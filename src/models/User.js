@@ -82,6 +82,11 @@ export default function defineUser(sequelize) {
         type: DataTypes.INTEGER,
         allowNull: true,
       },
+      RemoteOnly: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
     },
     {
       tableName: 'Users',

@@ -123,8 +123,10 @@ async function miniAppAuth(req, res, next) {
 }
 
 function registerHandlers(bot, appBaseUrl) {
-  const miniAppUrl = appBaseUrl ? `${appBaseUrl}/app/applications` : '';
-  const canUseWebAppButton = isValidTelegramWebAppUrl(miniAppUrl);
+  const applicationsUrl = appBaseUrl ? `${appBaseUrl}/app/applications` : '';
+  const profileUrl = appBaseUrl ? `${appBaseUrl}/app/profile` : '';
+  const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
+  const canUseProfileWebApp = isValidTelegramWebAppUrl(profileUrl);
 
   bot.use(async (ctx, next) => {
     try {
@@ -136,22 +138,46 @@ function registerHandlers(bot, appBaseUrl) {
   });
 
   bot.start(async (ctx) => {
-    if (canUseWebAppButton) {
+    if (canUseApplicationsWebApp) {
       await ctx.reply('Open your job agent mini app:', {
         reply_markup: {
-          inline_keyboard: [[{ text: 'Open Job Agent', web_app: { url: miniAppUrl } }]],
+          inline_keyboard: [[{ text: 'Open Applications', web_app: { url: applicationsUrl } }]],
         },
       });
       return;
     }
-    if (miniAppUrl) {
+    if (applicationsUrl) {
       await ctx.reply(
-        `Bot is active. Mini app URL is not valid for Telegram WebApp button: ${miniAppUrl}\n` +
+        `Bot is active. Mini app URL is not valid for Telegram WebApp button: ${applicationsUrl}\n` +
           'Use a public HTTPS domain (not localhost) for WEBHOOK_URL/ADMIN_APP_URL.'
       );
       return;
     }
     await ctx.reply('Bot is active. Set WEBHOOK_URL or ADMIN_APP_URL to public HTTPS URL for mini app button.');
+  });
+
+  bot.command('applications', async (ctx) => {
+    if (canUseApplicationsWebApp) {
+      await ctx.reply('Open applications:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Applications', web_app: { url: applicationsUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Applications page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  });
+
+  bot.command('profile', async (ctx) => {
+    if (canUseProfileWebApp) {
+      await ctx.reply('Open profile:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Profile', web_app: { url: profileUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Profile page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
   });
 
   bot.catch((err) => {
@@ -194,6 +220,7 @@ async function main() {
           emailRecruitersEnabled: !!user.EmailRecruitersEnabled,
           searchMode: user.SearchMode || 'not_urgent',
           minimumSalary: user.MinimumSalary,
+          remoteOnly: !!user.RemoteOnly,
         },
       });
     } catch (err) {
@@ -214,6 +241,7 @@ async function main() {
         EmailRecruitersEnabled: toBoolOrUndefined(req.body.emailRecruitersEnabled),
         SearchMode: toSearchModeOrUndefined(req.body.searchMode),
         MinimumSalary: toIntOrNullOrUndefined(req.body.minimumSalary),
+        RemoteOnly: toBoolOrUndefined(req.body.remoteOnly),
       };
 
       const updates = Object.fromEntries(
@@ -232,6 +260,7 @@ async function main() {
           emailRecruitersEnabled: !!user.EmailRecruitersEnabled,
           searchMode: user.SearchMode || 'not_urgent',
           minimumSalary: user.MinimumSalary,
+          remoteOnly: !!user.RemoteOnly,
         },
       });
     } catch (err) {
@@ -308,7 +337,10 @@ async function main() {
   registerHandlers(bot, appBaseUrl);
 
   try {
-    await bot.telegram.setMyCommands([{ command: 'start', description: 'Open mini app' }]);
+    await bot.telegram.setMyCommands([
+      { command: 'applications', description: 'Applications' },
+      { command: 'profile', description: 'Profile' },
+    ]);
   } catch (err) {
     console.error('Failed to set menu commands:', err.message);
   }

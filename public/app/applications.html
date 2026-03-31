@@ -21,7 +21,7 @@
         background: var(--bg);
         color: var(--text);
       }
-      .wrap { max-width: 760px; margin: 0 auto; padding: 16px 16px 84px; display: grid; gap: 16px; }
+      .wrap { max-width: 760px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
       .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
       h1, h2 { margin: 0 0 12px; }
       h1 { font-size: 22px; }
@@ -37,14 +37,6 @@
       .app-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #10182d; }
       .pill { border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; font-size: 12px; color: var(--muted); }
       .muted { color: var(--muted); }
-      .bottom-nav {
-        position: fixed; left: 0; right: 0; bottom: 0; background: #0f1730; border-top: 1px solid var(--border);
-        display: flex; justify-content: flex-start; gap: 10px; padding: 10px 12px;
-      }
-      .nav-item {
-        color: var(--muted); text-decoration: none; padding: 8px 12px; border-radius: 10px; border: 1px solid transparent;
-      }
-      .nav-item.active { color: var(--text); border-color: var(--border); background: #151f3c; }
     </style>
   </head>
   <body>
@@ -81,11 +73,6 @@
         <div id="appsList" class="apps"></div>
       </section>
     </div>
-
-    <nav class="bottom-nav">
-      <a class="nav-item active" href="/app/applications">Applications</a>
-      <a class="nav-item" href="/app/profile">Profile</a>
-    </nav>
 
     <script>
       const tg = window.Telegram?.WebApp;
