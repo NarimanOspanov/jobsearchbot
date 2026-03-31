@@ -24,6 +24,20 @@ function toBoolOrUndefined(value) {
   return undefined;
 }
 
+function toSearchModeOrUndefined(value) {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'urgent' || normalized === 'not_urgent') return normalized;
+  return undefined;
+}
+
+function toIntOrNullOrUndefined(value) {
+  if (value == null || value === '') return null;
+  const n = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return n;
+}
+
 function isValidTelegramWebAppUrl(urlValue) {
   if (!urlValue) return false;
   try {
@@ -109,7 +123,7 @@ async function miniAppAuth(req, res, next) {
 }
 
 function registerHandlers(bot, appBaseUrl) {
-  const miniAppUrl = appBaseUrl ? `${appBaseUrl}/app` : '';
+  const miniAppUrl = appBaseUrl ? `${appBaseUrl}/app/applications` : '';
   const canUseWebAppButton = isValidTelegramWebAppUrl(miniAppUrl);
 
   bot.use(async (ctx, next) => {
@@ -154,6 +168,12 @@ async function main() {
 
   app.get('/', (_req, res) => res.status(200).send('OK'));
   app.use('/app', express.static(join(__dirname, '..', 'public', 'app')));
+  app.get('/app/applications', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'applications.html'));
+  });
+  app.get('/app/profile', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'profile.html'));
+  });
 
   let runtimeBotUsername = '';
   app.get('/api/app/bot-info', (_req, res) => res.json({ botUsername: runtimeBotUsername }));
@@ -172,6 +192,8 @@ async function main() {
           companySitesEnabled: !!user.CompanySitesEnabled,
           emailFoundersEnabled: !!user.EmailFoundersEnabled,
           emailRecruitersEnabled: !!user.EmailRecruitersEnabled,
+          searchMode: user.SearchMode || 'not_urgent',
+          minimumSalary: user.MinimumSalary,
         },
       });
     } catch (err) {
@@ -190,9 +212,13 @@ async function main() {
         CompanySitesEnabled: toBoolOrUndefined(req.body.companySitesEnabled),
         EmailFoundersEnabled: toBoolOrUndefined(req.body.emailFoundersEnabled),
         EmailRecruitersEnabled: toBoolOrUndefined(req.body.emailRecruitersEnabled),
+        SearchMode: toSearchModeOrUndefined(req.body.searchMode),
+        MinimumSalary: toIntOrNullOrUndefined(req.body.minimumSalary),
       };
 
-      const updates = Object.fromEntries(Object.entries(patch).filter(([, v]) => typeof v === 'boolean'));
+      const updates = Object.fromEntries(
+        Object.entries(patch).filter(([, v]) => typeof v === 'boolean' || typeof v === 'string' || v === null || typeof v === 'number')
+      );
       if (Object.keys(updates).length > 0) await user.update(updates);
 
       res.json({
@@ -204,6 +230,8 @@ async function main() {
           companySitesEnabled: !!user.CompanySitesEnabled,
           emailFoundersEnabled: !!user.EmailFoundersEnabled,
           emailRecruitersEnabled: !!user.EmailRecruitersEnabled,
+          searchMode: user.SearchMode || 'not_urgent',
+          minimumSalary: user.MinimumSalary,
         },
       });
     } catch (err) {

@@ -73,6 +73,15 @@ export default function defineUser(sequelize) {
         allowNull: false,
         defaultValue: true,
       },
+      SearchMode: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: 'not_urgent',
+      },
+      MinimumSalary: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
     },
     {
       tableName: 'Users',
