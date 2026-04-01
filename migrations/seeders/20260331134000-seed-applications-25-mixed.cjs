@@ -4,11 +4,32 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     const now = new Date();
-    const [existingUsers] = await queryInterface.sequelize.query(
-      "SELECT TOP 1 Id FROM dbo.Users ORDER BY Id ASC"
-    );
+    const rawTargetChatId = (process.env.SEED_TELEGRAM_CHAT_ID || '').trim();
+    const targetChatId = rawTargetChatId ? Number.parseInt(rawTargetChatId, 10) : null;
+    const hasTargetChatId = Number.isSafeInteger(targetChatId);
 
-    let userId = existingUsers?.[0]?.Id;
+    let userId = null;
+    if (hasTargetChatId) {
+      const [targetUsers] = await queryInterface.sequelize.query(
+        `SELECT TOP 1 Id
+         FROM dbo.Users
+         WHERE TelegramChatId = :chatId
+         ORDER BY Id ASC`,
+        { replacements: { chatId: targetChatId } }
+      );
+      userId = targetUsers?.[0]?.Id || null;
+      if (!userId) {
+        throw new Error(
+          `SEED_TELEGRAM_CHAT_ID is set to ${targetChatId}, but no matching user was found in dbo.Users.`
+        );
+      }
+    } else {
+      const [existingUsers] = await queryInterface.sequelize.query(
+        "SELECT TOP 1 Id FROM dbo.Users ORDER BY Id ASC"
+      );
+      userId = existingUsers?.[0]?.Id || null;
+    }
+
     if (!userId) {
       const [inserted] = await queryInterface.sequelize.query(
         `INSERT INTO dbo.Users
