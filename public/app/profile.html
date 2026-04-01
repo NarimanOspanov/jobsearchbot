@@ -41,6 +41,16 @@
       .switch:checked { background: var(--switch-on); }
       .switch:checked::before { transform: translateX(20px); }
       .field { margin-bottom: 10px; }
+      .money-input { position: relative; }
+      .money-input .prefix {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--muted);
+        pointer-events: none;
+      }
+      .money-input input { padding-left: 28px; }
     </style>
   </head>
   <body>
@@ -72,7 +82,10 @@
         </div>
         <div class="field">
           <label for="minimumSalary">Minimum salary</label>
-          <input id="minimumSalary" type="number" min="0" step="1" placeholder="e.g. 3000" />
+          <div class="money-input">
+            <span class="prefix">$</span>
+            <input id="minimumSalary" type="number" min="0" step="1" placeholder="e.g. 3000" />
+          </div>
         </div>
         <div class="row"><span>Remote only</span><input id="remoteOnly" class="switch" type="checkbox" /></div>
         <button id="saveSettingsBtn">Save settings</button>

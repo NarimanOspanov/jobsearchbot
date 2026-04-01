@@ -12,6 +12,29 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const WELCOME_NEW_USER =
   'Welcome to Job Agent.\n\n' +
   'Use the menu (Applications / Profile) to manage your applications and profile settings.';
+const ABOUT_MESSAGE = [
+  'Забудьте про поиск работы вручную.',
+  '',
+  'Будущее наступило. Теперь у каждого человека будет личный ИИ-агент для поиска работы.',
+  '',
+  'Что требуется:',
+  '- Загрузить резюме',
+  '- Указать предпочтения',
+  '',
+  'Все остальное агент берет на себя. Вы получите уведомление, когда потребуется действие.',
+  '',
+  'Как это работает:',
+  'Агент мониторит большое количество сайтов компаний с вакансиями на полную удаленку.',
+  'Не джоб-борды, а напрямую разделы с вакансиями на сайтах компаний.',
+  '',
+  'Если вакансия подходит, ИИ откликается с персонализированным резюме,',
+  'адаптируя ваш опыт под конкретные требования.',
+  '',
+  'Это повышает шансы на просмотр: для рекрутера ваш отклик выглядит',
+  'как качественная ручная работа.',
+  '',
+  'Агент сам распознает поля любых форм и заполняет их вашими данными.',
+].join('\n');
 
 function checkEnvLoaded() {
   const token = config.telegramBotToken;
@@ -209,6 +232,10 @@ function registerHandlers(bot, appBaseUrl) {
       return;
     }
     await ctx.reply('Profile page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  });
+
+  bot.command('about', async (ctx) => {
+    await ctx.reply(ABOUT_MESSAGE);
   });
 
   bot.command('removeuser', async (ctx) => {
@@ -416,7 +443,8 @@ async function main() {
   try {
     await bot.telegram.setMyCommands([
       { command: 'applications', description: 'Applications' },
-      { command: 'profile', description: 'Profile' },
+      { command: 'profile', description: 'Settings' },
+      { command: 'about', description: 'About' },
     ]);
   } catch (err) {
     console.error('Failed to set menu commands:', err.message);
