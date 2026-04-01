@@ -17,6 +17,16 @@ function getEnv(name) {
   return process.env[name] || '';
 }
 
+/** Comma-separated Telegram user IDs allowed to run hidden admin bot commands (e.g. /removeuser). */
+function parseBotAdminTelegramIds(raw) {
+  const set = new Set();
+  for (const part of (raw || '').split(',')) {
+    const n = Number.parseInt(part.trim(), 10);
+    if (Number.isSafeInteger(n) && n > 0) set.add(n);
+  }
+  return set;
+}
+
 const isProduction = process.env.NODE_ENV === 'production';
 const port = process.env.PORT || 3000;
 const defaultWebhookUrl = isProduction
@@ -26,6 +36,7 @@ const defaultWebhookUrl = isProduction
 export const config = {
   isProduction,
   telegramBotToken: getEnv('TELEGRAM_BOT_TOKEN'),
+  botAdminTelegramIds: parseBotAdminTelegramIds(getEnv('BOT_ADMIN_TELEGRAM_IDS')),
   webhookUrl: getEnv('WEBHOOK_URL') || defaultWebhookUrl,
   // MSSQL (Azure SQL) – override with DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT
   db: {

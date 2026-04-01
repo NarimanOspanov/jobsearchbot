@@ -58,6 +58,11 @@ export default function defineUser(sequelize) {
         allowNull: false,
         defaultValue: true,
       },
+      TelegramEnabled: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+      },
       CompanySitesEnabled: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

@@ -58,8 +58,8 @@
         <div class="row"><span>HeadHunter</span><input id="hhEnabled" class="switch" type="checkbox" /></div>
         <div class="row"><span>LinkedIn</span><input id="linkedInEnabled" class="switch" type="checkbox" /></div>
         <div class="row"><span>Indeed</span><input id="indeedEnabled" class="switch" type="checkbox" /></div>
+        <div class="row"><span>Telegram</span><input id="telegramEnabled" class="switch" type="checkbox" /></div>
         <div class="row"><span>Company sites</span><input id="companySitesEnabled" class="switch" type="checkbox" /></div>
-        <div class="row"><span>Remote only</span><input id="remoteOnly" class="switch" type="checkbox" /></div>
         <div class="row"><span>Email founders</span><input id="emailFoundersEnabled" class="switch" type="checkbox" /></div>
         <div class="row"><span>Email recruiters</span><input id="emailRecruitersEnabled" class="switch" type="checkbox" /></div>
 
@@ -74,6 +74,7 @@
           <label for="minimumSalary">Minimum salary</label>
           <input id="minimumSalary" type="number" min="0" step="1" placeholder="e.g. 3000" />
         </div>
+        <div class="row"><span>Remote only</span><input id="remoteOnly" class="switch" type="checkbox" /></div>
         <button id="saveSettingsBtn">Save settings</button>
         <p id="saveStatus" class="muted"></p>
       </section>
@@ -96,6 +97,7 @@
           hhEnabled: document.getElementById('hhEnabled').checked,
           linkedInEnabled: document.getElementById('linkedInEnabled').checked,
           indeedEnabled: document.getElementById('indeedEnabled').checked,
+          telegramEnabled: document.getElementById('telegramEnabled').checked,
           companySitesEnabled: document.getElementById('companySitesEnabled').checked,
           remoteOnly: document.getElementById('remoteOnly').checked,
           emailFoundersEnabled: document.getElementById('emailFoundersEnabled').checked,
@@ -112,6 +114,7 @@
         document.getElementById('hhEnabled').checked = !!s.hhEnabled;
         document.getElementById('linkedInEnabled').checked = !!s.linkedInEnabled;
         document.getElementById('indeedEnabled').checked = !!s.indeedEnabled;
+        document.getElementById('telegramEnabled').checked = !!s.telegramEnabled;
         document.getElementById('companySitesEnabled').checked = !!s.companySitesEnabled;
         document.getElementById('remoteOnly').checked = !!s.remoteOnly;
         document.getElementById('emailFoundersEnabled').checked = !!s.emailFoundersEnabled;

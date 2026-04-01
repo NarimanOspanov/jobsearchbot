@@ -5,9 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { Telegraf } from 'telegraf';
 import { Sequelize } from 'sequelize';
 import { config } from './config.js';
-import { models } from './db.js';
+import { models, sequelize } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const WELCOME_NEW_USER =
+  'Welcome to Job Agent.\n\n' +
+  'Use the menu (Applications / Profile) to manage your applications and profile settings.';
 
 function checkEnvLoaded() {
   const token = config.telegramBotToken;
@@ -104,6 +108,23 @@ async function ensureUser(ctx) {
   return ensureUserByTelegramId(chatId, username);
 }
 
+/** Deletes Applications rows then User for the given Telegram chat id. */
+async function removeUserDataByTelegramChatId(telegramChatId) {
+  return sequelize.transaction(async (transaction) => {
+    const user = await models.Users.findOne({
+      where: { TelegramChatId: telegramChatId },
+      transaction,
+    });
+    if (!user) return { ok: true, found: false, applicationsDeleted: 0 };
+    const applicationsDeleted = await models.Applications.destroy({
+      where: { UserId: user.Id },
+      transaction,
+    });
+    await user.destroy({ transaction });
+    return { ok: true, found: true, applicationsDeleted };
+  });
+}
+
 async function miniAppAuth(req, res, next) {
   const initData = req.headers['x-init-data'];
 
@@ -130,6 +151,13 @@ function registerHandlers(bot, appBaseUrl) {
 
   bot.use(async (ctx, next) => {
     try {
+      const chatId = ctx.chat?.id ?? ctx.from?.id;
+      if (chatId) {
+        const existing = await models.Users.findOne({ where: { TelegramChatId: chatId } });
+        ctx.state.isFirstTimeUser = !existing;
+      } else {
+        ctx.state.isFirstTimeUser = false;
+      }
       await ensureUser(ctx);
     } catch (err) {
       console.error('ensureUser error:', err);
@@ -138,6 +166,9 @@ function registerHandlers(bot, appBaseUrl) {
   });
 
   bot.start(async (ctx) => {
+    if (ctx.state.isFirstTimeUser) {
+      await ctx.reply(WELCOME_NEW_USER);
+    }
     if (canUseApplicationsWebApp) {
       await ctx.reply('Open your job agent mini app:', {
         reply_markup: {
@@ -180,6 +211,49 @@ function registerHandlers(bot, appBaseUrl) {
     await ctx.reply('Profile page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
   });
 
+  bot.command('removeuser', async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('This command only works in a private chat with the bot.');
+      return;
+    }
+    const adminIds = config.botAdminTelegramIds;
+    if (adminIds.size === 0) {
+      await ctx.reply('This command is disabled. Set BOT_ADMIN_TELEGRAM_IDS in the server environment.');
+      return;
+    }
+    const fromId = ctx.from?.id;
+    if (!fromId || !adminIds.has(fromId)) {
+      await ctx.reply('Unauthorized.');
+      return;
+    }
+    const text = (ctx.message?.text || '').trim();
+    const parts = text.split(/\s+/).filter(Boolean);
+    const arg = parts[1];
+    if (!arg || !/^-?\d+$/.test(arg)) {
+      await ctx.reply('Usage: /removeuser <telegramChatId>');
+      return;
+    }
+    const targetChatId = Number(arg);
+    if (!Number.isSafeInteger(targetChatId)) {
+      await ctx.reply('Chat id is not a valid integer.');
+      return;
+    }
+    try {
+      const result = await removeUserDataByTelegramChatId(targetChatId);
+      console.log('removeuser:', { adminTelegramId: fromId, targetChatId, ...result });
+      if (!result.found) {
+        await ctx.reply(`No user found for chat id ${targetChatId}.`);
+        return;
+      }
+      await ctx.reply(
+        `Removed user ${targetChatId} and ${result.applicationsDeleted} application(s).`
+      );
+    } catch (err) {
+      console.error('removeuser failed:', err);
+      await ctx.reply('Failed to remove user data. Check server logs.');
+    }
+  });
+
   bot.catch((err) => {
     console.error('Bot error:', err);
   });
@@ -215,6 +289,7 @@ async function main() {
           hhEnabled: !!user.HhEnabled,
           linkedInEnabled: !!user.LinkedInEnabled,
           indeedEnabled: !!user.IndeedEnabled,
+          telegramEnabled: !!user.TelegramEnabled,
           companySitesEnabled: !!user.CompanySitesEnabled,
           emailFoundersEnabled: !!user.EmailFoundersEnabled,
           emailRecruitersEnabled: !!user.EmailRecruitersEnabled,
@@ -236,6 +311,7 @@ async function main() {
         HhEnabled: toBoolOrUndefined(req.body.hhEnabled),
         LinkedInEnabled: toBoolOrUndefined(req.body.linkedInEnabled),
         IndeedEnabled: toBoolOrUndefined(req.body.indeedEnabled),
+        TelegramEnabled: toBoolOrUndefined(req.body.telegramEnabled),
         CompanySitesEnabled: toBoolOrUndefined(req.body.companySitesEnabled),
         EmailFoundersEnabled: toBoolOrUndefined(req.body.emailFoundersEnabled),
         EmailRecruitersEnabled: toBoolOrUndefined(req.body.emailRecruitersEnabled),
@@ -255,6 +331,7 @@ async function main() {
           hhEnabled: !!user.HhEnabled,
           linkedInEnabled: !!user.LinkedInEnabled,
           indeedEnabled: !!user.IndeedEnabled,
+          telegramEnabled: !!user.TelegramEnabled,
           companySitesEnabled: !!user.CompanySitesEnabled,
           emailFoundersEnabled: !!user.EmailFoundersEnabled,
           emailRecruitersEnabled: !!user.EmailRecruitersEnabled,
