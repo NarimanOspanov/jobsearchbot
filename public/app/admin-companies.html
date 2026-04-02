@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Companies</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --danger: #dc5b6a;
+        --border: #273357;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { max-width: 880px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+      h1, h2 { margin: 0 0 12px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+      input, button { width: 100%; border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 10px; font: inherit; }
+      button { cursor: pointer; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+      .danger { background: var(--danger); border-color: var(--danger); }
+      .muted { color: var(--muted); }
+      .row { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+      .row-actions { display: flex; gap: 8px; margin-top: 8px; }
+      .row-actions button { width: auto; }
+      a { color: var(--accent); word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Admin: Remote Companies</h1>
+
+      <section class="card">
+        <h2 id="formTitle">Add company</h2>
+        <div class="grid">
+          <input id="nameInput" placeholder="Company name" />
+          <input id="urlInput" placeholder="https://company.com/careers" />
+          <button id="saveBtn">Save</button>
+        </div>
+        <div class="row-actions" style="margin-top:8px">
+          <button id="cancelEditBtn" style="display:none">Cancel edit</button>
+        </div>
+        <p id="status" class="muted"></p>
+      </section>
+
+      <section class="card">
+        <h2>Companies</h2>
+        <div id="list"></div>
+      </section>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+
+      let editingId = null;
+
+      async function api(path, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        if (tg?.initData) headers['x-init-data'] = tg.initData;
+        const response = await fetch(path, { ...options, headers });
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+      }
+
+      function esc(value) {
+        return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function resetForm() {
+        editingId = null;
+        document.getElementById('formTitle').textContent = 'Add company';
+        document.getElementById('nameInput').value = '';
+        document.getElementById('urlInput').value = '';
+        document.getElementById('cancelEditBtn').style.display = 'none';
+      }
+
+      function startEdit(row) {
+        editingId = row.Id;
+        document.getElementById('formTitle').textContent = `Edit company #${row.Id}`;
+        document.getElementById('nameInput').value = row.Name || '';
+        document.getElementById('urlInput').value = row.Url || '';
+        document.getElementById('cancelEditBtn').style.display = 'inline-block';
+      }
+
+      async function loadRows() {
+        const rows = await api('/api/app/admin/companies');
+        const list = document.getElementById('list');
+        if (!rows.length) {
+          list.innerHTML = '<p class="muted">No companies yet.</p>';
+          return;
+        }
+        list.innerHTML = rows.map((row) => `
+          <article class="row">
+            <strong>${esc(row.Name)}</strong>
+            <div><a href="${esc(row.Url)}" target="_blank" rel="noopener noreferrer">${esc(row.Url)}</a></div>
+            <div class="muted">Added: ${row.DateAdded ? new Date(row.DateAdded).toLocaleString() : '-'}</div>
+            <div class="row-actions">
+              <button data-edit="${row.Id}">Edit</button>
+              <button class="danger" data-delete="${row.Id}">Delete</button>
+            </div>
+          </article>
+        `).join('');
+
+        for (const btn of list.querySelectorAll('[data-edit]')) {
+          btn.addEventListener('click', () => {
+            const id = Number(btn.getAttribute('data-edit'));
+            const row = rows.find((x) => x.Id === id);
+            if (row) startEdit(row);
+          });
+        }
+        for (const btn of list.querySelectorAll('[data-delete]')) {
+          btn.addEventListener('click', async () => {
+            const id = Number(btn.getAttribute('data-delete'));
+            if (!confirm(`Delete company #${id}?`)) return;
+            await api(`/api/app/admin/companies/${id}`, { method: 'DELETE' });
+            if (editingId === id) resetForm();
+            await loadRows();
+          });
+        }
+      }
+
+      document.getElementById('saveBtn').addEventListener('click', async () => {
+        const status = document.getElementById('status');
+        status.textContent = 'Saving...';
+        try {
+          const payload = {
+            name: document.getElementById('nameInput').value.trim(),
+            url: document.getElementById('urlInput').value.trim(),
+          };
+          if (!payload.name || !payload.url) throw new Error('Name and URL are required');
+          if (editingId) {
+            await api(`/api/app/admin/companies/${editingId}`, {
+              method: 'PATCH',
+              body: JSON.stringify(payload),
+            });
+          } else {
+            await api('/api/app/admin/companies', {
+              method: 'POST',
+              body: JSON.stringify(payload),
+            });
+          }
+          resetForm();
+          await loadRows();
+          status.textContent = 'Saved';
+        } catch (err) {
+          status.textContent = `Failed: ${err.message}`;
+        }
+      });
+
+      document.getElementById('cancelEditBtn').addEventListener('click', () => {
+        resetForm();
+      });
+
+      resetForm();
+      loadRows().catch((err) => {
+        document.getElementById('status').textContent = `Failed: ${err.message}`;
+      });
+    </script>
+  </body>
+</html>

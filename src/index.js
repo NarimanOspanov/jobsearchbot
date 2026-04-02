@@ -65,6 +65,26 @@ function toIntOrNullOrUndefined(value) {
   return n;
 }
 
+function toStringOrUndefined(value, maxLen = 255) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.slice(0, maxLen);
+}
+
+function toValidUrlOrUndefined(value) {
+  if (typeof value !== 'string') return undefined;
+  const raw = value.trim();
+  if (!raw) return undefined;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function isValidTelegramWebAppUrl(urlValue) {
   if (!urlValue) return false;
   try {
@@ -166,11 +186,25 @@ async function miniAppAuth(req, res, next) {
   return next();
 }
 
+async function adminMiniAppAuth(req, res, next) {
+  await miniAppAuth(req, res, async () => {
+    const adminIds = config.botAdminTelegramIds;
+    if (adminIds.size === 0) return res.status(403).json({ error: 'Admin mode is disabled' });
+    const userId = Number(req.miniAppUser?.id);
+    if (!Number.isSafeInteger(userId) || !adminIds.has(userId)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    return next();
+  });
+}
+
 function registerHandlers(bot, appBaseUrl) {
   const applicationsUrl = appBaseUrl ? `${appBaseUrl}/app/applications` : '';
   const profileUrl = appBaseUrl ? `${appBaseUrl}/app/profile` : '';
+  const companiesUrl = appBaseUrl ? `${appBaseUrl}/app/companies` : '';
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
   const canUseProfileWebApp = isValidTelegramWebAppUrl(profileUrl);
+  const canUseCompaniesWebApp = isValidTelegramWebAppUrl(companiesUrl);
 
   bot.use(async (ctx, next) => {
     try {
@@ -238,6 +272,18 @@ function registerHandlers(bot, appBaseUrl) {
     await ctx.reply(ABOUT_MESSAGE);
   });
 
+  bot.command('companies', async (ctx) => {
+    if (canUseCompaniesWebApp) {
+      await ctx.reply('Open companies:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Companies', web_app: { url: companiesUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Companies page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  });
+
   bot.command('removeuser', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
       await ctx.reply('This command only works in a private chat with the bot.');
@@ -300,6 +346,12 @@ async function main() {
   });
   app.get('/app/profile', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'profile.html'));
+  });
+  app.get('/app/companies', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'companies.html'));
+  });
+  app.get('/app/admin/companies', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'admin-companies.html'));
   });
 
   let runtimeBotUsername = '';
@@ -415,6 +467,86 @@ async function main() {
     }
   });
 
+  app.get('/api/app/companies', miniAppAuth, async (_req, res) => {
+    try {
+      const rows = await models.RemoteCompanies.findAll({
+        order: [['DateAdded', 'DESC'], ['Id', 'DESC']],
+        limit: 500,
+      });
+      res.json(rows);
+    } catch (err) {
+      console.error('GET /api/app/companies:', err);
+      res.status(500).json({ error: 'Failed to load companies' });
+    }
+  });
+
+  app.get('/api/app/admin/companies', adminMiniAppAuth, async (_req, res) => {
+    try {
+      const rows = await models.RemoteCompanies.findAll({
+        order: [['DateAdded', 'DESC'], ['Id', 'DESC']],
+        limit: 1000,
+      });
+      res.json(rows);
+    } catch (err) {
+      console.error('GET /api/app/admin/companies:', err);
+      res.status(500).json({ error: 'Failed to load admin companies' });
+    }
+  });
+
+  app.post('/api/app/admin/companies', adminMiniAppAuth, async (req, res) => {
+    try {
+      const name = toStringOrUndefined(req.body.name, 255);
+      const url = toValidUrlOrUndefined(req.body.url);
+      if (!name || !url) return res.status(400).json({ error: 'name and valid url are required' });
+      const row = await models.RemoteCompanies.create({
+        Name: name,
+        Url: url,
+        DateAdded: Sequelize.literal('GETUTCDATE()'),
+      });
+      res.status(201).json(row);
+    } catch (err) {
+      console.error('POST /api/app/admin/companies:', err);
+      res.status(500).json({ error: 'Failed to create company' });
+    }
+  });
+
+  app.patch('/api/app/admin/companies/:id', adminMiniAppAuth, async (req, res) => {
+    try {
+      const id = Number.parseInt(String(req.params.id), 10);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
+
+      const row = await models.RemoteCompanies.findByPk(id);
+      if (!row) return res.status(404).json({ error: 'Company not found' });
+
+      const updates = {};
+      const name = toStringOrUndefined(req.body.name, 255);
+      const url = toValidUrlOrUndefined(req.body.url);
+      if (name) updates.Name = name;
+      if (url) updates.Url = url;
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'At least one valid field is required' });
+      }
+      await row.update(updates);
+      res.json(row);
+    } catch (err) {
+      console.error('PATCH /api/app/admin/companies/:id:', err);
+      res.status(500).json({ error: 'Failed to update company' });
+    }
+  });
+
+  app.delete('/api/app/admin/companies/:id', adminMiniAppAuth, async (req, res) => {
+    try {
+      const id = Number.parseInt(String(req.params.id), 10);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
+      const deleted = await models.RemoteCompanies.destroy({ where: { Id: id } });
+      if (!deleted) return res.status(404).json({ error: 'Company not found' });
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('DELETE /api/app/admin/companies/:id:', err);
+      res.status(500).json({ error: 'Failed to delete company' });
+    }
+  });
+
   await new Promise((resolve) => app.listen(port, resolve));
   console.log('HTTP server listening on port', port);
 
@@ -444,6 +576,7 @@ async function main() {
     await bot.telegram.setMyCommands([
       { command: 'applications', description: 'Applications' },
       { command: 'profile', description: 'Settings' },
+      { command: 'companies', description: 'Companies' },
       { command: 'about', description: 'About' },
     ]);
   } catch (err) {
