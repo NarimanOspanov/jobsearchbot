@@ -36,6 +36,89 @@ const ABOUT_MESSAGE = [
   'Агент сам распознает поля любых форм и заполняет их вашими данными.',
 ].join('\n');
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Keeps Telegram «печатает…» alive for long waits (action expires ~after 5s). */
+async function withTypingTelegram(telegram, chatId, ms) {
+  const pulse = () => telegram.sendChatAction(chatId, 'typing').catch(() => {});
+  pulse();
+  const id = setInterval(pulse, 4000);
+  try {
+    await sleep(ms);
+  } finally {
+    clearInterval(id);
+  }
+}
+
+/** @type {Map<number, { step: string }>} */
+const hireAgentStateByChatId = new Map();
+
+const HIRE_AGENT_FAKE_QUEUE = [
+  { role: 'Backend Engineer', company: 'Deel' },
+  { role: 'Fullstack Engineer', company: 'GitLab' },
+  { role: 'Data Engineer', company: 'Zapier' },
+  { role: 'DevOps Engineer', company: 'Canonical' },
+  { role: 'Software Engineer', company: 'Automattic' },
+  { role: 'Product Engineer', company: 'PostHog' },
+  { role: 'ML Engineer', company: 'Apollo' },
+  { role: 'Frontend Engineer', company: 'ClickUp' },
+  { role: 'Platform Engineer', company: 'Circle' },
+  { role: 'Security Engineer', company: '1Password' },
+];
+
+/** doneThroughIndex: rows with j <= index are ✅ (green); the rest ⬜. Use -1 so all are ⬜. */
+function formatHireAgentFullList(doneThroughIndex) {
+  return HIRE_AGENT_FAKE_QUEUE.map((p, j) => {
+    const mark = j <= doneThroughIndex ? '✅' : '⬜';
+    return `${mark} ${p.role} · ${p.company}`;
+  }).join('\n');
+}
+
+async function runHireAgentFakeApplying(ctx, chatId) {
+  await withTypingTelegram(ctx.telegram, chatId, 500 + Math.floor(Math.random() * 500));
+  const pendingPreview = formatHireAgentFullList(-1);
+  const statusMsg = await ctx.reply(
+    `⏳ Запускаю автоматические отклики…\nСтатус: подготовка\n\nВакансии (${HIRE_AGENT_FAKE_QUEUE.length}):\n${pendingPreview}`
+  );
+  const mid = statusMsg.message_id;
+  const api = ctx.telegram;
+
+  for (let i = 0; i < HIRE_AGENT_FAKE_QUEUE.length; i++) {
+    const current = HIRE_AGENT_FAKE_QUEUE[i];
+    const listBlock = formatHireAgentFullList(i);
+    const text =
+      `Статус: отправка отклика…\n` +
+      `Сейчас: ${current.role} — ${current.company}\n\n` +
+      listBlock;
+    await api.editMessageText(chatId, mid, undefined, text).catch(() => {});
+    await withTypingTelegram(api, chatId, 900 + Math.floor(Math.random() * 700));
+  }
+
+  const allChecked = formatHireAgentFullList(HIRE_AGENT_FAKE_QUEUE.length - 1);
+  await api
+    .editMessageText(
+      chatId,
+      mid,
+      undefined,
+      `✅ Первая партия откликов завершена (демо).\n\n${allChecked}`
+    )
+    .catch(() => {});
+
+  await ctx.reply(
+    'Я откликнулся на первые 10 позиций. Резюме и сопроводительные письма были адаптированы под каждую вакансию.\n\n' +
+      'Проверьте почту — возможно, уже есть письма от работодателей.\n\n' +
+      'Чтобы продолжить, купите подписку.',
+    {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Продолжить', callback_data: 'hireagent_continue' }]],
+      },
+    }
+  );
+  hireAgentStateByChatId.set(chatId, { step: 'idle' });
+}
+
 function checkEnvLoaded() {
   const token = config.telegramBotToken;
   console.log('Env check:');
@@ -256,6 +339,84 @@ function registerHandlers(bot, appBaseUrl) {
     await ctx.reply('Applications page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
   });
 
+  bot.command('hireagent', async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Этот сценарий доступен только в личном чате с ботом.');
+      return;
+    }
+    hireAgentStateByChatId.set(ctx.chat.id, { step: 'awaiting_cv' });
+    await ctx.reply(
+      'Привет! Я Алекс! Ваш персональный карьерный агент. Я буду искать для Вас вакансии на 100% удалёнку и откликаться за вас.\n\n' +
+        'От вас требуется лишь резюме. Когда подтребуются действия, я напишу.\n\n' +
+        'Отправьте резюме файлом (PDF или изображение) — я «разберу» его и начну работу.'
+    );
+  });
+
+  bot.action('hireagent_yes', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    const chatId = ctx.callbackQuery?.message?.chat?.id;
+    if (!chatId) return;
+    const st = hireAgentStateByChatId.get(chatId);
+    if (st?.step !== 'awaiting_confirm') {
+      await ctx.reply('Сначала пройдите шаг с резюме в диалоге с агентом (/hireagent).');
+      return;
+    }
+    hireAgentStateByChatId.set(chatId, { step: 'applying' });
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+    await runHireAgentFakeApplying(ctx, chatId);
+  });
+
+  bot.action('hireagent_no', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    const chatId = ctx.callbackQuery?.message?.chat?.id;
+    if (!chatId) return;
+    const st = hireAgentStateByChatId.get(chatId);
+    if (st?.step !== 'awaiting_confirm') return;
+    hireAgentStateByChatId.set(chatId, { step: 'idle' });
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+    await ctx.reply('Хорошо. Когда будете готовы — снова выберите «Нанять агента» в меню.');
+  });
+
+  bot.action('hireagent_continue', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+  });
+
+  bot.on(['document', 'photo'], async (ctx, next) => {
+    if (ctx.chat?.type !== 'private') return next();
+    const chatId = ctx.chat.id;
+    const st = hireAgentStateByChatId.get(chatId);
+    if (st?.step !== 'awaiting_cv') return next();
+    await ctx.reply('Спасибо! Анализирую резюме…');
+    await withTypingTelegram(ctx.telegram, chatId, 2000 + Math.floor(Math.random() * 1000));
+    hireAgentStateByChatId.set(chatId, { step: 'awaiting_confirm' });
+    await ctx.reply(
+      'Готово. Я нашёл 263 вакансии с полной удалёнкой (100%), которые вам подходят.\n\n' +
+        'Запустить автоматические отклики?',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: 'Да, начинай', callback_data: 'hireagent_yes' },
+              { text: 'Нет, позже', callback_data: 'hireagent_no' },
+            ],
+          ],
+        },
+      }
+    );
+  });
+
   bot.command('profile', async (ctx) => {
     if (canUseProfileWebApp) {
       await ctx.reply('Open profile:', {
@@ -325,6 +486,18 @@ function registerHandlers(bot, appBaseUrl) {
       console.error('removeuser failed:', err);
       await ctx.reply('Failed to remove user data. Check server logs.');
     }
+  });
+
+  bot.on('text', async (ctx, next) => {
+    if (ctx.chat?.type !== 'private') return next();
+    const cmd = ctx.message?.entities?.[0];
+    if (cmd?.type === 'bot_command' && cmd.offset === 0) return next();
+    const st = hireAgentStateByChatId.get(ctx.chat.id);
+    if (st?.step === 'awaiting_cv') {
+      await ctx.reply('Пожалуйста, отправьте резюме файлом (PDF или изображение), а не текстом.');
+      return;
+    }
+    return next();
   });
 
   bot.catch((err) => {
@@ -575,6 +748,7 @@ async function main() {
   try {
     await bot.telegram.setMyCommands([
       { command: 'applications', description: 'Applications' },
+      { command: 'hireagent', description: 'Нанять агента' },
       { command: 'profile', description: 'Settings' },
       { command: 'companies', description: 'Companies' },
       { command: 'about', description: 'About' },
