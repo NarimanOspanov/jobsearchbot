@@ -6,6 +6,7 @@ import { Telegraf } from 'telegraf';
 import { Sequelize } from 'sequelize';
 import { config } from './config.js';
 import { models, sequelize } from './db.js';
+import { createResumeStorage } from './services/resumeStorage.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -67,6 +68,7 @@ const HIRE_AGENT_FAKE_QUEUE = [
   { role: 'Platform Engineer', company: 'Circle' },
   { role: 'Security Engineer', company: '1Password' },
 ];
+const resumeStorage = createResumeStorage(config);
 
 /** doneThroughIndex: rows with j <= index are ✅ (green); the rest ⬜. Use -1 so all are ⬜. */
 function formatHireAgentFullList(doneThroughIndex) {
@@ -127,6 +129,9 @@ function checkEnvLoaded() {
     token ? `${token.slice(0, 8)}...${token.slice(-4)} (length ${token.length})` : 'MISSING'
   );
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN must be set.');
+  if (!config.azureStorageConnectionString) {
+    console.warn('AZURE_STORAGE_CONNECTION_STRING is missing; resume uploads in /hireagent will fail.');
+  }
 }
 
 function toBoolOrUndefined(value) {
@@ -249,6 +254,37 @@ async function removeUserDataByTelegramChatId(telegramChatId) {
     await user.destroy({ transaction });
     return { ok: true, found: true, applicationsDeleted };
   });
+}
+
+function pickResumeSourceFromMessage(message) {
+  if (!message) return null;
+  if (message.document?.file_id) {
+    return {
+      fileId: message.document.file_id,
+      fileName: message.document.file_name || null,
+      mimeType: message.document.mime_type || 'application/octet-stream',
+    };
+  }
+  if (Array.isArray(message.photo) && message.photo.length > 0) {
+    const largest = message.photo[message.photo.length - 1];
+    if (!largest?.file_id) return null;
+    return {
+      fileId: largest.file_id,
+      fileName: `resume-${largest.file_unique_id || largest.file_id}.jpg`,
+      mimeType: 'image/jpeg',
+    };
+  }
+  return null;
+}
+
+async function downloadTelegramFileAsBuffer(telegram, fileId) {
+  const fileUrl = await telegram.getFileLink(fileId);
+  const response = await fetch(fileUrl.toString());
+  if (!response.ok) {
+    throw new Error(`Failed to download Telegram file: ${response.status}`);
+  }
+  const bytes = await response.arrayBuffer();
+  return Buffer.from(bytes);
 }
 
 async function miniAppAuth(req, res, next) {
@@ -398,23 +434,50 @@ function registerHandlers(bot, appBaseUrl) {
     const chatId = ctx.chat.id;
     const st = hireAgentStateByChatId.get(chatId);
     if (st?.step !== 'awaiting_cv') return next();
-    await ctx.reply('Спасибо! Анализирую резюме…');
-    await withTypingTelegram(ctx.telegram, chatId, 2000 + Math.floor(Math.random() * 1000));
-    hireAgentStateByChatId.set(chatId, { step: 'awaiting_confirm' });
-    await ctx.reply(
-      'Готово. Я нашёл 263 вакансии с полной удалёнкой (100%), которые вам подходят.\n\n' +
-        'Запустить автоматические отклики?',
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: 'Да, начинай', callback_data: 'hireagent_yes' },
-              { text: 'Нет, позже', callback_data: 'hireagent_no' },
+    const resumeSource = pickResumeSourceFromMessage(ctx.message);
+    if (!resumeSource) {
+      await ctx.reply('Не удалось распознать файл резюме. Отправьте PDF или изображение еще раз.');
+      return;
+    }
+    try {
+      await ctx.reply('Спасибо! Загружаю и анализирую резюме…');
+      await withTypingTelegram(ctx.telegram, chatId, 1200 + Math.floor(Math.random() * 600));
+
+      const fileBuffer = await downloadTelegramFileAsBuffer(ctx.telegram, resumeSource.fileId);
+      const resumeUrl = await resumeStorage.uploadResumeBuffer({
+        chatId,
+        fileId: resumeSource.fileId,
+        fileName: resumeSource.fileName,
+        mimeType: resumeSource.mimeType,
+        buffer: fileBuffer,
+      });
+
+      const user = await ensureUserByTelegramId(chatId, ctx.from?.username ?? null);
+      await user.update({ ResumeURL: resumeUrl });
+
+      await withTypingTelegram(ctx.telegram, chatId, 800 + Math.floor(Math.random() * 400));
+      hireAgentStateByChatId.set(chatId, { step: 'awaiting_confirm' });
+      await ctx.reply(
+        'Готово. Я сохранил ваше резюме и нашёл 263 вакансии с полной удалёнкой (100%), которые вам подходят.\n\n' +
+          'Запустить автоматические отклики?',
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: 'Да, начинай', callback_data: 'hireagent_yes' },
+                { text: 'Нет, позже', callback_data: 'hireagent_no' },
+              ],
             ],
-          ],
-        },
-      }
-    );
+          },
+        }
+      );
+    } catch (err) {
+      console.error('hireagent resume upload failed:', err);
+      await ctx.reply(
+        'Не удалось сохранить резюме. Проверьте настройки Azure Storage (AZURE_STORAGE_CONNECTION_STRING) и попробуйте снова.'
+      );
+      hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv' });
+    }
   });
 
   bot.command('profile', async (ctx) => {
@@ -537,6 +600,7 @@ async function main() {
         id: user.Id,
         telegramChatId: String(user.TelegramChatId),
         telegramUserName: user.TelegramUserName,
+        resumeUrl: user.ResumeURL,
         settings: {
           hhEnabled: !!user.HhEnabled,
           linkedInEnabled: !!user.LinkedInEnabled,

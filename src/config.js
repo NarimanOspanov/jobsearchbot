@@ -37,6 +37,8 @@ export const config = {
   isProduction,
   telegramBotToken: getEnv('TELEGRAM_BOT_TOKEN'),
   botAdminTelegramIds: parseBotAdminTelegramIds(getEnv('BOT_ADMIN_TELEGRAM_IDS')),
+  azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
+  azureResumeContainerName: 'resumes',
   webhookUrl: getEnv('WEBHOOK_URL') || defaultWebhookUrl,
   // MSSQL (Azure SQL) – override with DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT
   db: {

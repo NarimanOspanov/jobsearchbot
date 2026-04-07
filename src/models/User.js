@@ -92,6 +92,10 @@ export default function defineUser(sequelize) {
         allowNull: false,
         defaultValue: false,
       },
+      ResumeURL: {
+        type: DataTypes.STRING(2048),
+        allowNull: true,
+      },
     },
     {
       tableName: 'Users',
