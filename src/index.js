@@ -730,6 +730,66 @@ async function main() {
     }
   });
 
+  app.get('/api/app/admin/users', adminMiniAppAuth, async (req, res) => {
+    try {
+      const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '100'), 10) || 100));
+      const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
+      const rows = await models.Users.findAll({
+        order: [['DateJoined', 'DESC'], ['Id', 'DESC']],
+        limit,
+        offset,
+      });
+      res.json(rows.map((u) => ({
+        id: u.Id,
+        telegramChatId: String(u.TelegramChatId),
+        telegramUserName: u.TelegramUserName,
+        dateJoined: u.DateJoined,
+        isBlocked: !!u.IsBlocked,
+        resumeUrl: u.ResumeURL || null,
+      })));
+    } catch (err) {
+      console.error('GET /api/app/admin/users:', err);
+      res.status(500).json({ error: 'Failed to load users' });
+    }
+  });
+
+  app.get('/api/app/admin/users/:id', adminMiniAppAuth, async (req, res) => {
+    try {
+      const id = Number.parseInt(String(req.params.id), 10);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
+
+      const u = await models.Users.findByPk(id);
+      if (!u) return res.status(404).json({ error: 'User not found' });
+
+      res.json({
+        id: u.Id,
+        telegramChatId: String(u.TelegramChatId),
+        telegramUserName: u.TelegramUserName,
+        dateJoined: u.DateJoined,
+        isBlocked: !!u.IsBlocked,
+        muteBotUntil: u.MuteBotUntil,
+        timezone: u.Timezone,
+        promocode: u.Promocode,
+        resumeUrl: u.ResumeURL || null,
+        settings: {
+          hhEnabled: !!u.HhEnabled,
+          linkedInEnabled: !!u.LinkedInEnabled,
+          indeedEnabled: !!u.IndeedEnabled,
+          telegramEnabled: !!u.TelegramEnabled,
+          companySitesEnabled: !!u.CompanySitesEnabled,
+          emailFoundersEnabled: !!u.EmailFoundersEnabled,
+          emailRecruitersEnabled: !!u.EmailRecruitersEnabled,
+          searchMode: u.SearchMode || 'not_urgent',
+          minimumSalary: u.MinimumSalary,
+          remoteOnly: !!u.RemoteOnly,
+        },
+      });
+    } catch (err) {
+      console.error('GET /api/app/admin/users/:id:', err);
+      res.status(500).json({ error: 'Failed to load user' });
+    }
+  });
+
   app.post('/api/app/admin/companies', adminMiniAppAuth, async (req, res) => {
     try {
       const name = toStringOrUndefined(req.body.name, 255);
