@@ -701,6 +701,11 @@ async function main() {
       if (screenlyJobId === undefined || screenlyJobId === null) {
         return res.status(400).json({ error: 'screenlyJobId is required and must be a non-negative integer' });
       }
+      const existing = await models.Applications.findOne({
+        where: { UserId: user.Id, ScreenlyJobId: screenlyJobId },
+      });
+      if (existing) return res.status(200).json(existing);
+
       const vacancyTitle = String(req.body.vacancyTitle || '').trim();
 
       const row = await models.Applications.create({
