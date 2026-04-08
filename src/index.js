@@ -688,15 +688,24 @@ async function main() {
     }
   });
 
-  app.post('/api/app/applications', miniAppAuth, async (req, res) => {
+  app.post('/api/app/applications', async (req, res) => {
     try {
-      const user = await ensureUserByTelegramId(req.miniAppUser.id, req.miniAppUser.username ?? null);
+      const userId = Number.parseInt(String(req.body.userId), 10);
+      if (!Number.isSafeInteger(userId) || userId <= 0) {
+        return res.status(400).json({ error: 'userId is required and must be a positive integer' });
+      }
+      const user = await models.Users.findByPk(userId);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const screenlyJobId = toIntOrNullOrUndefined(req.body.screenlyJobId);
+      if (screenlyJobId === undefined || screenlyJobId === null) {
+        return res.status(400).json({ error: 'screenlyJobId is required and must be a non-negative integer' });
+      }
       const vacancyTitle = String(req.body.vacancyTitle || '').trim();
-      if (!vacancyTitle) return res.status(400).json({ error: 'vacancyTitle is required' });
 
       const row = await models.Applications.create({
         UserId: user.Id,
-        VacancyTitle: vacancyTitle.slice(0, 255),
+        VacancyTitle: (vacancyTitle || `Screenly #${screenlyJobId}`).slice(0, 255),
         CompanyName: req.body.companyName ? String(req.body.companyName).slice(0, 255) : null,
         Source: req.body.source ? String(req.body.source).slice(0, 50) : null,
         Status: req.body.status ? String(req.body.status).slice(0, 50) : 'applied',
@@ -704,7 +713,7 @@ async function main() {
         Notes: req.body.notes ? String(req.body.notes) : null,
         MetaJson: req.body.metaJson ? JSON.stringify(req.body.metaJson) : null,
         Score: toScoreOrNullOrUndefined(req.body.score),
-        ScreenlyJobId: toIntOrNullOrUndefined(req.body.screenlyJobId),
+        ScreenlyJobId: screenlyJobId,
         TailoredCVURL: toStringOrUndefined(req.body.tailoredCvUrl, 2048) ?? null,
         CoverLetter: req.body.coverLetter == null ? null : String(req.body.coverLetter),
       });
