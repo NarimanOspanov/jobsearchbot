@@ -688,6 +688,27 @@ async function main() {
     }
   });
 
+  app.get('/api/app/applications/by-user', async (req, res) => {
+    try {
+      const userId = Number.parseInt(String(req.query.userId), 10);
+      if (!Number.isSafeInteger(userId) || userId <= 0) {
+        return res.status(400).json({ error: 'userId is required and must be a positive integer' });
+      }
+      const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '20'), 10) || 20));
+      const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
+      const rows = await models.Applications.findAll({
+        where: { UserId: userId },
+        order: [['AppliedAt', 'DESC'], ['Id', 'DESC']],
+        limit,
+        offset,
+      });
+      res.json(rows);
+    } catch (err) {
+      console.error('GET /api/app/applications/by-user:', err);
+      res.status(500).json({ error: 'Failed to load applications by user' });
+    }
+  });
+
   app.post('/api/app/applications', async (req, res) => {
     try {
       const userId = Number.parseInt(String(req.body.userId), 10);
