@@ -23,3 +23,4 @@ Set:
 - Container name is fixed: `resumes`.
 - The app creates the container automatically on first successful upload.
 - On re-upload, old blobs are kept; only `Users.ResumeURL` is updated to the latest blob URL.
+- For tailored CV files generated per application, use container `tailoredresumes` and save URL in `Applications.TailoredCVURL`.

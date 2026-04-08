@@ -153,6 +153,14 @@ function toIntOrNullOrUndefined(value) {
   return n;
 }
 
+function toScoreOrNullOrUndefined(value) {
+  if (value == null || value === '') return null;
+  const n = Number.parseFloat(String(value));
+  if (!Number.isFinite(n)) return undefined;
+  if (n < 0 || n > 99.9) return undefined;
+  return Math.round(n * 10) / 10;
+}
+
 function toStringOrUndefined(value, maxLen = 255) {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -695,12 +703,84 @@ async function main() {
         AppliedAt: req.body.appliedAt ? new Date(req.body.appliedAt) : new Date(),
         Notes: req.body.notes ? String(req.body.notes) : null,
         MetaJson: req.body.metaJson ? JSON.stringify(req.body.metaJson) : null,
+        Score: toScoreOrNullOrUndefined(req.body.score),
+        ScreenlyJobId: toIntOrNullOrUndefined(req.body.screenlyJobId),
+        TailoredCVURL: toStringOrUndefined(req.body.tailoredCvUrl, 2048) ?? null,
+        CoverLetter: req.body.coverLetter == null ? null : String(req.body.coverLetter),
       });
 
       res.status(201).json(row);
     } catch (err) {
       console.error('POST /api/app/applications:', err);
       res.status(500).json({ error: 'Failed to create application' });
+    }
+  });
+
+  app.patch('/api/app/applications/:id', async (req, res) => {
+    try {
+      const id = Number.parseInt(String(req.params.id), 10);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
+
+      const row = await models.Applications.findByPk(id);
+      if (!row) return res.status(404).json({ error: 'Application not found' });
+
+      const updates = {};
+
+      if (typeof req.body.vacancyTitle === 'string') {
+        const v = req.body.vacancyTitle.trim();
+        if (!v) return res.status(400).json({ error: 'vacancyTitle cannot be empty' });
+        updates.VacancyTitle = v.slice(0, 255);
+      }
+      if (req.body.companyName !== undefined) {
+        updates.CompanyName = req.body.companyName ? String(req.body.companyName).slice(0, 255) : null;
+      }
+      if (req.body.source !== undefined) {
+        updates.Source = req.body.source ? String(req.body.source).slice(0, 50) : null;
+      }
+      if (req.body.status !== undefined) {
+        updates.Status = req.body.status ? String(req.body.status).slice(0, 50) : null;
+      }
+      if (req.body.appliedAt !== undefined) {
+        if (req.body.appliedAt == null || req.body.appliedAt === '') {
+          updates.AppliedAt = new Date();
+        } else {
+          const d = new Date(req.body.appliedAt);
+          if (!Number.isFinite(d.getTime())) return res.status(400).json({ error: 'Invalid appliedAt' });
+          updates.AppliedAt = d;
+        }
+      }
+      if (req.body.notes !== undefined) {
+        updates.Notes = req.body.notes ? String(req.body.notes) : null;
+      }
+      if (req.body.metaJson !== undefined) {
+        updates.MetaJson = req.body.metaJson ? JSON.stringify(req.body.metaJson) : null;
+      }
+      if (req.body.score !== undefined) {
+        const score = toScoreOrNullOrUndefined(req.body.score);
+        if (score === undefined) return res.status(400).json({ error: 'Invalid score' });
+        updates.Score = score;
+      }
+      if (req.body.screenlyJobId !== undefined) {
+        const screenlyJobId = toIntOrNullOrUndefined(req.body.screenlyJobId);
+        if (screenlyJobId === undefined) return res.status(400).json({ error: 'Invalid screenlyJobId' });
+        updates.ScreenlyJobId = screenlyJobId;
+      }
+      if (req.body.tailoredCvUrl !== undefined) {
+        updates.TailoredCVURL = toStringOrUndefined(req.body.tailoredCvUrl, 2048) ?? null;
+      }
+      if (req.body.coverLetter !== undefined) {
+        updates.CoverLetter = req.body.coverLetter == null ? null : String(req.body.coverLetter);
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'No valid fields to update' });
+      }
+
+      await row.update(updates);
+      res.json(row);
+    } catch (err) {
+      console.error('PATCH /api/app/applications/:id:', err);
+      res.status(500).json({ error: 'Failed to update application' });
     }
   });
 

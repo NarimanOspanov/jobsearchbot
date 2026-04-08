@@ -42,6 +42,22 @@ export default function defineApplication(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      Score: {
+        type: DataTypes.DECIMAL(3, 1),
+        allowNull: true,
+      },
+      ScreenlyJobId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      TailoredCVURL: {
+        type: DataTypes.STRING(2048),
+        allowNull: true,
+      },
+      CoverLetter: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
     },
     {
       tableName: 'Applications',
