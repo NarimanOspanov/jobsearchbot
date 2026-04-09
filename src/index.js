@@ -1,9 +1,12 @@
 import { createHmac } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import express from 'express';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Telegraf } from 'telegraf';
 import { Sequelize } from 'sequelize';
+import PDFDocument from 'pdfkit';
+import { GoogleGenAI } from '@google/genai';
 import { config } from './config.js';
 import { models, sequelize } from './db.js';
 import { createResumeStorage } from './services/resumeStorage.js';
@@ -69,6 +72,7 @@ const HIRE_AGENT_FAKE_QUEUE = [
   { role: 'Security Engineer', company: '1Password' },
 ];
 const resumeStorage = createResumeStorage(config);
+const genAI = config.geminiApiKey ? new GoogleGenAI({ apiKey: config.geminiApiKey }) : null;
 
 /** doneThroughIndex: rows with j <= index are ✅ (green); the rest ⬜. Use -1 so all are ⬜. */
 function formatHireAgentFullList(doneThroughIndex) {
@@ -129,9 +133,205 @@ function checkEnvLoaded() {
     token ? `${token.slice(0, 8)}...${token.slice(-4)} (length ${token.length})` : 'MISSING'
   );
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN must be set.');
+  if (!config.geminiApiKey) {
+    console.warn('GEMINI_API_KEY is missing; tailored resume API will fail.');
+  }
   if (!config.azureStorageConnectionString) {
     console.warn('AZURE_STORAGE_CONNECTION_STRING is missing; resume uploads in /hireagent will fail.');
   }
+}
+
+function buildTailoredResumePrompt({ jobTitle, jobDescription, mainResumeText }) {
+  return `You are an expert resume tailoring assistant.
+Task:
+Create a tailored resume in markdown for this vacancy.
+Inputs:
+Job title: ${jobTitle}
+Job description:
+${jobDescription}
+Candidate main resume text:
+${mainResumeText}
+Strict rules:
+Use ONLY facts from the candidate main resume text.
+Do NOT invent companies, dates, titles, metrics, education, certificates, or skills.
+Keep the resume ATS-friendly, concise, and achievement-oriented.
+Prioritize and reorder existing experience/skills to match the vacancy.
+Remove irrelevant details when needed, but never fabricate.
+If the resume contains multiple languages, prefer the language used in the job description.
+Write the final resume in the same primary language as the job description.
+ATS formatting constraints: plain headings and bullets only; no tables, no columns, no icons/emojis, no decorative separators, no markdown links.
+Translate section heading labels to the same language as the job description (for example, Professional Summary, Core Competencies, Relevant Experience, Education, Certifications, Skills).
+Keep the same section order, but localize heading text.
+Always include the candidate's full name, email, phone number, and location at the very top of the resume.
+Output MARKDOWN ONLY (no code fences, no explanations).
+Render every section heading in bold markdown using this style: **<localized heading>**.
+Output format (must follow exactly in this order, top-level headings only):
+[Candidate Full Name]
+[Phone] | [Email] | [City/Relocation info]
+Professional Summary
+(3-5 lines tailored to the role)
+Core Competencies
+(8-12 bullets)
+Relevant Experience
+<Role / Company / Dates exactly as in source when available>
+(impact-focused bullets, 3-6 per role)
+Education
+(as available in source)
+Certifications
+(as available in source; if none, write: - Not specified)
+Skills
+(grouped concise bullets from source only)
+Quality checks before final output:
+Candidate name, phone, email, and location are present at the top
+All claims traceable to source resume text
+No placeholder text
+No duplicated bullets
+Clean markdown structure`;
+}
+
+async function generateTailoredResumeMarkdown({ jobTitle, jobDescription, mainResumeText }) {
+  if (!genAI) throw new Error('GEMINI_API_KEY is not configured');
+  const prompt = buildTailoredResumePrompt({ jobTitle, jobDescription, mainResumeText });
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const text = response.text?.trim();
+  if (!text) throw new Error('AI response is empty');
+  return text;
+}
+
+async function generateCoverLetterText({ jobTitle, jobDescription, mainResumeText }) {
+  if (!genAI) throw new Error('GEMINI_API_KEY is not configured');
+  const prompt = `You are an expert career copywriter.
+Task:
+Write a short, strong, human-sounding cover letter tailored to this vacancy.
+Inputs:
+Job title: ${jobTitle}
+Job description:
+${jobDescription}
+Candidate main resume text:
+${mainResumeText}
+Strict rules:
+Use ONLY facts from the candidate main resume text.
+Do NOT invent companies, dates, titles, metrics, education, certificates, or skills.
+Write in the same primary language as the job description.
+Keep it concise: 140-220 words.
+Tone: confident, warm, specific, and natural (not generic, not robotic).
+The first 1-2 sentences must hook the employer with clear role-fit.
+Focus on value the candidate can bring for this role.
+End with a short proactive closing.
+Output plain text only (no markdown, no code fences, no explanations).`;
+
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const text = response.text?.trim();
+  if (!text) throw new Error('AI response is empty');
+  return text;
+}
+
+async function markdownToPdfBuffer(markdownText) {
+  const doc = new PDFDocument({ margin: 48, size: 'A4' });
+  const chunks = [];
+  doc.on('data', (chunk) => chunks.push(chunk));
+  const done = new Promise((resolve, reject) => {
+    doc.on('end', resolve);
+    doc.on('error', reject);
+  });
+
+  // Use Unicode-capable fonts to avoid Cyrillic mojibake in generated PDFs.
+  const regularFontPath = 'C:/Windows/Fonts/arial.ttf';
+  const boldFontPath = 'C:/Windows/Fonts/arialbd.ttf';
+  const hasUnicodeFonts = existsSync(regularFontPath) && existsSync(boldFontPath);
+  if (hasUnicodeFonts) {
+    doc.registerFont('resume-regular', regularFontPath);
+    doc.registerFont('resume-bold', boldFontPath);
+    doc.font('resume-regular');
+  } else {
+    doc.font('Helvetica');
+  }
+
+  const titleFont = hasUnicodeFonts ? 'resume-bold' : 'Helvetica-Bold';
+  const bodyFont = hasUnicodeFonts ? 'resume-regular' : 'Helvetica';
+  const bodyWidth = 500;
+  const sectionTitles = new Set([
+    'Professional Summary',
+    'Core Competencies',
+    'Relevant Experience',
+    'Education',
+    'Certifications',
+    'Skills',
+  ]);
+
+  const lines = String(markdownText || '').replace(/\r\n/g, '\n').split('\n');
+  let lineIndex = 0;
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+    if (!trimmed) {
+      doc.moveDown(0.45);
+      lineIndex += 1;
+      continue;
+    }
+
+    // Top block: candidate name + contacts.
+    if (lineIndex === 0) {
+      doc.font(titleFont).fontSize(18).fillColor('#111111').text(trimmed, { width: bodyWidth });
+      doc.moveDown(0.2);
+      lineIndex += 1;
+      continue;
+    }
+    if (lineIndex === 1) {
+      doc.font(bodyFont).fontSize(11).fillColor('#1f2937').text(trimmed, { width: bodyWidth });
+      doc.moveDown(0.5);
+      lineIndex += 1;
+      continue;
+    }
+
+    const isBoldHeading = /^\*\*.+\*\*$/.test(trimmed);
+    if (isBoldHeading || sectionTitles.has(trimmed)) {
+      const headingText = isBoldHeading ? trimmed.replace(/^\*\*|\*\*$/g, '') : trimmed;
+      doc
+        .font(titleFont)
+        .fontSize(13)
+        .fillColor('#0f172a')
+        .text(headingText, { width: bodyWidth, underline: true });
+      doc.moveDown(0.25);
+      lineIndex += 1;
+      continue;
+    }
+
+    if (/^[-*•]\s+/.test(trimmed)) {
+      const bulletText = trimmed.replace(/^[-*•]\s+/, '');
+      doc
+        .font(bodyFont)
+        .fontSize(10.8)
+        .fillColor('#111111')
+        .text(`• ${bulletText}`, { width: bodyWidth, indent: 14, lineGap: 2 });
+      lineIndex += 1;
+      continue;
+    }
+
+    // Role/company/date style line.
+    if (trimmed.includes('/') && trimmed.length <= 140) {
+      doc.font(titleFont).fontSize(11.3).fillColor('#111111').text(trimmed, { width: bodyWidth });
+      doc.moveDown(0.15);
+      lineIndex += 1;
+      continue;
+    }
+
+    doc
+      .font(bodyFont)
+      .fontSize(10.8)
+      .fillColor('#111111')
+      .text(trimmed, { width: bodyWidth, lineGap: 2 });
+    lineIndex += 1;
+  }
+  doc.end();
+  await done;
+  return Buffer.concat(chunks);
 }
 
 function toBoolOrUndefined(value) {
@@ -600,6 +800,55 @@ async function main() {
 
   let runtimeBotUsername = '';
   app.get('/api/app/bot-info', (_req, res) => res.json({ botUsername: runtimeBotUsername }));
+
+  app.post('/api/tailored-resume', async (req, res) => {
+    try {
+      const jobTitle = String(req.body?.jobTitle || '').trim();
+      const jobDescription = String(req.body?.jobDescription || '').trim();
+      const mainResumeText = String(req.body?.mainResumeText || '').trim();
+      if (!jobTitle || !jobDescription || !mainResumeText) {
+        return res.status(400).json({
+          error: 'jobTitle, jobDescription, and mainResumeText are required',
+        });
+      }
+
+      const markdown = await generateTailoredResumeMarkdown({
+        jobTitle,
+        jobDescription,
+        mainResumeText,
+      });
+      const pdfBuffer = await markdownToPdfBuffer(markdown);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="tailored-resume.pdf"');
+      return res.status(200).send(pdfBuffer);
+    } catch (err) {
+      console.error('POST /api/tailored-resume:', err);
+      return res.status(500).json({ error: 'Failed to generate tailored resume PDF' });
+    }
+  });
+
+  app.post('/api/cover-letter', async (req, res) => {
+    try {
+      const jobTitle = String(req.body?.jobTitle || '').trim();
+      const jobDescription = String(req.body?.jobDescription || '').trim();
+      const mainResumeText = String(req.body?.mainResumeText || '').trim();
+      if (!jobTitle || !jobDescription || !mainResumeText) {
+        return res.status(400).json({
+          error: 'jobTitle, jobDescription, and mainResumeText are required',
+        });
+      }
+
+      const coverLetter = await generateCoverLetterText({
+        jobTitle,
+        jobDescription,
+        mainResumeText,
+      });
+      return res.status(200).json({ coverLetter });
+    } catch (err) {
+      console.error('POST /api/cover-letter:', err);
+      return res.status(500).json({ error: 'Failed to generate cover letter' });
+    }
+  });
 
   app.get('/api/app/profile', miniAppAuth, async (req, res) => {
     try {
