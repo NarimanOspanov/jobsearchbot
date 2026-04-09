@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Telegraf } from 'telegraf';
 import { Sequelize } from 'sequelize';
 import PDFDocument from 'pdfkit';
+import { PDFParse } from 'pdf-parse';
 import { GoogleGenAI } from '@google/genai';
 import { config } from './config.js';
 import { models, sequelize } from './db.js';
@@ -334,6 +335,27 @@ async function markdownToPdfBuffer(markdownText) {
   return Buffer.concat(chunks);
 }
 
+async function extractResumeTextFromUrl(resumeUrl) {
+  const response = await fetch(resumeUrl);
+  if (!response.ok) throw new Error(`Failed to download resume by URL: ${response.status}`);
+  const mime = (response.headers.get('content-type') || '').toLowerCase();
+  const bytes = await response.arrayBuffer();
+  const buffer = Buffer.from(bytes);
+  if (mime.includes('pdf') || resumeUrl.toLowerCase().endsWith('.pdf')) {
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const parsed = await parser.getText();
+      return (parsed.text || '').trim();
+    } finally {
+      await parser.destroy();
+    }
+  }
+  if (mime.includes('text/') || resumeUrl.toLowerCase().endsWith('.txt')) {
+    return buffer.toString('utf8').trim();
+  }
+  throw new Error('Resume format is not supported for text extraction; provide PDF or TXT resume.');
+}
+
 function toBoolOrUndefined(value) {
   if (typeof value === 'boolean') return value;
   return undefined;
@@ -529,9 +551,11 @@ function registerHandlers(bot, appBaseUrl) {
   const applicationsUrl = appBaseUrl ? `${appBaseUrl}/app/applications` : '';
   const profileUrl = appBaseUrl ? `${appBaseUrl}/app/profile` : '';
   const companiesUrl = appBaseUrl ? `${appBaseUrl}/app/companies` : '';
+  const adminUrl = appBaseUrl ? `${appBaseUrl}/app/admin` : '';
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
   const canUseProfileWebApp = isValidTelegramWebAppUrl(profileUrl);
   const canUseCompaniesWebApp = isValidTelegramWebAppUrl(companiesUrl);
+  const canUseAdminWebApp = isValidTelegramWebAppUrl(adminUrl);
 
   bot.use(async (ctx, next) => {
     try {
@@ -716,6 +740,27 @@ function registerHandlers(bot, appBaseUrl) {
     await ctx.reply('Companies page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
   });
 
+  bot.command('admin', async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Admin panel is available only in private chat.');
+      return;
+    }
+    const adminIds = config.botAdminTelegramIds;
+    if (adminIds.size > 0 && (!ctx.from?.id || !adminIds.has(ctx.from.id))) {
+      await ctx.reply('Unauthorized.');
+      return;
+    }
+    if (canUseAdminWebApp) {
+      await ctx.reply('Open admin panel:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Admin Panel', web_app: { url: adminUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Admin page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  });
+
   bot.command('removeuser', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
       await ctx.reply('This command only works in a private chat with the bot.');
@@ -797,9 +842,62 @@ async function main() {
   app.get('/app/admin/companies', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'admin-companies.html'));
   });
+  app.get('/app/admin', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'admin.html'));
+  });
 
   let runtimeBotUsername = '';
   app.get('/api/app/bot-info', (_req, res) => res.json({ botUsername: runtimeBotUsername }));
+
+  app.get('/api/admin/skills', async (_req, res) => {
+    try {
+      const response = await fetch('https://screenly.work/api/all-skills');
+      if (!response.ok) return res.status(response.status).json({ error: 'Failed to load skills from Screenly' });
+      const payload = await response.json();
+      return res.json(payload);
+    } catch (err) {
+      console.error('GET /api/admin/skills:', err);
+      return res.status(500).json({ error: 'Failed to load skills' });
+    }
+  });
+
+  app.get('/api/admin/positions', async (req, res) => {
+    try {
+      const from = String(req.query.from || '').trim();
+      const to = String(req.query.to || '').trim();
+      const skillId = String(req.query.skillId || '').trim();
+      if (!from || !to) return res.status(400).json({ error: 'from and to are required' });
+      const url =
+        `https://screenly.work/api/global-remote-positions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
+        (skillId ? `&skillIds=${encodeURIComponent(skillId)}` : '');
+      const response = await fetch(url);
+      if (!response.ok) {
+        const txt = await response.text();
+        return res.status(response.status).json({ error: txt || 'Failed to load positions from Screenly' });
+      }
+      const payload = await response.json();
+      return res.json(payload);
+    } catch (err) {
+      console.error('GET /api/admin/positions:', err);
+      return res.status(500).json({ error: 'Failed to load positions' });
+    }
+  });
+
+  app.get('/api/app/admin/users/:id/resume-text', async (req, res) => {
+    try {
+      const id = Number.parseInt(String(req.params.id), 10);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
+      const user = await models.Users.findByPk(id);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      if (!user.ResumeURL) return res.status(404).json({ error: 'Resume URL is not set for this user' });
+      const resumeText = await extractResumeTextFromUrl(user.ResumeURL);
+      if (!resumeText) return res.status(422).json({ error: 'Could not extract resume text' });
+      return res.json({ userId: id, resumeUrl: user.ResumeURL, resumeText });
+    } catch (err) {
+      console.error('GET /api/app/admin/users/:id/resume-text:', err);
+      return res.status(500).json({ error: 'Failed to extract resume text' });
+    }
+  });
 
   app.post('/api/tailored-resume', async (req, res) => {
     try {
@@ -824,6 +922,42 @@ async function main() {
     } catch (err) {
       console.error('POST /api/tailored-resume:', err);
       return res.status(500).json({ error: 'Failed to generate tailored resume PDF' });
+    }
+  });
+
+  app.post('/api/tailored-resume/upload', async (req, res) => {
+    try {
+      const seekerId = Number.parseInt(String(req.body?.seekerId), 10);
+      const screenlyJobId = Number.parseInt(String(req.body?.screenlyJobId), 10);
+      const jobTitle = String(req.body?.jobTitle || '').trim();
+      const jobDescription = String(req.body?.jobDescription || '').trim();
+      const mainResumeText = String(req.body?.mainResumeText || '').trim();
+      if (!Number.isSafeInteger(seekerId) || seekerId <= 0) {
+        return res.status(400).json({ error: 'seekerId is required and must be a positive integer' });
+      }
+      if (!Number.isSafeInteger(screenlyJobId) || screenlyJobId < 0) {
+        return res.status(400).json({ error: 'screenlyJobId is required and must be a non-negative integer' });
+      }
+      if (!jobTitle || !jobDescription || !mainResumeText) {
+        return res.status(400).json({
+          error: 'jobTitle, jobDescription, and mainResumeText are required',
+        });
+      }
+
+      const markdown = await generateTailoredResumeMarkdown({ jobTitle, jobDescription, mainResumeText });
+      const pdfBuffer = await markdownToPdfBuffer(markdown);
+      const tailoredCvUrl = await resumeStorage.uploadTailoredResumeBuffer({
+        seekerId,
+        screenlyJobId,
+        fileName: `tailored-cv-${screenlyJobId}.pdf`,
+        mimeType: 'application/pdf',
+        buffer: pdfBuffer,
+      });
+
+      return res.status(200).json({ tailoredCvUrl, markdown });
+    } catch (err) {
+      console.error('POST /api/tailored-resume/upload:', err);
+      return res.status(500).json({ error: 'Failed to generate/upload tailored resume' });
     }
   });
 
@@ -919,13 +1053,20 @@ async function main() {
     }
   });
 
-  app.get('/api/app/applications', miniAppAuth, async (req, res) => {
+  app.get('/api/app/applications', async (req, res) => {
     try {
-      const user = await ensureUserByTelegramId(req.miniAppUser.id, req.miniAppUser.username ?? null);
+      let userId = Number.parseInt(String(req.query.userId || ''), 10);
+      if (!Number.isSafeInteger(userId) || userId <= 0) {
+        await miniAppAuth(req, res, async () => {
+          const user = await ensureUserByTelegramId(req.miniAppUser.id, req.miniAppUser.username ?? null);
+          userId = user.Id;
+        });
+        if (!Number.isSafeInteger(userId) || userId <= 0) return;
+      }
       const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '20'), 10) || 20));
       const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
       const rows = await models.Applications.findAll({
-        where: { UserId: user.Id },
+        where: { UserId: userId },
         order: [['AppliedAt', 'DESC'], ['Id', 'DESC']],
         limit,
         offset,

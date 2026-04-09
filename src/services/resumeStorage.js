@@ -15,9 +15,10 @@ function extensionFromMime(mimeType) {
 
 export function createResumeStorage(config) {
   const connectionString = config.azureStorageConnectionString || '';
-  const containerName = config.azureResumeContainerName || 'resumes';
+  const resumeContainerName = config.azureResumeContainerName || 'resumes';
+  const tailoredContainerName = config.azureTailoredResumeContainerName || 'tailoredresumes';
 
-  async function uploadResumeBuffer({ chatId, fileId, fileName, mimeType, buffer }) {
+  async function uploadToContainer(containerName, { folder, fileId, fileName, mimeType, buffer }) {
     if (!connectionString) {
       throw new Error('AZURE_STORAGE_CONNECTION_STRING is not configured.');
     }
@@ -25,12 +26,12 @@ export function createResumeStorage(config) {
     const container = client.getContainerClient(containerName);
     await container.createIfNotExists();
 
-    const safeChatId = sanitizeSegment(chatId);
+    const safeFolder = sanitizeSegment(folder);
     const safeFileId = sanitizeSegment(fileId);
     const ext = (fileName && fileName.includes('.'))
       ? sanitizeSegment(fileName.split('.').pop())
       : extensionFromMime(mimeType);
-    const blobName = `telegram/${safeChatId}/${Date.now()}-${safeFileId}.${ext}`;
+    const blobName = `telegram/${safeFolder}/${Date.now()}-${safeFileId}.${ext}`;
     const blob = container.getBlockBlobClient(blobName);
 
     await blob.uploadData(buffer, {
@@ -39,5 +40,25 @@ export function createResumeStorage(config) {
     return blob.url;
   }
 
-  return { uploadResumeBuffer };
+  async function uploadResumeBuffer({ chatId, fileId, fileName, mimeType, buffer }) {
+    return uploadToContainer(resumeContainerName, {
+      folder: chatId,
+      fileId,
+      fileName,
+      mimeType,
+      buffer,
+    });
+  }
+
+  async function uploadTailoredResumeBuffer({ seekerId, screenlyJobId, fileName, mimeType, buffer }) {
+    return uploadToContainer(tailoredContainerName, {
+      folder: `${seekerId}-${screenlyJobId}`,
+      fileId: `${seekerId}-${screenlyJobId}-${Date.now()}`,
+      fileName: fileName || `tailored-${screenlyJobId}.pdf`,
+      mimeType: mimeType || 'application/pdf',
+      buffer,
+    });
+  }
+
+  return { uploadResumeBuffer, uploadTailoredResumeBuffer };
 }

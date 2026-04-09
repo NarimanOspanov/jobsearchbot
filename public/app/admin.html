@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+        --ok: #22c55e;
+        --bad: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { max-width: 1200px; margin: 0 auto; padding: 14px; display: grid; gap: 12px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+      h1, h2, h3 { margin: 0 0 10px; }
+      .muted { color: var(--muted); }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      input, select, button, textarea {
+        border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 8px; font: inherit;
+      }
+      button { cursor: pointer; background: var(--accent); border-color: var(--accent); }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
+      th { color: var(--muted); font-weight: 600; }
+      .ok { color: var(--ok); }
+      .bad { color: var(--bad); }
+      .layout { display: grid; gap: 12px; grid-template-columns: 1fr; }
+      @media (min-width: 1024px) { .layout { grid-template-columns: 1.1fr 1fr; } }
+      .users-list button { width: 100%; text-align: left; margin: 4px 0; }
+      .selected { outline: 2px solid var(--accent); }
+      .artifacts a { color: #8ab4ff; display: inline-block; margin-right: 10px; text-decoration: underline; font-weight: 600; }
+      a { color: #9ec5ff; text-decoration: underline; font-weight: 600; }
+      a:hover { color: #c7ddff; }
+      .loader { display: none; }
+      .loader.on { display: inline; }
+      textarea { width: 100%; min-height: 130px; }
+      .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+        display: none; align-items: center; justify-content: center; z-index: 9999;
+      }
+      .modal-backdrop.on { display: flex; }
+      .modal-card {
+        width: min(1100px, 95vw); height: min(85vh, 900px); background: #0a1020;
+        border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: grid;
+        grid-template-rows: auto 1fr;
+      }
+      .modal-head {
+        display: flex; justify-content: space-between; align-items: center; gap: 8px;
+        padding: 8px 10px; border-bottom: 1px solid var(--border);
+      }
+      .modal-body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Admin Panel</h1>
+      <p id="globalMsg" class="muted"></p>
+
+      <div class="layout">
+        <section class="card">
+          <h2>Users (resume required)</h2>
+          <div id="usersList" class="users-list"></div>
+        </section>
+
+        <section class="card">
+          <h2>User dashboard</h2>
+          <div class="row">
+            <label>Seeker ID <input id="seekerId" style="width:110px" /></label>
+            <label>From <input id="fromDate" type="date" /></label>
+            <label>To <input id="toDate" type="date" /></label>
+            <label>Skill <select id="skillId"><option value="">All</option></select></label>
+            <button id="syncBtn">Search remote jobs</button>
+            <button id="openResumeBtn" type="button">Open resume</button>
+            <span id="syncLoader" class="loader">Loading...</span>
+          </div>
+          <p id="dashMsg" class="muted"></p>
+          <div style="overflow:auto; max-height:420px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Status</th><th>Notes</th><th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="jobsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <section class="card">
+        <h2>Job details</h2>
+        <div id="jobInfo" class="muted">Select a job to continue.</div>
+        <div id="jobActions" style="display:none">
+          <div class="row">
+            <label>Status
+              <select id="statusSel">
+                <option value="new">new</option>
+                <option value="applied">applied</option>
+                <option value="skipped">skipped</option>
+              </select>
+            </label>
+            <button id="genBtn">Generate Tailored CV + Cover Letter</button>
+            <span id="jobLoader" class="loader">Working...</span>
+          </div>
+          <label>Notes</label>
+          <textarea id="notesText"></textarea>
+          <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
+          <label>Cover Letter</label>
+          <textarea id="coverPreview" readonly></textarea>
+          <p id="jobMsg" class="muted"></p>
+        </div>
+      </section>
+    </div>
+    <div id="cvModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="cvModalTitle">Document</strong>
+          <button id="cvModalClose" type="button">Close</button>
+        </div>
+        <div class="modal-body">
+          <iframe id="cvModalFrame" title="Document preview"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+
+      const API_BASE = '';
+      const USERS_URL = `/api/app/admin/users`;
+      const SKILLS_URL = '/api/admin/skills';
+      const POSITIONS_URL = '/api/admin/positions';
+
+      let users = [];
+      let skills = [];
+      let positions = [];
+      let applications = [];
+      let selectedJob = null;
+      let selectedApplication = null;
+      let jobsSort = { key: 'posted', dir: 'desc' };
+
+      function q() {
+        const p = new URLSearchParams(location.search);
+        return {
+          seekerId: p.get('seekerId') || '',
+          from: p.get('from') || '',
+          to: p.get('to') || '',
+          skillId: p.get('skillId') || '',
+          jobId: p.get('jobId') || '',
+        };
+      }
+      function setQ(next) {
+        const p = new URLSearchParams(location.search);
+        Object.entries(next).forEach(([k, v]) => {
+          if (v == null || v === '') p.delete(k); else p.set(k, String(v));
+        });
+        history.replaceState(null, '', `?${p.toString()}`);
+      }
+      function setMsg(id, txt, isErr = false) {
+        const el = document.getElementById(id);
+        el.textContent = txt || '';
+        el.className = isErr ? 'bad' : 'muted';
+      }
+      function esc(v) {
+        return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      function formatPostedDate(v) {
+        const s = String(v || '').trim();
+        if (!s) return '';
+        if (s.includes('T')) return s.split('T')[0];
+        return s;
+      }
+      function sortArrow(key) {
+        if (jobsSort.key !== key) return '';
+        return jobsSort.dir === 'asc' ? ' ▲' : ' ▼';
+      }
+      function asComparableDate(v) {
+        const t = new Date(String(v || '')).getTime();
+        return Number.isFinite(t) ? t : 0;
+      }
+      function compareJobs(a, b) {
+        const appA = appByScreenlyId(a.id);
+        const appB = appByScreenlyId(b.id);
+        const dir = jobsSort.dir === 'asc' ? 1 : -1;
+        let va = '';
+        let vb = '';
+        switch (jobsSort.key) {
+          case 'title':
+            va = String(a.title || '').toLowerCase();
+            vb = String(b.title || '').toLowerCase();
+            break;
+          case 'company':
+            va = String(a.company || '').toLowerCase();
+            vb = String(b.company || '').toLowerCase();
+            break;
+          case 'location':
+            va = String(a.location || '').toLowerCase();
+            vb = String(b.location || '').toLowerCase();
+            break;
+          case 'posted':
+            return (asComparableDate(a.publishedAt) - asComparableDate(b.publishedAt)) * dir;
+          case 'status':
+            va = String(appA?.Status || 'new').toLowerCase();
+            vb = String(appB?.Status || 'new').toLowerCase();
+            break;
+          default:
+            va = String(a.title || '').toLowerCase();
+            vb = String(b.title || '').toLowerCase();
+            break;
+        }
+        if (va < vb) return -1 * dir;
+        if (va > vb) return 1 * dir;
+        return 0;
+      }
+      function setJobsSort(key) {
+        if (jobsSort.key === key) {
+          jobsSort.dir = jobsSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          jobsSort.key = key;
+          jobsSort.dir = key === 'posted' ? 'desc' : 'asc';
+        }
+        renderJobs();
+      }
+      function onLoading(id, on) {
+        const el = document.getElementById(id);
+        el.className = on ? 'loader on' : 'loader';
+      }
+      function openCvModal(title, url) {
+        document.getElementById('cvModalTitle').textContent = title || 'Document';
+        document.getElementById('cvModalFrame').src = url || 'about:blank';
+        document.getElementById('cvModal').classList.add('on');
+      }
+      function closeCvModal() {
+        document.getElementById('cvModal').classList.remove('on');
+        document.getElementById('cvModalFrame').src = 'about:blank';
+      }
+      async function api(url, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        const res = await fetch(url, { ...options, headers });
+        if (!res.ok) throw new Error(await res.text());
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) return res.json();
+        return res.text();
+      }
+
+      async function loadUsers() {
+        const rows = await api(USERS_URL);
+        users = (rows || []).filter((u) => !!u.resumeUrl);
+        renderUsers();
+      }
+      function renderUsers() {
+        const root = document.getElementById('usersList');
+        const qs = q();
+        if (!users.length) {
+          root.innerHTML = '<p class="muted">No users with resume data.</p>';
+          return;
+        }
+        root.innerHTML = users.map((u) => `
+          <button data-id="${u.id}" class="${String(u.id) === qs.seekerId ? 'selected' : ''}">
+            #${u.id} ${esc(u.telegramUserName || '')} (${esc(u.telegramChatId)})
+          </button>
+        `).join('');
+        root.querySelectorAll('button[data-id]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            document.getElementById('seekerId').value = id;
+            setQ({ seekerId: id });
+            renderUsers();
+          });
+        });
+      }
+
+      async function loadSkills() {
+        const payload = await api(SKILLS_URL);
+        skills = payload.skills || payload || [];
+        const sel = document.getElementById('skillId');
+        const labelOf = (s) => {
+          const roleName = String(s.roleName || s.RoleName || '').trim();
+          const name = String(s.name || s.Name || `${s.id}`).trim();
+          if (roleName && name) return `${roleName}:${name}`;
+          return roleName || name || String(s.id);
+        };
+        sel.innerHTML = '<option value="">All</option>' + skills.map((s) =>
+          `<option value="${s.id}">${esc(labelOf(s))}</option>`
+        ).join('');
+      }
+
+      async function loadApplicationsByUser(userId) {
+        applications = await api(`${API_BASE}/api/app/applications/by-user?userId=${encodeURIComponent(userId)}&limit=100&offset=0`);
+      }
+
+      async function syncJobs() {
+        const seekerId = document.getElementById('seekerId').value.trim();
+        const from = document.getElementById('fromDate').value;
+        const to = document.getElementById('toDate').value;
+        const skillId = document.getElementById('skillId').value;
+        if (!seekerId) throw new Error('Select seeker first.');
+        if (!from || !to) throw new Error('Set from and to dates.');
+
+        setQ({ seekerId, from, to, skillId });
+        onLoading('syncLoader', true);
+        try {
+          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillId ? `&skillId=${encodeURIComponent(skillId)}` : ''}`;
+          const data = await api(posUrl);
+          positions = data.positions || [];
+          await loadApplicationsByUser(seekerId);
+          renderJobs();
+          setMsg('dashMsg', `Loaded ${positions.length} jobs.`);
+        } finally {
+          onLoading('syncLoader', false);
+        }
+      }
+
+      function appByScreenlyId(screenlyId) {
+        return applications.find((a) => Number(a.ScreenlyJobId) === Number(screenlyId)) || null;
+      }
+
+      function renderJobs() {
+        const body = document.getElementById('jobsBody');
+        const headRow = document.querySelector('table thead tr');
+        headRow.innerHTML = `
+          <th><button type="button" data-sort="title">Title${sortArrow('title')}</button></th>
+          <th><button type="button" data-sort="company">Company${sortArrow('company')}</button></th>
+          <th><button type="button" data-sort="location">Location${sortArrow('location')}</button></th>
+          <th><button type="button" data-sort="posted">Posted${sortArrow('posted')}</button></th>
+          <th><button type="button" data-sort="status">Status${sortArrow('status')}</button></th>
+          <th>Notes</th>
+          <th>Action</th>
+        `;
+        headRow.querySelectorAll('button[data-sort]').forEach((btn) => {
+          btn.addEventListener('click', () => setJobsSort(btn.getAttribute('data-sort')));
+        });
+
+        if (!positions.length) {
+          body.innerHTML = '<tr><td colspan="7" class="muted">No jobs loaded.</td></tr>';
+          return;
+        }
+        const sorted = [...positions].sort(compareJobs);
+        body.innerHTML = sorted.map((p) => {
+          const app = appByScreenlyId(p.id);
+          return `<tr>
+            <td>${esc(p.title)}</td>
+            <td>${esc(p.company)}</td>
+            <td>${esc(p.location)}</td>
+            <td>${esc(formatPostedDate(p.publishedAt))}</td>
+            <td>${esc(app?.Status || 'new')}</td>
+            <td>${esc(app?.Notes || '')}</td>
+            <td><button data-open="${p.id}">Open</button></td>
+          </tr>`;
+        }).join('');
+        body.querySelectorAll('button[data-open]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = Number(btn.getAttribute('data-open'));
+            setQ({ jobId: id });
+            openJobById(id);
+          });
+        });
+      }
+
+      async function ensureApplication(seekerId, job) {
+        let app = appByScreenlyId(job.id);
+        if (app) return app;
+        app = await api(`${API_BASE}/api/app/applications`, {
+          method: 'POST',
+          body: JSON.stringify({
+            userId: Number(seekerId),
+            screenlyJobId: Number(job.id),
+            vacancyTitle: job.title,
+            companyName: job.company,
+            source: job.source,
+            appliedAt: job.publishedAt,
+            metaJson: {
+              positionId: job.id,
+              applyUrl: job.applyUrl || null,
+              location: job.location || null,
+              shortSummary: job.shortSummary || null,
+            },
+          }),
+        });
+        await loadApplicationsByUser(seekerId);
+        return appByScreenlyId(job.id) || app;
+      }
+
+      function openJobById(id) {
+        const job = positions.find((x) => Number(x.id) === Number(id));
+        if (!job) return;
+        selectedJob = job;
+        selectedApplication = appByScreenlyId(job.id);
+        document.getElementById('jobActions').style.display = 'block';
+        document.getElementById('jobInfo').innerHTML =
+          `<strong>${esc(job.title)}</strong><br/>${esc(job.company)} · ${esc(job.location)}<br/>` +
+          `<a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Open source job link</a>`;
+        document.getElementById('statusSel').value = selectedApplication?.Status || 'new';
+        document.getElementById('notesText').value = selectedApplication?.Notes || '';
+        renderArtifacts();
+      }
+
+      function renderArtifacts() {
+        const links = document.getElementById('artifactLinks');
+        const cover = document.getElementById('coverPreview');
+        if (!selectedApplication) {
+          links.innerHTML = '';
+          cover.value = '';
+          return;
+        }
+        links.innerHTML = selectedApplication.TailoredCVURL
+          ? `
+            <button type="button" id="openTailoredCvBtn">Tailored CV (open)</button>
+            <a href="${esc(selectedApplication.TailoredCVURL)}" download target="_blank" rel="noopener noreferrer">Download Tailored CV</a>
+          `
+          : '';
+        const openBtn = document.getElementById('openTailoredCvBtn');
+        if (openBtn) {
+          openBtn.addEventListener('click', () => {
+            openCvModal('Tailored CV', selectedApplication.TailoredCVURL);
+          });
+        }
+        cover.value = selectedApplication.CoverLetter || '';
+      }
+
+      async function saveStatus() {
+        const seekerId = document.getElementById('seekerId').value.trim();
+        if (!selectedJob) throw new Error('Open a job first.');
+        onLoading('jobLoader', true);
+        try {
+          const app = await ensureApplication(seekerId, selectedJob);
+          const updated = await api(`${API_BASE}/api/app/applications/${app.Id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              status: document.getElementById('statusSel').value,
+              notes: document.getElementById('notesText').value,
+            }),
+          });
+          selectedApplication = updated;
+          await loadApplicationsByUser(seekerId);
+          renderJobs();
+          renderArtifacts();
+          setMsg('jobMsg', 'Status saved.');
+        } finally {
+          onLoading('jobLoader', false);
+        }
+      }
+
+      function getSelectedUser() {
+        const seekerId = document.getElementById('seekerId').value.trim();
+        if (!seekerId) return null;
+        return users.find((u) => String(u.id) === String(seekerId)) || null;
+      }
+
+      function openSelectedUserResume() {
+        const u = getSelectedUser();
+        if (!u || !u.resumeUrl) {
+          setMsg('dashMsg', 'Selected user has no resumeUrl.', true);
+          return;
+        }
+        openCvModal(`Resume: #${u.id}`, u.resumeUrl);
+      }
+
+      async function generateMaterials() {
+        const seekerId = document.getElementById('seekerId').value.trim();
+        if (!selectedJob) throw new Error('Open a job first.');
+        onLoading('jobLoader', true);
+        try {
+          const app = await ensureApplication(seekerId, selectedJob);
+          const resumePayload = await api(`${API_BASE}/api/app/admin/users/${encodeURIComponent(seekerId)}/resume-text`);
+          const mainResumeText = String(resumePayload.resumeText || '').trim();
+          if (!mainResumeText) throw new Error('Resume text is empty for selected user.');
+
+          const [tailored, cover] = await Promise.all([
+            api(`${API_BASE}/api/tailored-resume/upload`, {
+              method: 'POST',
+              body: JSON.stringify({
+                seekerId: Number(seekerId),
+                screenlyJobId: Number(selectedJob.id),
+                jobTitle: selectedJob.title || '',
+                jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
+                mainResumeText,
+              }),
+            }),
+            api(`${API_BASE}/api/cover-letter`, {
+              method: 'POST',
+              body: JSON.stringify({
+                jobTitle: selectedJob.title || '',
+                jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
+                mainResumeText,
+              }),
+            }),
+          ]);
+
+          const updated = await api(`${API_BASE}/api/app/applications/${app.Id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              tailoredCvUrl: tailored.tailoredCvUrl,
+              coverLetter: cover.coverLetter,
+              notes: document.getElementById('notesText').value,
+            }),
+          });
+          selectedApplication = updated;
+          await loadApplicationsByUser(seekerId);
+          renderJobs();
+          renderArtifacts();
+          setMsg('jobMsg', 'Tailored CV + cover letter generated and saved.');
+        } finally {
+          onLoading('jobLoader', false);
+        }
+      }
+
+      function hydrateStateToInputs() {
+        const s = q();
+        document.getElementById('seekerId').value = s.seekerId;
+        if (s.from && s.to) {
+          document.getElementById('fromDate').value = s.from;
+          document.getElementById('toDate').value = s.to;
+          return;
+        }
+        const now = new Date();
+        const to = now.toISOString().slice(0, 10);
+        const prev = new Date(now);
+        prev.setMonth(prev.getMonth() - 1);
+        const from = prev.toISOString().slice(0, 10);
+        document.getElementById('fromDate').value = from;
+        document.getElementById('toDate').value = to;
+      }
+
+      async function boot() {
+        hydrateStateToInputs();
+        await Promise.all([loadUsers(), loadSkills()]);
+        const s = q();
+        if (s.skillId) document.getElementById('skillId').value = s.skillId;
+        if (s.seekerId && s.from && s.to) {
+          await syncJobs();
+          if (s.jobId) openJobById(Number(s.jobId));
+        }
+      }
+
+      document.getElementById('syncBtn').addEventListener('click', () => syncJobs().catch((e) => setMsg('dashMsg', e.message, true)));
+      document.getElementById('statusSel').addEventListener('change', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('notesText').addEventListener('blur', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('genBtn').addEventListener('click', () => generateMaterials().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('openResumeBtn').addEventListener('click', openSelectedUserResume);
+      document.getElementById('cvModalClose').addEventListener('click', closeCvModal);
+      document.getElementById('cvModal').addEventListener('click', (e) => {
+        if (e.target.id === 'cvModal') closeCvModal();
+      });
+
+      boot().catch((err) => {
+        setMsg('globalMsg', `Failed to initialize admin panel: ${err.message}`, true);
+      });
+    </script>
+  </body>
+</html>
