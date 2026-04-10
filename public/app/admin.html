@@ -18,7 +18,7 @@
       }
       * { box-sizing: border-box; }
       body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
-      .wrap { max-width: 1200px; margin: 0 auto; padding: 14px; display: grid; gap: 12px; }
+      .wrap { width: 100%; max-width: 100%; margin: 0 auto; padding: 14px; display: grid; gap: 12px; box-sizing: border-box; }
       .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
       h1, h2, h3 { margin: 0 0 10px; }
       .muted { color: var(--muted); }
@@ -30,17 +30,55 @@
       table { width: 100%; border-collapse: collapse; }
       th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
       th { color: var(--muted); font-weight: 600; }
+      #jobsBody tr { cursor: pointer; }
+      #jobsBody tr:hover { background: rgba(79, 124, 255, 0.08); }
       .ok { color: var(--ok); }
       .bad { color: var(--bad); }
-      .layout { display: grid; gap: 12px; grid-template-columns: 1fr; }
-      @media (min-width: 1024px) { .layout { grid-template-columns: 1.1fr 1fr; } }
+      .layout {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+      @media (min-width: 1024px) {
+        .layout {
+          grid-template-columns: minmax(0, 10%) minmax(0, 45%) minmax(0, 45%);
+          min-height: calc(100vh - 100px);
+        }
+        .layout .card.layout-col {
+          min-height: 0;
+          max-height: calc(100vh - 100px);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .layout .layout-col-body {
+          flex: 1;
+          min-height: 0;
+          overflow: auto;
+        }
+      }
       .users-list button { width: 100%; text-align: left; margin: 4px 0; }
       .selected { outline: 2px solid var(--accent); }
       .artifacts a { color: #8ab4ff; display: inline-block; margin-right: 10px; text-decoration: underline; font-weight: 600; }
       a { color: #9ec5ff; text-decoration: underline; font-weight: 600; }
       a:hover { color: #c7ddff; }
-      .loader { display: none; }
-      .loader.on { display: inline; }
+      .loader {
+        display: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(158, 176, 209, 0.45);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
+      }
+      .loader.on { display: inline-block; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      button:disabled, input:disabled, select:disabled, textarea:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
       textarea { width: 100%; min-height: 130px; }
       .modal-backdrop {
         position: fixed; inset: 0; background: rgba(0,0,0,0.7);
@@ -57,6 +95,68 @@
         padding: 8px 10px; border-bottom: 1px solid var(--border);
       }
       .modal-body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+      .tag-remote {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        margin-left: 8px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #1e3a5f;
+        color: #93c5fd;
+        border: 1px solid #3b82f6;
+        cursor: help;
+        vertical-align: middle;
+      }
+      .job-detail { color: var(--text); }
+      .job-detail .sub { color: var(--muted); font-size: 13px; }
+      .job-summary { margin: 10px 0; line-height: 1.45; color: var(--text); }
+      .skills-block { margin-top: 12px; }
+      .skills-block h4 { margin: 8px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+      .skill-tag {
+        display: inline-block;
+        margin: 2px 6px 2px 0;
+        padding: 3px 8px;
+        border-radius: 6px;
+        background: #1a2540;
+        border: 1px solid var(--border);
+        font-size: 12px;
+        cursor: help;
+        line-height: 1.35;
+      }
+      .skill-tag.primary { border-color: #3b82f6; background: #152038; }
+      .user-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .user-info-grid .item {
+        background: #0f1730;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+      }
+      .user-info-grid .k {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+      .date-range {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+      }
+      .date-range-row {
+        margin-top: 8px;
+      }
+      .section-separator {
+        height: 1px;
+        border: 0;
+        background: var(--border);
+        margin: 10px 0 8px;
+      }
     </style>
   </head>
   <body>
@@ -65,59 +165,74 @@
       <p id="globalMsg" class="muted"></p>
 
       <div class="layout">
-        <section class="card">
-          <h2>Users (resume required)</h2>
-          <div id="usersList" class="users-list"></div>
+        <section class="card layout-col">
+          <h2>Users</h2>
+          <div id="usersList" class="users-list layout-col-body"></div>
         </section>
 
-        <section class="card">
-          <h2>User dashboard</h2>
+        <section class="card layout-col">
+          <h2>User information and applications</h2>
+          <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
           <div class="row">
-            <label>Seeker ID <input id="seekerId" style="width:110px" /></label>
-            <label>From <input id="fromDate" type="date" /></label>
-            <label>To <input id="toDate" type="date" /></label>
-            <label>Skill <select id="skillId"><option value="">All</option></select></label>
-            <button id="syncBtn">Search remote jobs</button>
             <button id="openResumeBtn" type="button">Open resume</button>
-            <span id="syncLoader" class="loader">Loading...</span>
+          </div>
+          <hr class="section-separator" />
+          <div class="row date-range-row">
+            <span class="date-range">
+              <label>From <input id="fromDate" type="date" /></label>
+              <label>To <input id="toDate" type="date" /></label>
+            </span>
+          </div>
+          <div class="row date-range-row">
+            <label>Skill <select id="skillId"><option value="">All</option></select></label>
+          </div>
+          <div class="row date-range-row">
+            <button id="syncBtn">Search remote jobs</button>
+            <span id="syncLoader" class="loader" aria-hidden="true"></span>
           </div>
           <p id="dashMsg" class="muted"></p>
-          <div style="overflow:auto; max-height:420px;">
+          <div class="layout-col-body">
             <table>
               <thead>
                 <tr>
-                  <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Status</th><th>Notes</th><th>Action</th>
+                  <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Status</th>
                 </tr>
               </thead>
               <tbody id="jobsBody"></tbody>
             </table>
           </div>
         </section>
-      </div>
 
-      <section class="card">
-        <h2>Job details</h2>
-        <div id="jobInfo" class="muted">Select a job to continue.</div>
-        <div id="jobActions" style="display:none">
-          <div class="row">
-            <label>Status
-              <select id="statusSel">
-                <option value="new">new</option>
-                <option value="applied">applied</option>
-                <option value="skipped">skipped</option>
-              </select>
-            </label>
-            <button id="genBtn">Generate Tailored CV + Cover Letter</button>
-            <span id="jobLoader" class="loader">Working...</span>
+        <section class="card layout-col">
+          <h2>Job details</h2>
+          <div class="layout-col-body">
+            <div id="jobInfo" class="muted">Select a job to continue.</div>
+            <div id="jobActions" style="display:none">
+              <div class="row">
+                <label>Status
+                  <select id="statusSel">
+                    <option value="new">new</option>
+                    <option value="applied">applied</option>
+                    <option value="skipped">skipped</option>
+                  </select>
+                </label>
+                <button id="genBtn">Generate Tailored CV + Cover Letter</button>
+                <span id="jobLoader" class="loader" aria-hidden="true"></span>
+              </div>
+              <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
+              <label>Cover Letter</label>
+              <textarea id="coverPreview" readonly></textarea>
+              <p id="jobMsg" class="muted"></p>
+            </div>
+            <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
+              <div class="skills-block">
+                <h4>Admin notes</h4>
+                <textarea id="notesText" aria-label="Admin notes"></textarea>
+              </div>
+            </div>
           </div>
-          <label>Notes</label>
-          <textarea id="notesText"></textarea>
-          <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
-          <label>Cover Letter</label>
-          <textarea id="coverPreview" readonly></textarea>
-          <p id="jobMsg" class="muted"></p>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
     <div id="cvModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
@@ -146,7 +261,9 @@
       let applications = [];
       let selectedJob = null;
       let selectedApplication = null;
-      let jobsSort = { key: 'posted', dir: 'desc' };
+      let jobsSort = { key: 'id', dir: 'desc' };
+      let isSyncing = false;
+      let isJobBusy = false;
 
       function q() {
         const p = new URLSearchParams(location.search);
@@ -173,6 +290,42 @@
       function esc(v) {
         return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       }
+      /** For HTML attribute values (e.g. title tooltips). */
+      function attrEsc(v) {
+        return String(v || '')
+          .replace(/\r\n|\r|\n/g, ' ')
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;');
+      }
+      function skillDisplayLine(s) {
+        const roleName = String(s.roleName || '').trim() || '—';
+        const name = String(s.name || '').trim() || '—';
+        return `${roleName} : ${name}`;
+      }
+      function remoteTagHtml(remoteReasoning) {
+        const r = String(remoteReasoning || '').trim();
+        if (!r) return '';
+        return `<span class="tag-remote" title="${attrEsc(r)}">Remote</span>`;
+      }
+      function renderJobSkillsHtml(skills) {
+        const list = Array.isArray(skills) ? skills : [];
+        const primary = list.filter((s) => s.isHighlyRelevant === true);
+        const secondary = list.filter((s) => s.isHighlyRelevant !== true);
+        const chips = (arr, cls) =>
+          arr
+            .map((s) => {
+              const label = esc(skillDisplayLine(s));
+              const tip = attrEsc(s.justification || '');
+              return `<span class="skill-tag ${cls}" title="${tip}">${label}</span>`;
+            })
+            .join('');
+        let out = '<div class="skills-block">';
+        out += `<h4>Primary skills</h4><div>${chips(primary, 'primary') || '<span class="muted">None</span>'}</div>`;
+        out += `<h4>Secondary skills</h4><div>${chips(secondary, '') || '<span class="muted">None</span>'}</div>`;
+        out += '</div>';
+        return out;
+      }
       function formatPostedDate(v) {
         const s = String(v || '').trim();
         if (!s) return '';
@@ -194,6 +347,8 @@
         let va = '';
         let vb = '';
         switch (jobsSort.key) {
+          case 'id':
+            return (Number(a.id) - Number(b.id)) * dir;
           case 'title':
             va = String(a.title || '').toLowerCase();
             vb = String(b.title || '').toLowerCase();
@@ -226,13 +381,29 @@
           jobsSort.dir = jobsSort.dir === 'asc' ? 'desc' : 'asc';
         } else {
           jobsSort.key = key;
-          jobsSort.dir = key === 'posted' ? 'desc' : 'asc';
+          jobsSort.dir = (key === 'posted' || key === 'id') ? 'desc' : 'asc';
         }
         renderJobs();
       }
       function onLoading(id, on) {
         const el = document.getElementById(id);
         el.className = on ? 'loader on' : 'loader';
+      }
+      function setSyncBusy(on) {
+        isSyncing = on;
+        onLoading('syncLoader', on);
+        ['syncBtn', 'fromDate', 'toDate', 'skillId', 'openResumeBtn'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.disabled = on;
+        });
+      }
+      function setJobBusy(on) {
+        isJobBusy = on;
+        onLoading('jobLoader', on);
+        ['statusSel', 'notesText', 'genBtn'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.disabled = on;
+        });
       }
       function openCvModal(title, url) {
         document.getElementById('cvModalTitle').textContent = title || 'Document';
@@ -272,11 +443,42 @@
         root.querySelectorAll('button[data-id]').forEach((btn) => {
           btn.addEventListener('click', () => {
             const id = btn.getAttribute('data-id');
-            document.getElementById('seekerId').value = id;
             setQ({ seekerId: id });
             renderUsers();
+            renderSelectedUserInfo();
           });
         });
+      }
+      function renderSelectedUserInfo() {
+        const el = document.getElementById('selectedUserInfo');
+        const u = getSelectedUser();
+        if (!u) {
+          el.className = 'muted';
+          el.innerHTML = 'Select a user to view user information.';
+          return;
+        }
+        const username = String(u.telegramUserName || '').trim();
+        const usernameNoAt = username.replace(/^@/, '');
+        const usernameHtml = usernameNoAt
+          ? `<a href="https://t.me/${encodeURIComponent(usernameNoAt)}" target="_blank" rel="noopener noreferrer">${esc(usernameNoAt)}</a>`
+          : '—';
+        el.className = 'job-detail';
+        el.innerHTML = `
+          <div class="user-info-grid">
+            <div class="item">
+              <div class="k">Telegram username</div>
+              <div>${usernameHtml}</div>
+            </div>
+            <div class="item">
+              <div class="k">User Id</div>
+              <div>${esc(String(u.id || '—'))}</div>
+            </div>
+            <div class="item">
+              <div class="k">TelegramChatId</div>
+              <div>${esc(String(u.telegramChatId || '—'))}</div>
+            </div>
+          </div>
+        `;
       }
 
       async function loadSkills() {
@@ -299,7 +501,8 @@
       }
 
       async function syncJobs() {
-        const seekerId = document.getElementById('seekerId').value.trim();
+        if (isSyncing) return;
+        const seekerId = q().seekerId;
         const from = document.getElementById('fromDate').value;
         const to = document.getElementById('toDate').value;
         const skillId = document.getElementById('skillId').value;
@@ -307,7 +510,7 @@
         if (!from || !to) throw new Error('Set from and to dates.');
 
         setQ({ seekerId, from, to, skillId });
-        onLoading('syncLoader', true);
+        setSyncBusy(true);
         try {
           const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillId ? `&skillId=${encodeURIComponent(skillId)}` : ''}`;
           const data = await api(posUrl);
@@ -316,7 +519,7 @@
           renderJobs();
           setMsg('dashMsg', `Loaded ${positions.length} jobs.`);
         } finally {
-          onLoading('syncLoader', false);
+          setSyncBusy(false);
         }
       }
 
@@ -333,33 +536,29 @@
           <th><button type="button" data-sort="location">Location${sortArrow('location')}</button></th>
           <th><button type="button" data-sort="posted">Posted${sortArrow('posted')}</button></th>
           <th><button type="button" data-sort="status">Status${sortArrow('status')}</button></th>
-          <th>Notes</th>
-          <th>Action</th>
         `;
         headRow.querySelectorAll('button[data-sort]').forEach((btn) => {
           btn.addEventListener('click', () => setJobsSort(btn.getAttribute('data-sort')));
         });
 
         if (!positions.length) {
-          body.innerHTML = '<tr><td colspan="7" class="muted">No jobs loaded.</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="muted">No jobs loaded.</td></tr>';
           return;
         }
         const sorted = [...positions].sort(compareJobs);
         body.innerHTML = sorted.map((p) => {
           const app = appByScreenlyId(p.id);
-          return `<tr>
+          return `<tr data-open="${p.id}">
             <td>${esc(p.title)}</td>
             <td>${esc(p.company)}</td>
             <td>${esc(p.location)}</td>
             <td>${esc(formatPostedDate(p.publishedAt))}</td>
             <td>${esc(app?.Status || 'new')}</td>
-            <td>${esc(app?.Notes || '')}</td>
-            <td><button data-open="${p.id}">Open</button></td>
           </tr>`;
         }).join('');
-        body.querySelectorAll('button[data-open]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const id = Number(btn.getAttribute('data-open'));
+        body.querySelectorAll('tr[data-open]').forEach((row) => {
+          row.addEventListener('click', () => {
+            const id = Number(row.getAttribute('data-open'));
             setQ({ jobId: id });
             openJobById(id);
           });
@@ -392,13 +591,31 @@
 
       function openJobById(id) {
         const job = positions.find((x) => Number(x.id) === Number(id));
-        if (!job) return;
+        if (!job) {
+          document.getElementById('jobNotesBlock').style.display = 'none';
+          document.getElementById('jobActions').style.display = 'none';
+          return;
+        }
         selectedJob = job;
         selectedApplication = appByScreenlyId(job.id);
+        document.getElementById('jobInfo').classList.remove('muted');
+        document.getElementById('jobNotesBlock').style.display = 'block';
         document.getElementById('jobActions').style.display = 'block';
+        const remoteHtml = String(job.remoteReasoning || '').trim()
+          ? `<div class="skills-block" style="margin-top:10px"><div>${remoteTagHtml(job.remoteReasoning)}</div></div>`
+          : '';
+        const sumHtml = String(job.shortSummary || '').trim()
+          ? `<div class="skills-block" style="margin-top:10px"><h4>Summary</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
+          : '';
         document.getElementById('jobInfo').innerHTML =
-          `<strong>${esc(job.title)}</strong><br/>${esc(job.company)} · ${esc(job.location)}<br/>` +
-          `<a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Open source job link</a>`;
+          `<div class="job-detail">` +
+          `<div><strong>${esc(job.title)}</strong></div>` +
+          `<div class="sub">${esc(job.company)} · ${esc(job.location)}</div>` +
+          `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Open source job link</a></div>` +
+          remoteHtml +
+          sumHtml +
+          renderJobSkillsHtml(job.skills) +
+          `</div>`;
         document.getElementById('statusSel').value = selectedApplication?.Status || 'new';
         document.getElementById('notesText').value = selectedApplication?.Notes || '';
         renderArtifacts();
@@ -428,9 +645,11 @@
       }
 
       async function saveStatus() {
-        const seekerId = document.getElementById('seekerId').value.trim();
+        if (isJobBusy) return;
+        const seekerId = q().seekerId;
         if (!selectedJob) throw new Error('Open a job first.');
-        onLoading('jobLoader', true);
+        if (!seekerId) throw new Error('Select seeker first.');
+        setJobBusy(true);
         try {
           const app = await ensureApplication(seekerId, selectedJob);
           const updated = await api(`${API_BASE}/api/app/applications/${app.Id}`, {
@@ -446,12 +665,12 @@
           renderArtifacts();
           setMsg('jobMsg', 'Status saved.');
         } finally {
-          onLoading('jobLoader', false);
+          setJobBusy(false);
         }
       }
 
       function getSelectedUser() {
-        const seekerId = document.getElementById('seekerId').value.trim();
+        const seekerId = q().seekerId;
         if (!seekerId) return null;
         return users.find((u) => String(u.id) === String(seekerId)) || null;
       }
@@ -466,9 +685,11 @@
       }
 
       async function generateMaterials() {
-        const seekerId = document.getElementById('seekerId').value.trim();
+        if (isJobBusy) return;
+        const seekerId = q().seekerId;
         if (!selectedJob) throw new Error('Open a job first.');
-        onLoading('jobLoader', true);
+        if (!seekerId) throw new Error('Select seeker first.');
+        setJobBusy(true);
         try {
           const app = await ensureApplication(seekerId, selectedJob);
           const resumePayload = await api(`${API_BASE}/api/app/admin/users/${encodeURIComponent(seekerId)}/resume-text`);
@@ -510,13 +731,12 @@
           renderArtifacts();
           setMsg('jobMsg', 'Tailored CV + cover letter generated and saved.');
         } finally {
-          onLoading('jobLoader', false);
+          setJobBusy(false);
         }
       }
 
       function hydrateStateToInputs() {
         const s = q();
-        document.getElementById('seekerId').value = s.seekerId;
         if (s.from && s.to) {
           document.getElementById('fromDate').value = s.from;
           document.getElementById('toDate').value = s.to;
@@ -534,6 +754,7 @@
       async function boot() {
         hydrateStateToInputs();
         await Promise.all([loadUsers(), loadSkills()]);
+        renderSelectedUserInfo();
         const s = q();
         if (s.skillId) document.getElementById('skillId').value = s.skillId;
         if (s.seekerId && s.from && s.to) {
