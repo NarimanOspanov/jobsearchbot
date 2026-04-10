@@ -157,6 +157,16 @@
         background: var(--border);
         margin: 10px 0 8px;
       }
+      .section-head-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .ghost-btn {
+        background: #0f1730;
+        border: 1px solid var(--border);
+      }
     </style>
   </head>
   <body>
@@ -171,12 +181,17 @@
         </section>
 
         <section class="card layout-col">
-          <h2>User information and applications</h2>
-          <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
-          <div class="row">
-            <button id="openResumeBtn" type="button">Open resume</button>
+          <div class="section-head-row">
+            <h2>User information and applications</h2>
+            <button id="toggleUserInfoBtn" type="button" class="ghost-btn">Hide user info</button>
           </div>
-          <hr class="section-separator" />
+          <div id="userInfoSection">
+            <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
+            <div class="row">
+              <button id="openResumeBtn" type="button">Open resume</button>
+            </div>
+            <hr class="section-separator" />
+          </div>
           <div class="row date-range-row">
             <span class="date-range">
               <label>From <input id="fromDate" type="date" /></label>
@@ -264,6 +279,7 @@
       let jobsSort = { key: 'id', dir: 'desc' };
       let isSyncing = false;
       let isJobBusy = false;
+      let isUserInfoHidden = false;
 
       function q() {
         const p = new URLSearchParams(location.search);
@@ -404,6 +420,13 @@
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
+      }
+      function setUserInfoVisibility(hidden) {
+        isUserInfoHidden = !!hidden;
+        const section = document.getElementById('userInfoSection');
+        const btn = document.getElementById('toggleUserInfoBtn');
+        if (section) section.style.display = isUserInfoHidden ? 'none' : '';
+        if (btn) btn.textContent = isUserInfoHidden ? 'Show user info' : 'Hide user info';
       }
       function openCvModal(title, url) {
         document.getElementById('cvModalTitle').textContent = title || 'Document';
@@ -776,6 +799,9 @@
       }
 
       document.getElementById('syncBtn').addEventListener('click', () => syncJobs().catch((e) => setMsg('dashMsg', e.message, true)));
+      document.getElementById('toggleUserInfoBtn').addEventListener('click', () => {
+        setUserInfoVisibility(!isUserInfoHidden);
+      });
       document.getElementById('statusSel').addEventListener('change', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
       document.getElementById('notesText').addEventListener('blur', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
       document.getElementById('genBtn').addEventListener('click', () => generateMaterials().catch((e) => setMsg('jobMsg', e.message, true)));
