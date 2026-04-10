@@ -440,7 +440,7 @@ function verifyInitData(initData) {
   }
 }
 
-async function ensureUserByTelegramId(telegramId, username = null) {
+async function ensureUserByTelegramId(telegramId, username = null, firstName = null, lastName = null) {
   if (!telegramId) return null;
   let user = await models.Users.findOne({ where: { TelegramChatId: telegramId } });
   if (!user) {
@@ -448,6 +448,8 @@ async function ensureUserByTelegramId(telegramId, username = null) {
       user = await models.Users.create({
         TelegramChatId: telegramId,
         TelegramUserName: username,
+        FirstName: firstName,
+        LastName: lastName,
         DateJoined: Sequelize.literal('GETUTCDATE()'),
       });
     } catch (createErr) {
@@ -457,8 +459,16 @@ async function ensureUserByTelegramId(telegramId, username = null) {
         throw createErr;
       }
     }
-  } else if (user.TelegramUserName !== username) {
-    await user.update({ TelegramUserName: username });
+  } else if (
+    user.TelegramUserName !== username ||
+    user.FirstName !== firstName ||
+    user.LastName !== lastName
+  ) {
+    await user.update({
+      TelegramUserName: username,
+      FirstName: firstName,
+      LastName: lastName,
+    });
   }
   return user;
 }
@@ -466,7 +476,9 @@ async function ensureUserByTelegramId(telegramId, username = null) {
 async function ensureUser(ctx) {
   const chatId = ctx.chat?.id ?? ctx.from?.id;
   const username = ctx.from?.username ?? null;
-  return ensureUserByTelegramId(chatId, username);
+  const firstName = ctx.from?.first_name ?? null;
+  const lastName = ctx.from?.last_name ?? null;
+  return ensureUserByTelegramId(chatId, username, firstName, lastName);
 }
 
 /** Deletes Applications rows then User for the given Telegram chat id. */
@@ -684,7 +696,12 @@ function registerHandlers(bot, appBaseUrl) {
         buffer: fileBuffer,
       });
 
-      const user = await ensureUserByTelegramId(chatId, ctx.from?.username ?? null);
+      const user = await ensureUserByTelegramId(
+        chatId,
+        ctx.from?.username ?? null,
+        ctx.from?.first_name ?? null,
+        ctx.from?.last_name ?? null
+      );
       await user.update({ ResumeURL: resumeUrl });
 
       await withTypingTelegram(ctx.telegram, chatId, 800 + Math.floor(Math.random() * 400));
@@ -986,7 +1003,12 @@ async function main() {
 
   app.get('/api/app/profile', miniAppAuth, async (req, res) => {
     try {
-      const user = await ensureUserByTelegramId(req.miniAppUser.id, req.miniAppUser.username ?? null);
+      const user = await ensureUserByTelegramId(
+        req.miniAppUser.id,
+        req.miniAppUser.username ?? null,
+        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+      );
       res.json({
         id: user.Id,
         telegramChatId: String(user.TelegramChatId),
@@ -1013,7 +1035,12 @@ async function main() {
 
   app.patch('/api/app/profile/settings', miniAppAuth, async (req, res) => {
     try {
-      const user = await ensureUserByTelegramId(req.miniAppUser.id, req.miniAppUser.username ?? null);
+      const user = await ensureUserByTelegramId(
+        req.miniAppUser.id,
+        req.miniAppUser.username ?? null,
+        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+      );
       const patch = {
         HhEnabled: toBoolOrUndefined(req.body.hhEnabled),
         LinkedInEnabled: toBoolOrUndefined(req.body.linkedInEnabled),
@@ -1058,7 +1085,12 @@ async function main() {
       let userId = Number.parseInt(String(req.query.userId || ''), 10);
       if (!Number.isSafeInteger(userId) || userId <= 0) {
         await miniAppAuth(req, res, async () => {
-          const user = await ensureUserByTelegramId(req.miniAppUser.id, req.miniAppUser.username ?? null);
+          const user = await ensureUserByTelegramId(
+            req.miniAppUser.id,
+            req.miniAppUser.username ?? null,
+            req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+            req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+          );
           userId = user.Id;
         });
         if (!Number.isSafeInteger(userId) || userId <= 0) return;
@@ -1248,6 +1280,8 @@ async function main() {
         id: u.Id,
         telegramChatId: String(u.TelegramChatId),
         telegramUserName: u.TelegramUserName,
+        firstName: u.FirstName || null,
+        lastName: u.LastName || null,
         dateJoined: u.DateJoined,
         isBlocked: !!u.IsBlocked,
         resumeUrl: u.ResumeURL || null,
@@ -1270,6 +1304,8 @@ async function main() {
         id: u.Id,
         telegramChatId: String(u.TelegramChatId),
         telegramUserName: u.TelegramUserName,
+        firstName: u.FirstName || null,
+        lastName: u.LastName || null,
         dateJoined: u.DateJoined,
         isBlocked: !!u.IsBlocked,
         muteBotUntil: u.MuteBotUntil,

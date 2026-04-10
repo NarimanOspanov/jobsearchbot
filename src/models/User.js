@@ -17,6 +17,14 @@ export default function defineUser(sequelize) {
         type: DataTypes.STRING(255),
         allowNull: true,
       },
+      FirstName: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      LastName: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
       TelegramChatId: {
         type: DataTypes.BIGINT,
         allowNull: false,

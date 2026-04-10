@@ -437,7 +437,9 @@
         }
         root.innerHTML = users.map((u) => `
           <button data-id="${u.id}" class="${String(u.id) === qs.seekerId ? 'selected' : ''}">
-            #${u.id} ${esc(u.telegramUserName || '')} (${esc(u.telegramChatId)})
+            #${u.id}
+            ${esc([String(u.firstName || '').trim(), String(u.lastName || '').trim()].filter(Boolean).join(' ') || u.telegramUserName || '')}
+            (${esc(u.telegramChatId)})
           </button>
         `).join('');
         root.querySelectorAll('button[data-id]').forEach((btn) => {
@@ -458,6 +460,8 @@
           return;
         }
         const username = String(u.telegramUserName || '').trim();
+        const firstName = String(u.firstName || '').trim();
+        const lastName = String(u.lastName || '').trim();
         const usernameNoAt = username.replace(/^@/, '');
         const usernameHtml = usernameNoAt
           ? `<a href="https://t.me/${encodeURIComponent(usernameNoAt)}" target="_blank" rel="noopener noreferrer">${esc(usernameNoAt)}</a>`
@@ -468,6 +472,14 @@
             <div class="item">
               <div class="k">Telegram username</div>
               <div>${usernameHtml}</div>
+            </div>
+            <div class="item">
+              <div class="k">First name</div>
+              <div>${esc(firstName || '—')}</div>
+            </div>
+            <div class="item">
+              <div class="k">Last name</div>
+              <div>${esc(lastName || '—')}</div>
             </div>
             <div class="item">
               <div class="k">User Id</div>
