@@ -883,17 +883,49 @@ async function main() {
       const from = String(req.query.from || '').trim();
       const to = String(req.query.to || '').trim();
       const skillId = String(req.query.skillId || '').trim();
+      const pageRaw = Number.parseInt(String(req.query.page || '1'), 10);
+      const pageSizeRaw = Number.parseInt(String(req.query.pageSize || '100'), 10);
+      const page = Number.isSafeInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+      const pageSize = Number.isSafeInteger(pageSizeRaw) && pageSizeRaw > 0
+        ? Math.min(200, pageSizeRaw)
+        : 100;
       if (!from || !to) return res.status(400).json({ error: 'from and to are required' });
       const url =
         `https://screenly.work/api/global-remote-positions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
-        (skillId ? `&skillIds=${encodeURIComponent(skillId)}` : '');
+        (skillId ? `&skillIds=${encodeURIComponent(skillId)}` : '') +
+        `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
       const response = await fetch(url);
       if (!response.ok) {
         const txt = await response.text();
         return res.status(response.status).json({ error: txt || 'Failed to load positions from Screenly' });
       }
       const payload = await response.json();
-      return res.json(payload);
+      if (
+        Object.prototype.hasOwnProperty.call(payload || {}, 'page') ||
+        Object.prototype.hasOwnProperty.call(payload || {}, 'hasMore')
+      ) {
+        const upstreamPositions = Array.isArray(payload?.positions) ? payload.positions : [];
+        return res.json({
+          ...payload,
+          page: Number(payload.page || page),
+          pageSize: Number(payload.pageSize || pageSize),
+          hasMore: Boolean(payload.hasMore),
+          count: Number(payload.count || upstreamPositions.length),
+          positions: upstreamPositions,
+        });
+      }
+      const all = Array.isArray(payload?.positions) ? payload.positions : [];
+      const offset = (page - 1) * pageSize;
+      const pageItems = all.slice(offset, offset + pageSize);
+      const hasMore = offset + pageItems.length < all.length;
+      return res.json({
+        ...payload,
+        page,
+        pageSize,
+        hasMore,
+        count: pageItems.length,
+        positions: pageItems,
+      });
     } catch (err) {
       console.error('GET /api/admin/positions:', err);
       return res.status(500).json({ error: 'Failed to load positions' });

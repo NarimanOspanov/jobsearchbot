@@ -167,6 +167,11 @@
         background: #0f1730;
         border: 1px solid var(--border);
       }
+      .pager {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
     </style>
   </head>
   <body>
@@ -204,13 +209,25 @@
           <div class="row date-range-row">
             <button id="syncBtn">Search remote jobs</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
+            <span class="pager">
+              <button id="prevPageBtn" type="button" class="ghost-btn">Prev</button>
+              <span id="pageInfo" class="muted">Page 1</span>
+              <button id="nextPageBtn" type="button" class="ghost-btn">Next</button>
+              <label>Page size
+                <select id="pageSizeSel">
+                  <option value="50">50</option>
+                  <option value="100" selected>100</option>
+                  <option value="200">200</option>
+                </select>
+              </label>
+            </span>
           </div>
           <p id="dashMsg" class="muted"></p>
           <div class="layout-col-body">
             <table>
               <thead>
                 <tr>
-                  <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Status</th>
+                  <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Apply type</th><th>Status</th>
                 </tr>
               </thead>
               <tbody id="jobsBody"></tbody>
@@ -280,6 +297,7 @@
       let isSyncing = false;
       let isJobBusy = false;
       let isUserInfoHidden = false;
+      let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0 };
 
       function q() {
         const p = new URLSearchParams(location.search);
@@ -289,6 +307,8 @@
           to: p.get('to') || '',
           skillId: p.get('skillId') || '',
           jobId: p.get('jobId') || '',
+          page: p.get('page') || '1',
+          pageSize: p.get('pageSize') || '100',
         };
       }
       function setQ(next) {
@@ -408,10 +428,20 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'fromDate', 'toDate', 'skillId', 'openResumeBtn'].forEach((id) => {
+        ['syncBtn', 'fromDate', 'toDate', 'skillId', 'openResumeBtn', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
+      }
+      function updatePagerUi() {
+        const info = document.getElementById('pageInfo');
+        const prev = document.getElementById('prevPageBtn');
+        const next = document.getElementById('nextPageBtn');
+        const sizeSel = document.getElementById('pageSizeSel');
+        if (info) info.textContent = `Page ${pageInfo.page} · ${pageInfo.count} item(s)`;
+        if (prev) prev.disabled = isSyncing || pageInfo.page <= 1;
+        if (next) next.disabled = isSyncing || !pageInfo.hasMore;
+        if (sizeSel) sizeSel.value = String(pageInfo.pageSize);
       }
       function setJobBusy(on) {
         isJobBusy = on;
@@ -541,20 +571,31 @@
         const from = document.getElementById('fromDate').value;
         const to = document.getElementById('toDate').value;
         const skillId = document.getElementById('skillId').value;
+        const query = q();
+        const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
+        const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(query.pageSize || '100'), 10) || 100));
         if (!seekerId) throw new Error('Select seeker first.');
         if (!from || !to) throw new Error('Set from and to dates.');
 
-        setQ({ seekerId, from, to, skillId });
+        setQ({ seekerId, from, to, skillId, page, pageSize });
         setSyncBusy(true);
         try {
-          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillId ? `&skillId=${encodeURIComponent(skillId)}` : ''}`;
+          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillId ? `&skillId=${encodeURIComponent(skillId)}` : ''}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
           const data = await api(posUrl);
           positions = data.positions || [];
+          pageInfo = {
+            page: Number(data.page || page),
+            pageSize: Number(data.pageSize || pageSize),
+            hasMore: !!data.hasMore,
+            count: Number(data.count || positions.length),
+          };
           await loadApplicationsByUser(seekerId);
           renderJobs();
-          setMsg('dashMsg', `Loaded ${positions.length} jobs.`);
+          updatePagerUi();
+          setMsg('dashMsg', `Loaded ${pageInfo.count} jobs (page ${pageInfo.page}).`);
         } finally {
           setSyncBusy(false);
+          updatePagerUi();
         }
       }
 
@@ -570,6 +611,7 @@
           <th><button type="button" data-sort="company">Company${sortArrow('company')}</button></th>
           <th><button type="button" data-sort="location">Location${sortArrow('location')}</button></th>
           <th><button type="button" data-sort="posted">Posted${sortArrow('posted')}</button></th>
+          <th>Apply type</th>
           <th><button type="button" data-sort="status">Status${sortArrow('status')}</button></th>
         `;
         headRow.querySelectorAll('button[data-sort]').forEach((btn) => {
@@ -577,7 +619,7 @@
         });
 
         if (!positions.length) {
-          body.innerHTML = '<tr><td colspan="5" class="muted">No jobs loaded.</td></tr>';
+          body.innerHTML = '<tr><td colspan="6" class="muted">No jobs loaded.</td></tr>';
           return;
         }
         const sorted = [...positions].sort(compareJobs);
@@ -588,6 +630,7 @@
             <td>${esc(p.company)}</td>
             <td>${esc(p.location)}</td>
             <td>${esc(formatPostedDate(p.publishedAt))}</td>
+            <td>${esc(p.applyType || '—')}</td>
             <td>${esc(app?.Status || 'new')}</td>
           </tr>`;
         }).join('');
@@ -792,6 +835,8 @@
         renderSelectedUserInfo();
         const s = q();
         if (s.skillId) document.getElementById('skillId').value = s.skillId;
+        document.getElementById('pageSizeSel').value = String(Math.min(200, Math.max(1, Number.parseInt(String(s.pageSize || '100'), 10) || 100)));
+        updatePagerUi();
         if (s.seekerId && s.from && s.to) {
           await syncJobs();
           if (s.jobId) openJobById(Number(s.jobId));
@@ -799,6 +844,23 @@
       }
 
       document.getElementById('syncBtn').addEventListener('click', () => syncJobs().catch((e) => setMsg('dashMsg', e.message, true)));
+      document.getElementById('prevPageBtn').addEventListener('click', () => {
+        const cur = q();
+        const nextPage = Math.max(1, (Number.parseInt(String(cur.page || '1'), 10) || 1) - 1);
+        setQ({ page: nextPage });
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('nextPageBtn').addEventListener('click', () => {
+        const cur = q();
+        const nextPage = (Number.parseInt(String(cur.page || '1'), 10) || 1) + 1;
+        setQ({ page: nextPage });
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('pageSizeSel').addEventListener('change', () => {
+        const nextSize = Math.min(200, Math.max(1, Number.parseInt(document.getElementById('pageSizeSel').value, 10) || 100));
+        setQ({ pageSize: nextSize, page: 1 });
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
       document.getElementById('toggleUserInfoBtn').addEventListener('click', () => {
         setUserInfoVisibility(!isUserInfoHidden);
       });
