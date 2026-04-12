@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Job import stats</title>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { max-width: 720px; margin: 0 auto; padding: 16px; }
+      h1 { margin: 0 0 12px; font-size: 1.25rem; }
+      .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+      label { color: var(--muted); font-size: 14px; }
+      select, button {
+        border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text);
+        padding: 8px 10px; font: inherit;
+      }
+      button { cursor: pointer; background: var(--accent); border-color: var(--accent); }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+      .muted { color: var(--muted); }
+      .bad { color: #ef4444; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th, td { border-bottom: 1px solid var(--border); padding: 8px 6px; text-align: left; }
+      th { color: var(--muted); font-weight: 600; }
+      .totals { margin-bottom: 14px; line-height: 1.5; }
+      a { color: #9ec5ff; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Job import stats (global remote)</h1>
+      <p class="muted" style="margin:0 0 12px">Same data as Telegram <code>/stat</code>.</p>
+      <div class="row">
+        <label>Period (days)
+          <select id="periodSel">
+            <option value="7" selected>7</option>
+            <option value="14">14</option>
+            <option value="30">30</option>
+            <option value="90">90</option>
+          </select>
+        </label>
+        <button id="reloadBtn" type="button">Reload</button>
+      </div>
+      <p id="msg" class="muted"></p>
+      <div id="content" class="card" style="display:none">
+        <div class="totals" id="totals"></div>
+        <table>
+          <thead>
+            <tr><th>Source</th><th>Imported</th><th>Remote</th><th>Remote %</th></tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <script>
+      const API = '/api/admin/job-import-stats';
+      function esc(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+      async function load() {
+        const period = document.getElementById('periodSel').value;
+        const msg = document.getElementById('msg');
+        const content = document.getElementById('content');
+        msg.textContent = 'Loading…';
+        content.style.display = 'none';
+        try {
+          const r = await fetch(`${API}?period=${encodeURIComponent(period)}`);
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || r.statusText);
+          if (!data.success) throw new Error('success=false');
+          const p = data.period ?? period;
+          document.getElementById('totals').innerHTML =
+            `<strong>Period:</strong> ${esc(p)} days<br/>` +
+            `<strong>Imported (all sources):</strong> ${esc(data.totalAllSources)}<br/>` +
+            `<strong>Global remote (all sources):</strong> ${esc(data.totalRemoteAllSources)} ` +
+            `(${esc(data.totalRemotePercentage)}%)`;
+          const tbody = document.getElementById('tbody');
+          tbody.innerHTML = (data.statistics || []).map((row) =>
+            `<tr>
+              <td>${esc(row.source)}</td>
+              <td>${esc(row.totalImported)}</td>
+              <td>${esc(row.totalRemote)}</td>
+              <td>${esc(row.remotePercentage)}%</td>
+            </tr>`
+          ).join('');
+          content.style.display = 'block';
+          msg.textContent = '';
+        } catch (e) {
+          msg.className = 'bad';
+          msg.textContent = e.message || 'Failed to load';
+        }
+      }
+      document.getElementById('reloadBtn').addEventListener('click', load);
+      document.getElementById('periodSel').addEventListener('change', load);
+      load();
+    </script>
+  </body>
+</html>

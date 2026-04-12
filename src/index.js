@@ -778,6 +778,75 @@ function registerHandlers(bot, appBaseUrl) {
     await ctx.reply('Admin page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
   });
 
+  bot.command('stat', async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('This command only works in a private chat with the bot.');
+      return;
+    }
+    const adminIds = config.botAdminTelegramIds;
+    if (adminIds.size === 0) {
+      await ctx.reply('This command is disabled. Set BOT_ADMIN_TELEGRAM_IDS in the server environment.');
+      return;
+    }
+    const fromId = ctx.from?.id;
+    if (!fromId || !adminIds.has(fromId)) {
+      await ctx.reply('Unauthorized.');
+      return;
+    }
+    const text = (ctx.message?.text || '').trim();
+    const parts = text.split(/\s+/).filter(Boolean);
+    let period = 7;
+    if (parts[1] && /^\d+$/.test(parts[1])) {
+      const p = Number.parseInt(parts[1], 10);
+      if (Number.isSafeInteger(p) && p >= 1 && p <= 365) period = p;
+    }
+    try {
+      const url = `https://screenly.work/api/global-remote-positions/job-import-stats?period=${encodeURIComponent(period)}`;
+      const response = await fetch(url);
+      const raw = await response.text();
+      if (!response.ok) {
+        await ctx.reply(`Stats request failed (${response.status}). ${raw.slice(0, 500)}`);
+        return;
+      }
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        await ctx.reply('Stats response was not valid JSON.');
+        return;
+      }
+      if (!data.success) {
+        await ctx.reply(`Stats: success=false\n${JSON.stringify(data).slice(0, 3500)}`);
+        return;
+      }
+      const p = Number(data.period ?? period);
+      const totalAll = Number(data.totalAllSources ?? 0);
+      const totalRemote = Number(data.totalRemoteAllSources ?? 0);
+      const pctAll = Number(data.totalRemotePercentage ?? 0);
+      const lines = [
+        `📊 Job import stats (last ${p} days)`,
+        '',
+        `Imported (all sources): ${totalAll}`,
+        `Global remote (all sources): ${totalRemote} (${pctAll}%)`,
+        '',
+        'By source:',
+      ];
+      const stats = Array.isArray(data.statistics) ? data.statistics : [];
+      for (const row of stats) {
+        const src = String(row.source ?? '—');
+        const ti = Number(row.totalImported ?? 0);
+        const tr = Number(row.totalRemote ?? 0);
+        const rp = Number(row.remotePercentage ?? 0);
+        lines.push(`• ${src}: ${ti} imported, ${tr} remote (${rp}%)`);
+      }
+      const out = lines.join('\n');
+      await ctx.reply(out.length > 4096 ? `${out.slice(0, 4090)}…` : out);
+    } catch (err) {
+      console.error('/stat failed:', err);
+      await ctx.reply('Failed to load stats. Check server logs.');
+    }
+  });
+
   bot.command('removeuser', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
       await ctx.reply('This command only works in a private chat with the bot.');
@@ -862,9 +931,33 @@ async function main() {
   app.get('/app/admin', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'admin.html'));
   });
+  app.get('/app/stat', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'stats.html'));
+  });
 
   let runtimeBotUsername = '';
   app.get('/api/app/bot-info', (_req, res) => res.json({ botUsername: runtimeBotUsername }));
+
+  app.get('/api/admin/job-import-stats', async (req, res) => {
+    try {
+      const periodRaw = String(req.query.period || '7').trim();
+      const period = /^\d+$/.test(periodRaw)
+        ? Math.min(365, Math.max(1, Number.parseInt(periodRaw, 10)))
+        : 7;
+      const url = `https://screenly.work/api/global-remote-positions/job-import-stats?period=${encodeURIComponent(period)}`;
+      const response = await fetch(url);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return res.status(response.status).json({
+          error: typeof payload === 'object' && payload?.error ? payload.error : 'Failed to load job import stats',
+        });
+      }
+      return res.json(payload);
+    } catch (err) {
+      console.error('GET /api/admin/job-import-stats:', err);
+      return res.status(500).json({ error: 'Failed to load job import stats' });
+    }
+  });
 
   app.get('/api/admin/skills', async (_req, res) => {
     try {
