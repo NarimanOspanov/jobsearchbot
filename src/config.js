@@ -45,11 +45,11 @@ export const config = {
   webhookUrl: getEnv('WEBHOOK_URL') || defaultWebhookUrl,
   // MSSQL (Azure SQL) – override with DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT
   db: {
-    host: process.env.DB_HOST || 'sql-st-prod.database.windows.net',
+    host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT, 10) || 1433,
-    database: process.env.DB_NAME || 'sql-photo-ai-prod',
-    username: process.env.DB_USER || 'stadmin',
-    password: process.env.DB_PASSWORD || 'Password123!',
+    database: process.env.DB_NAME || 'jobsearchbot',
+    username: process.env.DB_USER || '',
+    password: process.env.DB_PASSWORD || '',
     dialect: 'mssql',
   },
 };

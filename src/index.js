@@ -1226,8 +1226,14 @@ async function main() {
       const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '20'), 10) || 20));
       const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
       const rows = await models.Applications.findAll({
-        where: { UserId: userId },
-        order: [['AppliedAt', 'DESC'], ['Id', 'DESC']],
+        where: {
+          UserId: userId,
+          [Sequelize.Op.and]: Sequelize.where(
+            Sequelize.fn('lower', Sequelize.col('Status')),
+            'applied'
+          ),
+        },
+        order: [['Id', 'DESC']],
         limit,
         offset,
       });

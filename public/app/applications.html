@@ -30,6 +30,53 @@
       .app-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #10182d; }
       .pill { border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; font-size: 12px; color: var(--muted); }
       .muted { color: var(--muted); }
+      .actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+      .btn {
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        border-radius: 8px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+      .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 10, 20, 0.78);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+      }
+      .modal.open { display: flex; }
+      .modal-card {
+        width: min(860px, 100%);
+        max-height: 90vh;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+      .modal-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        border-bottom: 1px solid var(--border);
+        padding: 10px 12px;
+      }
+      .modal-body { padding: 12px; overflow: auto; }
+      #resumeFrame { width: 100%; min-height: 70vh; border: 1px solid var(--border); border-radius: 8px; }
+      #coverLetterContent {
+        white-space: pre-wrap;
+        margin: 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        background: #10182d;
+      }
     </style>
   </head>
   <body>
@@ -42,9 +89,34 @@
       </section>
     </div>
 
+    <div id="resumeModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="resumeModalTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="resumeModalTitle">Tailored Resume</strong>
+          <button class="btn" id="resumeModalClose" type="button">Close</button>
+        </div>
+        <div class="modal-body">
+          <iframe id="resumeFrame" title="Tailored Resume"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <div id="coverLetterModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="coverLetterModalTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="coverLetterModalTitle">Cover Letter</strong>
+          <button class="btn" id="coverLetterModalClose" type="button">Close</button>
+        </div>
+        <div class="modal-body">
+          <pre id="coverLetterContent"></pre>
+        </div>
+      </div>
+    </div>
+
     <script>
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
+      let applicationsById = new Map();
 
       async function api(path, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -54,24 +126,82 @@
         return response.json();
       }
 
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function formatDateOnly(value) {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '-';
+        return date.toLocaleDateString();
+      }
+
+      function openResumeModal(url) {
+        const modal = document.getElementById('resumeModal');
+        const frame = document.getElementById('resumeFrame');
+        frame.src = url;
+        modal.classList.add('open');
+      }
+
+      function closeResumeModal() {
+        const modal = document.getElementById('resumeModal');
+        const frame = document.getElementById('resumeFrame');
+        frame.src = 'about:blank';
+        modal.classList.remove('open');
+      }
+
+      function openCoverLetterModal(text) {
+        const modal = document.getElementById('coverLetterModal');
+        document.getElementById('coverLetterContent').textContent = text || '';
+        modal.classList.add('open');
+      }
+
+      function closeCoverLetterModal() {
+        const modal = document.getElementById('coverLetterModal');
+        document.getElementById('coverLetterContent').textContent = '';
+        modal.classList.remove('open');
+      }
+
       function renderApplications(rows) {
         const list = document.getElementById('appsList');
+        applicationsById = new Map(rows.map((row) => [String(row.Id), row]));
         if (!rows.length) {
           list.innerHTML = '<p class="muted">No applications yet.</p>';
           return;
         }
         list.innerHTML = rows.map((row) => {
-          const appliedAt = row.AppliedAt ? new Date(row.AppliedAt).toLocaleString() : '-';
+          const appliedAt = formatDateOnly(row.AppliedAt);
+          const title = escapeHtml(row.VacancyTitle || '');
+          const status = escapeHtml(row.Status || 'applied');
+          const company = escapeHtml(row.CompanyName || 'Unknown company');
+          const source = escapeHtml(row.Source || '-');
+          const notes = row.Notes ? `<div style="margin-top:8px;">${escapeHtml(row.Notes)}</div>` : '';
+          const tailoredBtn = row.TailoredCVURL
+            ? `<button class="btn js-open-resume" type="button" data-id="${row.Id}">View tailored resume</button>`
+            : '<button class="btn" type="button" disabled>No tailored resume</button>';
+          const coverBtn = row.CoverLetter
+            ? `<button class="btn js-open-cover" type="button" data-id="${row.Id}">View cover letter</button>`
+            : '<button class="btn" type="button" disabled>No cover letter</button>';
           return `
             <article class="app-item">
               <div style="display:flex;justify-content:space-between;gap:10px;">
-                <strong>${(row.VacancyTitle || '').replace(/</g, '&lt;')}</strong>
-                <span class="pill">${(row.Status || 'applied').replace(/</g, '&lt;')}</span>
+                <strong>${title}</strong>
+                <span class="pill">${status}</span>
               </div>
-              <div class="muted" style="margin-top:6px;">${(row.CompanyName || 'Unknown company').replace(/</g, '&lt;')}</div>
-              <div class="muted" style="margin-top:4px;">Source: ${(row.Source || '-').replace(/</g, '&lt;')}</div>
+              <div class="muted" style="margin-top:6px;">${company}</div>
+              <div class="muted" style="margin-top:4px;">Source: ${source}</div>
               <div class="muted" style="margin-top:4px;">Applied: ${appliedAt}</div>
-              ${row.Notes ? `<div style="margin-top:8px;">${String(row.Notes).replace(/</g, '&lt;')}</div>` : ''}
+              ${notes}
+              <div class="actions">
+                ${tailoredBtn}
+                ${coverBtn}
+              </div>
             </article>`;
         }).join('');
       }
@@ -80,6 +210,35 @@
         const rows = await api('/api/app/applications?limit=100&offset=0');
         renderApplications(rows);
       }
+
+      document.getElementById('appsList').addEventListener('click', (event) => {
+        const resumeBtn = event.target.closest('.js-open-resume');
+        if (resumeBtn) {
+          const row = applicationsById.get(String(resumeBtn.dataset.id));
+          if (row?.TailoredCVURL) openResumeModal(row.TailoredCVURL);
+          return;
+        }
+
+        const coverBtn = event.target.closest('.js-open-cover');
+        if (coverBtn) {
+          const row = applicationsById.get(String(coverBtn.dataset.id));
+          if (row?.CoverLetter) openCoverLetterModal(row.CoverLetter);
+        }
+      });
+
+      document.getElementById('resumeModalClose').addEventListener('click', closeResumeModal);
+      document.getElementById('coverLetterModalClose').addEventListener('click', closeCoverLetterModal);
+      document.getElementById('resumeModal').addEventListener('click', (event) => {
+        if (event.target.id === 'resumeModal') closeResumeModal();
+      });
+      document.getElementById('coverLetterModal').addEventListener('click', (event) => {
+        if (event.target.id === 'coverLetterModal') closeCoverLetterModal();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        closeResumeModal();
+        closeCoverLetterModal();
+      });
 
       loadApplications().catch((err) => alert(`Failed to load applications: ${err.message}`));
     </script>
