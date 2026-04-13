@@ -205,6 +205,14 @@
           </div>
           <div class="row date-range-row">
             <label>Skill <select id="skillId"><option value="">All</option></select></label>
+            <label>Source
+              <select id="sourceSel">
+                <option value="">All</option>
+                <option value="Linkedin">Linkedin</option>
+                <option value="Indeed">Indeed</option>
+                <option value="hirehi">hirehi</option>
+              </select>
+            </label>
           </div>
           <div class="row date-range-row">
             <button id="syncBtn">Search remote jobs</button>
@@ -227,7 +235,7 @@
             <table>
               <thead>
                 <tr>
-                  <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Apply type</th><th>Status</th>
+                  <th>Id</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Apply type</th><th>Status</th>
                 </tr>
               </thead>
               <tbody id="jobsBody"></tbody>
@@ -306,6 +314,7 @@
           from: p.get('from') || '',
           to: p.get('to') || '',
           skillId: p.get('skillId') || '',
+          source: p.get('source') || '',
           jobId: p.get('jobId') || '',
           page: p.get('page') || '1',
           pageSize: p.get('pageSize') || '100',
@@ -428,7 +437,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'fromDate', 'toDate', 'skillId', 'openResumeBtn', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel'].forEach((id) => {
+        ['syncBtn', 'fromDate', 'toDate', 'skillId', 'sourceSel', 'openResumeBtn', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -571,16 +580,17 @@
         const from = document.getElementById('fromDate').value;
         const to = document.getElementById('toDate').value;
         const skillId = document.getElementById('skillId').value;
+        const source = document.getElementById('sourceSel').value;
         const query = q();
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(query.pageSize || '100'), 10) || 100));
         if (!seekerId) throw new Error('Select seeker first.');
         if (!from || !to) throw new Error('Set from and to dates.');
 
-        setQ({ seekerId, from, to, skillId, page, pageSize });
+        setQ({ seekerId, from, to, skillId, source, page, pageSize });
         setSyncBusy(true);
         try {
-          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillId ? `&skillId=${encodeURIComponent(skillId)}` : ''}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillId ? `&skillId=${encodeURIComponent(skillId)}` : ''}${source ? `&source=${encodeURIComponent(source)}` : ''}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
           const data = await api(posUrl);
           positions = data.positions || [];
           pageInfo = {
@@ -607,6 +617,7 @@
         const body = document.getElementById('jobsBody');
         const headRow = document.querySelector('table thead tr');
         headRow.innerHTML = `
+          <th><button type="button" data-sort="id">Id${sortArrow('id')}</button></th>
           <th><button type="button" data-sort="title">Title${sortArrow('title')}</button></th>
           <th><button type="button" data-sort="company">Company${sortArrow('company')}</button></th>
           <th><button type="button" data-sort="location">Location${sortArrow('location')}</button></th>
@@ -619,13 +630,14 @@
         });
 
         if (!positions.length) {
-          body.innerHTML = '<tr><td colspan="6" class="muted">No jobs loaded.</td></tr>';
+          body.innerHTML = '<tr><td colspan="7" class="muted">No jobs loaded.</td></tr>';
           return;
         }
         const sorted = [...positions].sort(compareJobs);
         body.innerHTML = sorted.map((p) => {
           const app = appByScreenlyId(p.id);
           return `<tr data-open="${p.id}">
+            <td>${esc(p.id)}</td>
             <td>${esc(p.title)}</td>
             <td>${esc(p.company)}</td>
             <td>${esc(p.location)}</td>
@@ -835,6 +847,7 @@
         renderSelectedUserInfo();
         const s = q();
         if (s.skillId) document.getElementById('skillId').value = s.skillId;
+        if (s.source) document.getElementById('sourceSel').value = s.source;
         document.getElementById('pageSizeSel').value = String(Math.min(200, Math.max(1, Number.parseInt(String(s.pageSize || '100'), 10) || 100)));
         updatePagerUi();
         if (s.seekerId && s.from && s.to) {

@@ -976,6 +976,8 @@ async function main() {
       const from = String(req.query.from || '').trim();
       const to = String(req.query.to || '').trim();
       const skillId = String(req.query.skillId || '').trim();
+      const sourceRaw = String(req.query.source || '').trim();
+      const source = sourceRaw && sourceRaw.toLowerCase() !== 'all' ? sourceRaw : '';
       const pageRaw = Number.parseInt(String(req.query.page || '1'), 10);
       const pageSizeRaw = Number.parseInt(String(req.query.pageSize || '100'), 10);
       const page = Number.isSafeInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
@@ -986,6 +988,7 @@ async function main() {
       const url =
         `https://screenly.work/api/global-remote-positions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
         (skillId ? `&skillIds=${encodeURIComponent(skillId)}` : '') +
+        (source ? `&source=${encodeURIComponent(source)}` : '') +
         `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
       const response = await fetch(url);
       if (!response.ok) {
