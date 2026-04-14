@@ -74,6 +74,7 @@ const HIRE_AGENT_FAKE_QUEUE = [
 ];
 const resumeStorage = createResumeStorage(config);
 const genAI = config.geminiApiKey ? new GoogleGenAI({ apiKey: config.geminiApiKey }) : null;
+const HIRE_AGENT_SIMULATION_CONFIG_KEY = 'hireAgentSimulationVisible';
 
 /** doneThroughIndex: rows with j <= index are ✅ (green); the rest ⬜. Use -1 so all are ⬜. */
 function formatHireAgentFullList(doneThroughIndex) {
@@ -124,6 +125,34 @@ async function runHireAgentFakeApplying(ctx, chatId) {
     }
   );
   hireAgentStateByChatId.set(chatId, { step: 'idle' });
+}
+
+function parseConfigBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+  if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+async function ensureHireAgentSimulationVisibleConfig() {
+  const fallback = false;
+  if (!models.Configs) return fallback;
+  try {
+    let row = await models.Configs.findOne({ where: { Key: HIRE_AGENT_SIMULATION_CONFIG_KEY } });
+    if (!row) {
+      row = await models.Configs.create({
+        Key: HIRE_AGENT_SIMULATION_CONFIG_KEY,
+        Value: String(fallback),
+        Description: 'Controls demo simulation flow in /hireagent after CV upload',
+        UpdatedAt: new Date(),
+      });
+    }
+    return parseConfigBoolean(row.Value, fallback);
+  } catch (err) {
+    console.error('Failed to read Configs.hireAgentSimulationVisible; fallback=false:', err?.message || err);
+    return fallback;
+  }
 }
 
 function checkEnvLoaded() {
@@ -568,7 +597,8 @@ async function adminMiniAppAuth(req, res, next) {
   });
 }
 
-function registerHandlers(bot, appBaseUrl) {
+function registerHandlers(bot, appBaseUrl, options = {}) {
+  const hireAgentSimulationVisible = Boolean(options.hireAgentSimulationVisible);
   const applicationsUrl = appBaseUrl ? `${appBaseUrl}/app/applications` : '';
   const profileUrl = appBaseUrl ? `${appBaseUrl}/app/profile` : '';
   const companiesUrl = appBaseUrl ? `${appBaseUrl}/app/companies` : '';
@@ -647,6 +677,11 @@ function registerHandlers(bot, appBaseUrl) {
     } catch {
       /* ignore */
     }
+    if (!hireAgentSimulationVisible) {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+      await ctx.reply('Симуляция откликов сейчас отключена. Мы сообщим вам по результатам проверки резюме.');
+      return;
+    }
     const chatId = ctx.callbackQuery?.message?.chat?.id;
     if (!chatId) return;
     const st = hireAgentStateByChatId.get(chatId);
@@ -665,13 +700,17 @@ function registerHandlers(bot, appBaseUrl) {
     } catch {
       /* ignore */
     }
+    if (!hireAgentSimulationVisible) {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+      return;
+    }
     const chatId = ctx.callbackQuery?.message?.chat?.id;
     if (!chatId) return;
     const st = hireAgentStateByChatId.get(chatId);
     if (st?.step !== 'awaiting_confirm') return;
     hireAgentStateByChatId.set(chatId, { step: 'idle' });
     await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
-    await ctx.reply('Хорошо. Когда будете готовы — снова выберите «Нанять агента» в меню.');
+    await ctx.reply('Хорошо. Когда будете готовы — снова выберите «Делегировать отклики» в меню.');
   });
 
   bot.action('hireagent_continue', async (ctx) => {
@@ -714,21 +753,26 @@ function registerHandlers(bot, appBaseUrl) {
       await user.update({ ResumeURL: resumeUrl });
 
       await withTypingTelegram(ctx.telegram, chatId, 800 + Math.floor(Math.random() * 400));
-      hireAgentStateByChatId.set(chatId, { step: 'awaiting_confirm' });
-      await ctx.reply(
-        'Готово. Я сохранил ваше резюме и нашёл 263 вакансии с полной удалёнкой (100%), которые вам подходят.\n\n' +
-          'Запустить автоматические отклики?',
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: 'Да, начинай', callback_data: 'hireagent_yes' },
-                { text: 'Нет, позже', callback_data: 'hireagent_no' },
+      if (hireAgentSimulationVisible) {
+        hireAgentStateByChatId.set(chatId, { step: 'awaiting_confirm' });
+        await ctx.reply(
+          'Готово. Я сохранил ваше резюме и нашёл 263 вакансии с полной удалёнкой (100%), которые вам подходят.\n\n' +
+            'Запустить автоматические отклики?',
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: 'Да, начинай', callback_data: 'hireagent_yes' },
+                  { text: 'Нет, позже', callback_data: 'hireagent_no' },
+                ],
               ],
-            ],
-          },
-        }
-      );
+            },
+          }
+        );
+      } else {
+        hireAgentStateByChatId.set(chatId, { step: 'idle' });
+        await ctx.reply('Резюме принято. Мы передали его на проверку — свяжемся с вами с обратной связью.');
+      }
     } catch (err) {
       console.error('hireagent resume upload failed:', err);
       await ctx.reply(
@@ -1551,12 +1595,13 @@ async function main() {
   }
 
   const appBaseUrl = (process.env.ADMIN_APP_URL || config.webhookUrl || '').replace(/\/$/, '');
-  registerHandlers(bot, appBaseUrl);
+  const hireAgentSimulationVisible = await ensureHireAgentSimulationVisibleConfig();
+  registerHandlers(bot, appBaseUrl, { hireAgentSimulationVisible });
 
   try {
     await bot.telegram.setMyCommands([
-      { command: 'applications', description: 'Отклики' },
-      { command: 'hireagent', description: 'Нанять агента' },
+      { command: 'applications', description: 'Мои отклики' },
+      { command: 'hireagent', description: 'Делегировать отклики' },
       { command: 'profile', description: 'Настройки' },
       { command: 'companies', description: 'Компании с удалёнкой' },
       { command: 'about', description: 'О боте' },
