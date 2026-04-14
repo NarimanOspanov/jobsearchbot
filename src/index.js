@@ -217,8 +217,9 @@ Strict rules:
 Use ONLY facts from the candidate main resume text.
 Do NOT invent companies, dates, titles, metrics, education, certificates, or skills.
 Write in the same primary language as the job description.
-Keep it concise: 140-220 words.
-Tone: confident, warm, specific, and natural (not generic, not robotic).
+Write exactly 3-4 sentences total in one paragraph.
+No greeting/header/signature.
+Tone: natural and human, confident and warm, specific (not generic or robotic).
 The first 1-2 sentences must hook the employer with clear role-fit.
 Focus on value the candidate can bring for this role.
 End with a short proactive closing.
@@ -230,7 +231,15 @@ Output plain text only (no markdown, no code fences, no explanations).`;
   });
   const text = response.text?.trim();
   if (!text) throw new Error('AI response is empty');
-  return text;
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  const sentenceCandidates = normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (sentenceCandidates.length < 3) {
+    throw new Error('AI cover letter must contain at least 3 sentences');
+  }
+  return sentenceCandidates.slice(0, 4).join(' ');
 }
 
 async function markdownToPdfBuffer(markdownText) {
@@ -731,14 +740,14 @@ function registerHandlers(bot, appBaseUrl) {
 
   bot.command('profile', async (ctx) => {
     if (canUseProfileWebApp) {
-      await ctx.reply('Open profile:', {
+      await ctx.reply('Открыть настройки:', {
         reply_markup: {
-          inline_keyboard: [[{ text: 'Profile', web_app: { url: profileUrl } }]],
+          inline_keyboard: [[{ text: 'Настройки', web_app: { url: profileUrl } }]],
         },
       });
       return;
     }
-    await ctx.reply('Profile page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+    await ctx.reply('Страница настроек требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).');
   });
 
   bot.command('about', async (ctx) => {
@@ -747,14 +756,14 @@ function registerHandlers(bot, appBaseUrl) {
 
   bot.command('companies', async (ctx) => {
     if (canUseCompaniesWebApp) {
-      await ctx.reply('Open companies:', {
+      await ctx.reply('Открыть компании с удалёнкой:', {
         reply_markup: {
-          inline_keyboard: [[{ text: 'Companies', web_app: { url: companiesUrl } }]],
+          inline_keyboard: [[{ text: 'Компании с удалёнкой', web_app: { url: companiesUrl } }]],
         },
       });
       return;
     }
-    await ctx.reply('Companies page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+    await ctx.reply('Страница компаний требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).');
   });
 
   bot.command('admin', async (ctx) => {
@@ -1546,11 +1555,11 @@ async function main() {
 
   try {
     await bot.telegram.setMyCommands([
-      { command: 'applications', description: 'Applications' },
+      { command: 'applications', description: 'Отклики' },
       { command: 'hireagent', description: 'Нанять агента' },
-      { command: 'profile', description: 'Settings' },
-      { command: 'companies', description: 'Companies' },
-      { command: 'about', description: 'About' },
+      { command: 'profile', description: 'Настройки' },
+      { command: 'companies', description: 'Компании с удалёнкой' },
+      { command: 'about', description: 'О боте' },
     ]);
   } catch (err) {
     console.error('Failed to set menu commands:', err.message);

@@ -666,7 +666,7 @@
             vacancyTitle: job.title,
             companyName: job.company,
             source: job.source,
-            appliedAt: job.publishedAt,
+            appliedAt: new Date().toISOString(),
             metaJson: {
               positionId: job.id,
               applyUrl: job.applyUrl || null,

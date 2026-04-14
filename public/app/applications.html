@@ -77,6 +77,14 @@
         padding: 10px;
         background: #10182d;
       }
+      #summaryContent {
+        white-space: pre-wrap;
+        margin: 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        background: #10182d;
+      }
     </style>
   </head>
   <body>
@@ -113,6 +121,18 @@
       </div>
     </div>
 
+    <div id="summaryModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="summaryModalTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="summaryModalTitle">Job Summary</strong>
+          <button class="btn" id="summaryModalClose" type="button">Close</button>
+        </div>
+        <div class="modal-body">
+          <pre id="summaryContent"></pre>
+        </div>
+      </div>
+    </div>
+
     <script>
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
@@ -142,6 +162,16 @@
         return date.toLocaleDateString();
       }
 
+      function parseMetaJson(metaJson) {
+        if (!metaJson) return null;
+        if (typeof metaJson === 'object') return metaJson;
+        try {
+          return JSON.parse(metaJson);
+        } catch {
+          return null;
+        }
+      }
+
       function openResumeModal(url) {
         const modal = document.getElementById('resumeModal');
         const frame = document.getElementById('resumeFrame');
@@ -168,6 +198,18 @@
         modal.classList.remove('open');
       }
 
+      function openSummaryModal(text) {
+        const modal = document.getElementById('summaryModal');
+        document.getElementById('summaryContent').textContent = text || '';
+        modal.classList.add('open');
+      }
+
+      function closeSummaryModal() {
+        const modal = document.getElementById('summaryModal');
+        document.getElementById('summaryContent').textContent = '';
+        modal.classList.remove('open');
+      }
+
       function renderApplications(rows) {
         const list = document.getElementById('appsList');
         applicationsById = new Map(rows.map((row) => [String(row.Id), row]));
@@ -176,11 +218,12 @@
           return;
         }
         list.innerHTML = rows.map((row) => {
+          const meta = parseMetaJson(row.MetaJson);
+          const shortSummary = typeof meta?.shortSummary === 'string' ? meta.shortSummary.trim() : '';
           const appliedAt = formatDateOnly(row.AppliedAt);
           const title = escapeHtml(row.VacancyTitle || '');
           const status = escapeHtml(row.Status || 'applied');
           const company = escapeHtml(row.CompanyName || 'Unknown company');
-          const source = escapeHtml(row.Source || '-');
           const notes = row.Notes ? `<div style="margin-top:8px;">${escapeHtml(row.Notes)}</div>` : '';
           const tailoredBtn = row.TailoredCVURL
             ? `<button class="btn js-open-resume" type="button" data-id="${row.Id}">View tailored resume</button>`
@@ -188,6 +231,9 @@
           const coverBtn = row.CoverLetter
             ? `<button class="btn js-open-cover" type="button" data-id="${row.Id}">View cover letter</button>`
             : '<button class="btn" type="button" disabled>No cover letter</button>';
+          const summaryBtn = shortSummary
+            ? `<button class="btn js-open-summary" type="button" data-id="${row.Id}">View job summary</button>`
+            : '<button class="btn" type="button" disabled>No job summary</button>';
           return `
             <article class="app-item">
               <div style="display:flex;justify-content:space-between;gap:10px;">
@@ -195,12 +241,12 @@
                 <span class="pill">${status}</span>
               </div>
               <div class="muted" style="margin-top:6px;">${company}</div>
-              <div class="muted" style="margin-top:4px;">Source: ${source}</div>
               <div class="muted" style="margin-top:4px;">Applied: ${appliedAt}</div>
               ${notes}
               <div class="actions">
                 ${tailoredBtn}
                 ${coverBtn}
+                ${summaryBtn}
               </div>
             </article>`;
         }).join('');
@@ -223,21 +269,35 @@
         if (coverBtn) {
           const row = applicationsById.get(String(coverBtn.dataset.id));
           if (row?.CoverLetter) openCoverLetterModal(row.CoverLetter);
+          return;
+        }
+
+        const summaryBtn = event.target.closest('.js-open-summary');
+        if (summaryBtn) {
+          const row = applicationsById.get(String(summaryBtn.dataset.id));
+          const meta = parseMetaJson(row?.MetaJson);
+          const shortSummary = typeof meta?.shortSummary === 'string' ? meta.shortSummary.trim() : '';
+          if (shortSummary) openSummaryModal(shortSummary);
         }
       });
 
       document.getElementById('resumeModalClose').addEventListener('click', closeResumeModal);
       document.getElementById('coverLetterModalClose').addEventListener('click', closeCoverLetterModal);
+      document.getElementById('summaryModalClose').addEventListener('click', closeSummaryModal);
       document.getElementById('resumeModal').addEventListener('click', (event) => {
         if (event.target.id === 'resumeModal') closeResumeModal();
       });
       document.getElementById('coverLetterModal').addEventListener('click', (event) => {
         if (event.target.id === 'coverLetterModal') closeCoverLetterModal();
       });
+      document.getElementById('summaryModal').addEventListener('click', (event) => {
+        if (event.target.id === 'summaryModal') closeSummaryModal();
+      });
       document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
         closeResumeModal();
         closeCoverLetterModal();
+        closeSummaryModal();
       });
 
       loadApplications().catch((err) => alert(`Failed to load applications: ${err.message}`));
