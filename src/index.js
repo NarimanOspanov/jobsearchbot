@@ -14,9 +14,15 @@ import { createResumeStorage } from './services/resumeStorage.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const WELCOME_NEW_USER =
-  'Welcome to Job Agent.\n\n' +
-  'Use the menu (Applications / Profile) to manage your applications and profile settings.';
+const START_INTRO_MESSAGE = [
+  'Что умеет бот',
+  '',
+  'Привет! Меня зовут Ayala, я ваш персональный карьерный агент.',
+  '',
+  'Я помогаю в двух направлениях:',
+  '1) Каждый день ищу global remote вакансии и публикую их в Telegram-канале.',
+  '2) Если хотите делегировать отклики, вы нанимаете меня, и я работаю в фоне за вас.',
+].join('\n');
 const ABOUT_MESSAGE = [
   'Забудьте про поиск работы вручную.',
   '',
@@ -607,6 +613,28 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseProfileWebApp = isValidTelegramWebAppUrl(profileUrl);
   const canUseCompaniesWebApp = isValidTelegramWebAppUrl(companiesUrl);
   const canUseAdminWebApp = isValidTelegramWebAppUrl(adminUrl);
+  const startAvatarPath = join(__dirname, '..', 'avatar.png');
+  const startKeyboard = {
+    inline_keyboard: [
+      [{ text: 'Телеграм Канал с удалёнкой', url: 'https://t.me/digitalnomadsrelocation' }],
+      [{ text: 'Делегировать отклики', callback_data: 'start_hireagent' }],
+    ],
+  };
+
+  const startHireAgentScenario = async (ctx) => {
+    const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
+    if (chat?.type !== 'private') {
+      await ctx.reply('Этот сценарий доступен только в личном чате с ботом.');
+      return;
+    }
+    if (ctx.callbackQuery) await withTypingTelegram(ctx.telegram, chat.id, 700);
+    hireAgentStateByChatId.set(chat.id, { step: 'awaiting_cv' });
+    await ctx.reply(
+      'Привет! Я Ayala, ваш персональный карьерный агент. Я буду искать для вас вакансии на 100% удалёнку и откликаться за вас.\n\n' +
+        'От вас требуется только резюме. Когда потребуются действия, я напишу.\n\n' +
+        'Отправьте резюме файлом (PDF или изображение) — я разберу его и начну работу.'
+    );
+  };
 
   bot.use(async (ctx, next) => {
     try {
@@ -624,31 +652,32 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     return next();
   });
 
+  // Show "typing..." for all slash commands.
+  bot.use(async (ctx, next) => {
+    const text = ctx.message?.text;
+    if (ctx.chat?.id && typeof text === 'string' && text.trim().startsWith('/')) {
+      await withTypingTelegram(ctx.telegram, ctx.chat.id, 700);
+    }
+    return next();
+  });
+
   bot.start(async (ctx) => {
-    if (ctx.state.isFirstTimeUser) {
-      await ctx.reply(WELCOME_NEW_USER);
-    }
-    if (canUseApplicationsWebApp) {
-      await ctx.reply('Open your job agent mini app:', {
-        reply_markup: {
-          inline_keyboard: [[{ text: 'Open Applications', web_app: { url: applicationsUrl } }]],
-        },
-      });
-      return;
-    }
-    if (applicationsUrl) {
-      await ctx.reply(
-        `Bot is active. Mini app URL is not valid for Telegram WebApp button: ${applicationsUrl}\n` +
-          'Use a public HTTPS domain (not localhost) for WEBHOOK_URL/ADMIN_APP_URL.'
+    if (existsSync(startAvatarPath)) {
+      await ctx.replyWithPhoto(
+        { source: startAvatarPath },
+        {
+          caption: START_INTRO_MESSAGE,
+          reply_markup: startKeyboard,
+        }
       );
       return;
     }
-    await ctx.reply('Bot is active. Set WEBHOOK_URL or ADMIN_APP_URL to public HTTPS URL for mini app button.');
+    await ctx.reply(START_INTRO_MESSAGE, { reply_markup: startKeyboard });
   });
 
   bot.command('applications', async (ctx) => {
     if (canUseApplicationsWebApp) {
-      await ctx.reply('Open applications:', {
+      await ctx.reply('Мои отклики', {
         reply_markup: {
           inline_keyboard: [[{ text: 'Applications', web_app: { url: applicationsUrl } }]],
         },
@@ -659,16 +688,16 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   });
 
   bot.command('hireagent', async (ctx) => {
-    if (ctx.chat?.type !== 'private') {
-      await ctx.reply('Этот сценарий доступен только в личном чате с ботом.');
-      return;
+    await startHireAgentScenario(ctx);
+  });
+
+  bot.action('start_hireagent', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
     }
-    hireAgentStateByChatId.set(ctx.chat.id, { step: 'awaiting_cv' });
-    await ctx.reply(
-      'Привет! Я Алекс! Ваш персональный карьерный агент. Я буду искать для Вас вакансии на 100% удалёнку и откликаться за вас.\n\n' +
-        'От вас требуется лишь резюме. Когда подтребуются действия, я напишу.\n\n' +
-        'Отправьте резюме файлом (PDF или изображение) — я «разберу» его и начну работу.'
-    );
+    await startHireAgentScenario(ctx);
   });
 
   bot.action('hireagent_yes', async (ctx) => {
@@ -1600,6 +1629,7 @@ async function main() {
 
   try {
     await bot.telegram.setMyCommands([
+      { command: 'start', description: 'Что умеет бот' },
       { command: 'applications', description: 'Мои отклики' },
       { command: 'hireagent', description: 'Делегировать отклики' },
       { command: 'profile', description: 'Настройки' },
