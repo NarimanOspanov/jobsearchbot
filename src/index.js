@@ -21,7 +21,7 @@ const START_INTRO_MESSAGE = [
   '',
   'Я помогаю в двух направлениях:',
   '1) Каждый день ищу global remote вакансии и публикую их в Telegram-канале.',
-  '2) Если хотите делегировать отклики, вы нанимаете меня, и я работаю в фоне за вас.',
+  '2) Хотите делегировать отклики? Я откликаюсь от вашего лица.',
 ].join('\n');
 const ABOUT_MESSAGE = [
   'Забудьте про поиск работы вручную.',
@@ -617,7 +617,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const startKeyboard = {
     inline_keyboard: [
       [{ text: 'Телеграм Канал с удалёнкой', url: 'https://t.me/digitalnomadsrelocation' }],
-      [{ text: 'Делегировать отклики', callback_data: 'start_hireagent' }],
+      [{ text: 'Узнать больше про делегирование откликов', callback_data: 'start_hireagent_info' }],
     ],
   };
 
@@ -630,9 +630,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     if (ctx.callbackQuery) await withTypingTelegram(ctx.telegram, chat.id, 700);
     hireAgentStateByChatId.set(chat.id, { step: 'awaiting_cv' });
     await ctx.reply(
-      'Привет! Я Ayala, ваш персональный карьерный агент. Я буду искать для вас вакансии на 100% удалёнку и откликаться за вас.\n\n' +
-        'От вас требуется только резюме. Когда потребуются действия, я напишу.\n\n' +
-        'Отправьте резюме файлом (PDF или изображение) — я разберу его и начну работу.'
+      'Отправьте резюме файлом (PDF или изображение) — я разберу его и начну работу.\n' +
+        'Когда потребуются действия, я напишу.'
     );
   };
 
@@ -698,6 +697,21 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       /* ignore */
     }
     await startHireAgentScenario(ctx);
+  });
+
+  bot.action('start_hireagent_info', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    const chatId = ctx.callbackQuery?.message?.chat?.id;
+    if (chatId) await withTypingTelegram(ctx.telegram, chatId, 700);
+    await ctx.reply(ABOUT_MESSAGE, {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Отправить резюме и попробовать', callback_data: 'start_hireagent' }]],
+      },
+    });
   });
 
   bot.action('hireagent_yes', async (ctx) => {
