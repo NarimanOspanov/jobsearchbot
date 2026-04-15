@@ -398,6 +398,91 @@ async function extractResumeTextFromUrl(resumeUrl) {
   throw new Error('Resume format is not supported for text extraction; provide PDF or TXT resume.');
 }
 
+function extractFirstJsonObject(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.startsWith('```')) {
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fenceMatch?.[1]) return fenceMatch[1].trim();
+  }
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start >= 0 && end > start) return text.slice(start, end + 1).trim();
+  return text;
+}
+
+function normalizeResumeContacts(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const name = toStringOrUndefined(raw.name, 120);
+  const lastName = toStringOrUndefined(raw.lastName, 120);
+  const phoneNumber = toStringOrUndefined(raw.phoneNumber, 120);
+  const email = toStringOrUndefined(raw.email, 254);
+  const normalized = {};
+  if (name) normalized.name = name;
+  if (lastName) normalized.lastName = lastName;
+  if (phoneNumber) normalized.phoneNumber = phoneNumber;
+  if (email) normalized.email = email;
+  return normalized;
+}
+
+function parseResumeContactsJson(jsonValue) {
+  if (!jsonValue || typeof jsonValue !== 'string') return {};
+  try {
+    const parsed = JSON.parse(jsonValue);
+    return normalizeResumeContacts(parsed);
+  } catch {
+    return {};
+  }
+}
+
+async function extractResumeContactsWithAI(resumeText) {
+  if (!genAI) return null;
+  const text = String(resumeText || '').trim();
+  if (!text) return null;
+
+  const prompt = `Extract candidate contact information from this resume text.
+Return strict JSON only (no markdown, no explanations), with this exact shape:
+{"name":"string|null","lastName":"string|null","phoneNumber":"string|null","email":"string|null"}
+Rules:
+- Use only data present in resume text.
+- If a field is missing, set it to null.
+- Do not invent data.
+
+Resume text:
+${text}`;
+
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const raw = response.text?.trim();
+  if (!raw) return null;
+
+  const jsonText = extractFirstJsonObject(raw);
+  const parsed = JSON.parse(jsonText);
+  const normalized = normalizeResumeContacts(parsed);
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function buildAdminUserContactProjection(user) {
+  const resumeContacts = parseResumeContactsJson(user.ResumeContactsJson);
+  const resumeName = resumeContacts.name || null;
+  const resumeLastName = resumeContacts.lastName || null;
+  const resumePhoneNumber = resumeContacts.phoneNumber || null;
+  const resumeEmail = resumeContacts.email || null;
+  return {
+    resumeContacts,
+    resumeName,
+    resumeLastName,
+    resumePhoneNumber,
+    resumeEmail,
+    displayFirstName: resumeName || user.FirstName || null,
+    displayLastName: resumeLastName || user.LastName || null,
+    displayPhoneNumber: resumePhoneNumber || null,
+    displayEmail: resumeEmail || null,
+  };
+}
+
 function toBoolOrUndefined(value) {
   if (typeof value === 'boolean') return value;
   return undefined;
@@ -793,7 +878,15 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         ctx.from?.first_name ?? null,
         ctx.from?.last_name ?? null
       );
-      await user.update({ ResumeURL: resumeUrl });
+      let resumeContactsJson = null;
+      try {
+        const resumeText = await extractResumeTextFromUrl(resumeUrl);
+        const resumeContacts = await extractResumeContactsWithAI(resumeText);
+        if (resumeContacts) resumeContactsJson = JSON.stringify(resumeContacts);
+      } catch (parseErr) {
+        console.warn('Resume contact extraction failed, keeping upload flow:', parseErr?.message || parseErr);
+      }
+      await user.update({ ResumeURL: resumeUrl, ResumeContactsJson: resumeContactsJson });
 
       await withTypingTelegram(ctx.telegram, chatId, 800 + Math.floor(Math.random() * 400));
       if (hireAgentSimulationVisible) {
@@ -1488,16 +1581,20 @@ async function main() {
         limit,
         offset,
       });
-      res.json(rows.map((u) => ({
-        id: u.Id,
-        telegramChatId: String(u.TelegramChatId),
-        telegramUserName: u.TelegramUserName,
-        firstName: u.FirstName || null,
-        lastName: u.LastName || null,
-        dateJoined: u.DateJoined,
-        isBlocked: !!u.IsBlocked,
-        resumeUrl: u.ResumeURL || null,
-      })));
+      res.json(rows.map((u) => {
+        const projection = buildAdminUserContactProjection(u);
+        return {
+          id: u.Id,
+          telegramChatId: String(u.TelegramChatId),
+          telegramUserName: u.TelegramUserName,
+          firstName: u.FirstName || null,
+          lastName: u.LastName || null,
+          dateJoined: u.DateJoined,
+          isBlocked: !!u.IsBlocked,
+          resumeUrl: u.ResumeURL || null,
+          ...projection,
+        };
+      }));
     } catch (err) {
       console.error('GET /api/app/admin/users:', err);
       res.status(500).json({ error: 'Failed to load users' });
@@ -1536,6 +1633,7 @@ async function main() {
           minimumSalary: u.MinimumSalary,
           remoteOnly: !!u.RemoteOnly,
         },
+        ...buildAdminUserContactProjection(u),
       });
     } catch (err) {
       console.error('GET /api/app/admin/users/:id:', err);

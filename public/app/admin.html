@@ -500,7 +500,12 @@
         root.innerHTML = users.map((u) => `
           <button data-id="${u.id}" class="${String(u.id) === qs.seekerId ? 'selected' : ''}">
             #${u.id}
-            ${esc([String(u.firstName || '').trim(), String(u.lastName || '').trim()].filter(Boolean).join(' ') || u.telegramUserName || '')}
+            ${esc(
+              [String(u.displayFirstName || '').trim(), String(u.displayLastName || '').trim()].filter(Boolean).join(' ')
+              || [String(u.firstName || '').trim(), String(u.lastName || '').trim()].filter(Boolean).join(' ')
+              || u.telegramUserName
+              || ''
+            )}
             (${esc(u.telegramChatId)})
           </button>
         `).join('');
@@ -522,8 +527,10 @@
           return;
         }
         const username = String(u.telegramUserName || '').trim();
-        const firstName = String(u.firstName || '').trim();
-        const lastName = String(u.lastName || '').trim();
+        const firstName = String(u.displayFirstName || u.firstName || '').trim();
+        const lastName = String(u.displayLastName || u.lastName || '').trim();
+        const email = String(u.displayEmail || '').trim();
+        const phoneNumber = String(u.displayPhoneNumber || '').trim();
         const usernameNoAt = username.replace(/^@/, '');
         const usernameHtml = usernameNoAt
           ? `<a href="https://t.me/${encodeURIComponent(usernameNoAt)}" target="_blank" rel="noopener noreferrer">${esc(usernameNoAt)}</a>`
@@ -550,6 +557,14 @@
             <div class="item">
               <div class="k">TelegramChatId</div>
               <div>${esc(String(u.telegramChatId || '—'))}</div>
+            </div>
+            <div class="item">
+              <div class="k">Email</div>
+              <div>${esc(email || '—')}</div>
+            </div>
+            <div class="item">
+              <div class="k">Phone</div>
+              <div>${esc(phoneNumber || '—')}</div>
             </div>
           </div>
         `;
