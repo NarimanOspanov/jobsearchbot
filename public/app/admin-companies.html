@@ -21,7 +21,8 @@
       .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
       h1, h2 { margin: 0 0 12px; }
       .grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
-      input, button { width: 100%; border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 10px; font: inherit; }
+      input, textarea, button { width: 100%; border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 10px; font: inherit; }
+      textarea { resize: vertical; min-height: 90px; }
       button { cursor: pointer; background: var(--accent); border-color: var(--accent); font-weight: 600; }
       .danger { background: var(--danger); border-color: var(--danger); }
       .muted { color: var(--muted); }
@@ -41,6 +42,9 @@
           <input id="nameInput" placeholder="Company name" />
           <input id="urlInput" placeholder="https://company.com/careers" />
           <button id="saveBtn">Save</button>
+        </div>
+        <div style="margin-top:8px">
+          <textarea id="notesInput" maxlength="1000" placeholder="Notes (optional, up to 1000 chars)"></textarea>
         </div>
         <div class="row-actions" style="margin-top:8px">
           <button id="cancelEditBtn" style="display:none">Cancel edit</button>
@@ -77,6 +81,7 @@
         document.getElementById('formTitle').textContent = 'Add company';
         document.getElementById('nameInput').value = '';
         document.getElementById('urlInput').value = '';
+        document.getElementById('notesInput').value = '';
         document.getElementById('cancelEditBtn').style.display = 'none';
       }
 
@@ -85,6 +90,7 @@
         document.getElementById('formTitle').textContent = `Edit company #${row.Id}`;
         document.getElementById('nameInput').value = row.Name || '';
         document.getElementById('urlInput').value = row.Url || '';
+        document.getElementById('notesInput').value = row.Notes || '';
         document.getElementById('cancelEditBtn').style.display = 'inline-block';
       }
 
@@ -99,6 +105,7 @@
           <article class="row">
             <strong>${esc(row.Name)}</strong>
             <div><a href="${esc(row.Url)}" target="_blank" rel="noopener noreferrer">${esc(row.Url)}</a></div>
+            ${row.Notes ? `<div style="margin-top:8px; white-space:pre-wrap">${esc(row.Notes)}</div>` : ''}
             <div class="muted">Added: ${row.DateAdded ? new Date(row.DateAdded).toLocaleString() : '-'}</div>
             <div class="row-actions">
               <button data-edit="${row.Id}">Edit</button>
@@ -132,6 +139,7 @@
           const payload = {
             name: document.getElementById('nameInput').value.trim(),
             url: document.getElementById('urlInput').value.trim(),
+            notes: document.getElementById('notesInput').value.trim(),
           };
           if (!payload.name || !payload.url) throw new Error('Name and URL are required');
           if (editingId) {

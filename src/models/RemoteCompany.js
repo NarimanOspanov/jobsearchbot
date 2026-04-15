@@ -18,6 +18,10 @@ export default function defineRemoteCompany(sequelize) {
         type: DataTypes.STRING(1024),
         allowNull: false,
       },
+      Notes: {
+        type: DataTypes.STRING(1000),
+        allowNull: true,
+      },
       DateAdded: {
         type: DataTypes.DATE,
         allowNull: false,

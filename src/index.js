@@ -51,7 +51,7 @@ function sleep(ms) {
 
 /** Keeps Telegram «печатает…» alive for long waits (action expires ~after 5s). */
 async function withTypingTelegram(telegram, chatId, ms) {
-  const pulse = () => telegram.sendChatAction(chatId, 'typing').catch(() => {});
+  const pulse = () => telegram.sendChatAction(chatId, 'typing').catch(() => { });
   pulse();
   const id = setInterval(pulse, 4000);
   try {
@@ -104,7 +104,7 @@ async function runHireAgentFakeApplying(ctx, chatId) {
       `Статус: отправка отклика…\n` +
       `Сейчас: ${current.role} — ${current.company}\n\n` +
       listBlock;
-    await api.editMessageText(chatId, mid, undefined, text).catch(() => {});
+    await api.editMessageText(chatId, mid, undefined, text).catch(() => { });
     await withTypingTelegram(api, chatId, 900 + Math.floor(Math.random() * 700));
   }
 
@@ -116,12 +116,12 @@ async function runHireAgentFakeApplying(ctx, chatId) {
       undefined,
       `✅ Первая партия откликов завершена (демо).\n\n${allChecked}`
     )
-    .catch(() => {});
+    .catch(() => { });
 
   await ctx.reply(
     'Я откликнулся на первые 10 позиций. Резюме и сопроводительные письма были адаптированы под каждую вакансию.\n\n' +
-      'Проверьте почту — возможно, уже есть письма от работодателей.\n\n' +
-      'Чтобы продолжить, купите подписку.',
+    'Проверьте почту — возможно, уже есть письма от работодателей.\n\n' +
+    'Чтобы продолжить, купите подписку.',
     {
       reply_markup: {
         inline_keyboard: [[{ text: 'Продолжить', callback_data: 'hireagent_continue' }]],
@@ -607,10 +607,12 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const profileUrl = appBaseUrl ? `${appBaseUrl}/app/profile` : '';
   const companiesUrl = appBaseUrl ? `${appBaseUrl}/app/companies` : '';
   const adminUrl = appBaseUrl ? `${appBaseUrl}/app/admin` : '';
+  const adminCompaniesUrl = appBaseUrl ? `${appBaseUrl}/app/admin/companies` : '';
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
   const canUseProfileWebApp = isValidTelegramWebAppUrl(profileUrl);
   const canUseCompaniesWebApp = isValidTelegramWebAppUrl(companiesUrl);
   const canUseAdminWebApp = isValidTelegramWebAppUrl(adminUrl);
+  const canUseAdminCompaniesWebApp = isValidTelegramWebAppUrl(adminCompaniesUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const startKeyboard = {
     inline_keyboard: [
@@ -629,7 +631,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     hireAgentStateByChatId.set(chat.id, { step: 'awaiting_cv' });
     await ctx.reply(
       'Отправьте резюме файлом (PDF или изображение) — я разберу его и начну работу.\n' +
-        'Когда потребуются действия, я напишу.'
+      'Когда потребуются действия, я напишу.'
     );
   };
 
@@ -719,7 +721,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       /* ignore */
     }
     if (!hireAgentSimulationVisible) {
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
       await ctx.reply('Симуляция откликов сейчас отключена. Мы сообщим вам по результатам проверки резюме.');
       return;
     }
@@ -731,7 +733,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     hireAgentStateByChatId.set(chatId, { step: 'applying' });
-    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
     await runHireAgentFakeApplying(ctx, chatId);
   });
 
@@ -742,7 +744,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       /* ignore */
     }
     if (!hireAgentSimulationVisible) {
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
       return;
     }
     const chatId = ctx.callbackQuery?.message?.chat?.id;
@@ -750,7 +752,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const st = hireAgentStateByChatId.get(chatId);
     if (st?.step !== 'awaiting_confirm') return;
     hireAgentStateByChatId.set(chatId, { step: 'idle' });
-    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
     await ctx.reply('Хорошо. Когда будете готовы — снова выберите «Делегировать отклики» в меню.');
   });
 
@@ -798,7 +800,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_confirm' });
         await ctx.reply(
           'Готово. Я сохранил ваше резюме и нашёл 263 вакансии с полной удалёнкой (100%), которые вам подходят.\n\n' +
-            'Запустить автоматические отклики?',
+          'Запустить автоматические отклики?',
           {
             reply_markup: {
               inline_keyboard: [
@@ -870,6 +872,35 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     await ctx.reply('Admin page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  });
+
+  const openAdminCompanies = async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Admin companies page is available only in private chat.');
+      return;
+    }
+    const adminIds = config.botAdminTelegramIds;
+    if (adminIds.size > 0 && (!ctx.from?.id || !adminIds.has(ctx.from.id))) {
+      await ctx.reply('Unauthorized.');
+      return;
+    }
+    if (canUseAdminCompaniesWebApp) {
+      await ctx.reply('Open admin companies:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Admin Companies', web_app: { url: adminCompaniesUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Admin companies page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  };
+
+  bot.command('admin_companies', async (ctx) => {
+    await openAdminCompanies(ctx);
+  });
+
+  bot.hears(/^\/admin-companies(?:@\w+)?$/, async (ctx) => {
+    await openAdminCompanies(ctx);
   });
 
   bot.command('stat', async (ctx) => {
@@ -1517,9 +1548,11 @@ async function main() {
       const name = toStringOrUndefined(req.body.name, 255);
       const url = toValidUrlOrUndefined(req.body.url);
       if (!name || !url) return res.status(400).json({ error: 'name and valid url are required' });
+      const notes = toStringOrUndefined(req.body.notes, 1000);
       const row = await models.RemoteCompanies.create({
         Name: name,
         Url: url,
+        Notes: notes ?? null,
         DateAdded: Sequelize.literal('GETUTCDATE()'),
       });
       res.status(201).json(row);
@@ -1542,6 +1575,17 @@ async function main() {
       const url = toValidUrlOrUndefined(req.body.url);
       if (name) updates.Name = name;
       if (url) updates.Url = url;
+      if (Object.prototype.hasOwnProperty.call(req.body, 'notes')) {
+        if (req.body.notes == null || String(req.body.notes).trim() === '') {
+          updates.Notes = null;
+        } else {
+          const notes = toStringOrUndefined(req.body.notes, 1000);
+          if (!notes) {
+            return res.status(400).json({ error: 'notes must be a non-empty string up to 1000 characters' });
+          }
+          updates.Notes = notes;
+        }
+      }
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: 'At least one valid field is required' });
       }

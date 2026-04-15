@@ -55,6 +55,7 @@
           <article class="card">
             <h3 style="margin:0 0 8px">${esc(row.Name)}</h3>
             <a href="${esc(row.Url)}" target="_blank" rel="noopener noreferrer">${esc(row.Url)}</a>
+            ${row.Notes ? `<p class="muted" style="margin:8px 0 0; white-space:pre-wrap">${esc(row.Notes)}</p>` : ''}
           </article>
         `).join('');
       }
