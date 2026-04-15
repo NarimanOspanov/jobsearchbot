@@ -2,9 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="refresh" content="0; url=/app/applications" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Job Agent</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
-  <body></body>
+  <body>
+    <script>
+      (function bootstrapMiniAppStartParamRedirect() {
+        const tg = window.Telegram?.WebApp;
+        if (tg) tg.ready();
+
+        const fallbackUrl = '/app/applications';
+        const params = new URLSearchParams(window.location.search);
+        const directStartApp = params.get('startapp') || params.get('startApp') || '';
+        const initStartParam = tg?.initDataUnsafe?.start_param || '';
+        const rawStart = String(initStartParam || directStartApp || '').trim();
+
+        if (!rawStart || !rawStart.startsWith('search__')) {
+          window.location.replace(fallbackUrl);
+          return;
+        }
+
+        let rawQ = rawStart.slice('search__'.length).trim();
+        if (!rawQ) {
+          window.location.replace(fallbackUrl);
+          return;
+        }
+
+        try {
+          rawQ = decodeURIComponent(rawQ);
+        } catch {
+          // Keep token as-is when already decoded.
+        }
+
+        const targetUrl = `https://screenly.work/JobSearch/Search?q=${encodeURIComponent(rawQ)}`;
+        window.location.replace(targetUrl);
+      })();
+    </script>
+  </body>
 </html>
