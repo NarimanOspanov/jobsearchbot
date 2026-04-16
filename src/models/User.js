@@ -1,5 +1,16 @@
 import { DataTypes } from 'sequelize';
 
+function normalizeSkillIds(value) {
+  const rawItems = Array.isArray(value) ? value : [];
+  return Array.from(
+    new Set(
+      rawItems
+        .map((item) => Number.parseInt(String(item), 10))
+        .filter((item) => Number.isSafeInteger(item) && item > 0)
+    )
+  );
+}
+
 /**
  * Code-first User model. Maps to existing dbo.Users table.
  */
@@ -107,6 +118,23 @@ export default function defineUser(sequelize) {
       ResumeContactsJson: {
         type: DataTypes.TEXT,
         allowNull: true,
+      },
+      skills: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        get() {
+          const rawValue = this.getDataValue('skills');
+          if (!rawValue || typeof rawValue !== 'string') return [];
+          try {
+            return normalizeSkillIds(JSON.parse(rawValue));
+          } catch {
+            return [];
+          }
+        },
+        set(value) {
+          const normalized = normalizeSkillIds(value);
+          this.setDataValue('skills', normalized.length > 0 ? JSON.stringify(normalized) : null);
+        },
       },
     },
     {
