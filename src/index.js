@@ -691,14 +691,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const applicationsUrl = appBaseUrl ? `${appBaseUrl}/app/applications` : '';
   const profileUrl = appBaseUrl ? `${appBaseUrl}/app/profile` : '';
   const companiesUrl = appBaseUrl ? `${appBaseUrl}/app/companies` : '';
-  const directJobSearchUrl =
-    'https://screenly.work/JobSearch/Search?q=IA4KHgk9LxZEBgwfIAoWAAYRAgEKDAQfIAoWAAYRAgEKDAcfIAoWAAYRAgEKDAEfNwQXFyMGJAhEAwULZUhTRkhFekMdUEFcBwpeQFVGfUhJBRgIZw%3D%3D';
   const adminUrl = appBaseUrl ? `${appBaseUrl}/app/admin` : '';
   const adminCompaniesUrl = appBaseUrl ? `${appBaseUrl}/app/admin/companies` : '';
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
   const canUseProfileWebApp = isValidTelegramWebAppUrl(profileUrl);
   const canUseCompaniesWebApp = isValidTelegramWebAppUrl(companiesUrl);
-  const canUseDirectJobSearchWebApp = isValidTelegramWebAppUrl(directJobSearchUrl);
   const canUseAdminWebApp = isValidTelegramWebAppUrl(adminUrl);
   const canUseAdminCompaniesWebApp = isValidTelegramWebAppUrl(adminCompaniesUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
@@ -947,18 +944,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     await ctx.reply('Страница компаний требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).');
-  });
-
-  bot.command('jobsearch', async (ctx) => {
-    if (canUseDirectJobSearchWebApp) {
-      await ctx.reply('Открыть поиск вакансий:', {
-        reply_markup: {
-          inline_keyboard: [[{ text: 'Поиск вакансий', web_app: { url: directJobSearchUrl } }]],
-        },
-      });
-      return;
-    }
-    await ctx.reply('Страница поиска требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).');
   });
 
   bot.command('admin', async (ctx) => {
@@ -1756,7 +1741,6 @@ async function main() {
       { command: 'hireagent', description: 'Делегировать отклики' },
       { command: 'profile', description: 'Настройки' },
       { command: 'companies', description: 'Компании с удалёнкой' },
-      { command: 'jobsearch', description: 'Открыть поиск вакансий' },
       { command: 'about', description: 'О боте' },
     ]);
   } catch (err) {
