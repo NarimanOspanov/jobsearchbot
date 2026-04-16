@@ -708,6 +708,35 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     ],
   };
 
+  const formatUserDisplayName = (user) => {
+    const fullName = [user?.FirstName, user?.LastName]
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+      .join(' ');
+    return fullName || 'Не указано';
+  };
+
+  const formatUsername = (raw, { withAt = true } = {}) => {
+    const usernameRaw = String(raw || '').trim();
+    if (!usernameRaw) return 'нет';
+    if (!withAt) return usernameRaw.replace(/^@/, '');
+    return usernameRaw.startsWith('@') ? usernameRaw : `@${usernameRaw}`;
+  };
+
+  const notifyAdmins = async (ctx, message, errorLabel, telemetry = {}) => {
+    const adminIds = config.botAdminTelegramIds;
+    if (adminIds.size === 0) return;
+    for (const adminId of adminIds) {
+      await ctx.telegram.sendMessage(adminId, message).catch((err) => {
+        console.error(errorLabel, {
+          adminId,
+          ...telemetry,
+          error: err?.message || err,
+        });
+      });
+    }
+  };
+
   const startHireAgentScenario = async (ctx) => {
     const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
     if (chat?.type !== 'private') {
@@ -727,33 +756,20 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       const { user, wasCreated } = await ensureUser(ctx);
       ctx.state.isFirstTimeUser = wasCreated;
       if (wasCreated && user) {
-        const adminIds = config.botAdminTelegramIds;
-        if (adminIds.size > 0) {
-          const totalUsers = await models.Users.count();
-          const fullName = [user.FirstName, user.LastName]
-            .map((part) => String(part || '').trim())
-            .filter(Boolean)
-            .join(' ');
-          const displayName = fullName || 'Не указано';
-          const usernameRaw = String(user.TelegramUserName || '').trim();
-          const displayUsername = usernameRaw ? (usernameRaw.startsWith('@') ? usernameRaw : `@${usernameRaw}`) : 'нет';
-          const message = [
-            '🔔 Новый пользователь присоединился!',
-            `Имя: ${displayName}`,
-            `Username: ${displayUsername}`,
-            `ChatId: ${user.TelegramChatId}`,
-            `Всего пользователей: ${totalUsers}`,
-          ].join('\n');
-          for (const adminId of adminIds) {
-            await ctx.telegram.sendMessage(adminId, message).catch((err) => {
-              console.error('Failed to send new-user admin notification:', {
-                adminId,
-                telegramChatId: user.TelegramChatId,
-                error: err?.message || err,
-              });
-            });
-          }
-        }
+        const totalUsers = await models.Users.count();
+        const message = [
+          '🔔 Новый пользователь присоединился!',
+          `Имя: ${formatUserDisplayName(user)}`,
+          `Username: ${formatUsername(user.TelegramUserName, { withAt: true })}`,
+          `ChatId: ${user.TelegramChatId}`,
+          `Всего пользователей: ${totalUsers}`,
+        ].join('\n');
+        await notifyAdmins(
+          ctx,
+          message,
+          'Failed to send new-user admin notification:',
+          { telegramChatId: user.TelegramChatId }
+        );
       }
     } catch (err) {
       console.error('ensureUser error:', err);
@@ -912,6 +928,27 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         console.warn('Resume contact extraction failed, keeping upload flow:', parseErr?.message || parseErr);
       }
       await user.update({ ResumeURL: resumeUrl, ResumeContactsJson: resumeContactsJson });
+      const totalWithResume = await models.Users.count({
+        where: {
+          ResumeURL: {
+            [Sequelize.Op.ne]: null,
+          },
+        },
+      });
+      const resumeUploadMessage = [
+        '📄 CV Пользователь загрузил резюме',
+        `Имя: ${formatUserDisplayName(user)}`,
+        `Username: ${formatUsername(user.TelegramUserName, { withAt: false })}`,
+        `ChatId: ${user.TelegramChatId}`,
+        `Всего пользователей загрузило: ${totalWithResume}`,
+        `URL: ${resumeUrl}`,
+      ].join('\n');
+      await notifyAdmins(
+        ctx,
+        resumeUploadMessage,
+        'Failed to send CV upload admin notification:',
+        { telegramChatId: user.TelegramChatId }
+      );
 
       await withTypingTelegram(ctx.telegram, chatId, 800 + Math.floor(Math.random() * 400));
       if (hireAgentSimulationVisible) {
