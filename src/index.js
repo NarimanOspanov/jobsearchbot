@@ -568,7 +568,8 @@ function verifyInitData(initData) {
 }
 
 async function ensureUserByTelegramId(telegramId, username = null, firstName = null, lastName = null) {
-  if (!telegramId) return null;
+  if (!telegramId) return { user: null, wasCreated: false };
+  let wasCreated = false;
   let user = await models.Users.findOne({ where: { TelegramChatId: telegramId } });
   if (!user) {
     try {
@@ -579,6 +580,7 @@ async function ensureUserByTelegramId(telegramId, username = null, firstName = n
         LastName: lastName,
         DateJoined: Sequelize.literal('GETUTCDATE()'),
       });
+      wasCreated = true;
     } catch (createErr) {
       if (createErr?.name === 'SequelizeUniqueConstraintError') {
         user = await models.Users.findOne({ where: { TelegramChatId: telegramId } });
@@ -597,7 +599,7 @@ async function ensureUserByTelegramId(telegramId, username = null, firstName = n
       LastName: lastName,
     });
   }
-  return user;
+  return { user, wasCreated };
 }
 
 async function ensureUser(ctx) {
@@ -722,14 +724,37 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.use(async (ctx, next) => {
     try {
-      const chatId = ctx.chat?.id ?? ctx.from?.id;
-      if (chatId) {
-        const existing = await models.Users.findOne({ where: { TelegramChatId: chatId } });
-        ctx.state.isFirstTimeUser = !existing;
-      } else {
-        ctx.state.isFirstTimeUser = false;
+      const { user, wasCreated } = await ensureUser(ctx);
+      ctx.state.isFirstTimeUser = wasCreated;
+      if (wasCreated && user) {
+        const adminIds = config.botAdminTelegramIds;
+        if (adminIds.size > 0) {
+          const totalUsers = await models.Users.count();
+          const fullName = [user.FirstName, user.LastName]
+            .map((part) => String(part || '').trim())
+            .filter(Boolean)
+            .join(' ');
+          const displayName = fullName || 'Не указано';
+          const usernameRaw = String(user.TelegramUserName || '').trim();
+          const displayUsername = usernameRaw ? (usernameRaw.startsWith('@') ? usernameRaw : `@${usernameRaw}`) : 'нет';
+          const message = [
+            '🔔 Новый пользователь присоединился!',
+            `Имя: ${displayName}`,
+            `Username: ${displayUsername}`,
+            `ChatId: ${user.TelegramChatId}`,
+            `Всего пользователей: ${totalUsers}`,
+          ].join('\n');
+          for (const adminId of adminIds) {
+            await ctx.telegram.sendMessage(adminId, message).catch((err) => {
+              console.error('Failed to send new-user admin notification:', {
+                adminId,
+                telegramChatId: user.TelegramChatId,
+                error: err?.message || err,
+              });
+            });
+          }
+        }
       }
-      await ensureUser(ctx);
     } catch (err) {
       console.error('ensureUser error:', err);
     }
@@ -872,7 +897,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         buffer: fileBuffer,
       });
 
-      const user = await ensureUserByTelegramId(
+      const { user } = await ensureUserByTelegramId(
         chatId,
         ctx.from?.username ?? null,
         ctx.from?.first_name ?? null,
@@ -1302,7 +1327,7 @@ async function main() {
 
   app.get('/api/app/profile', miniAppAuth, async (req, res) => {
     try {
-      const user = await ensureUserByTelegramId(
+      const { user } = await ensureUserByTelegramId(
         req.miniAppUser.id,
         req.miniAppUser.username ?? null,
         req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
@@ -1334,7 +1359,7 @@ async function main() {
 
   app.patch('/api/app/profile/settings', miniAppAuth, async (req, res) => {
     try {
-      const user = await ensureUserByTelegramId(
+      const { user } = await ensureUserByTelegramId(
         req.miniAppUser.id,
         req.miniAppUser.username ?? null,
         req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
@@ -1384,7 +1409,7 @@ async function main() {
       let userId = Number.parseInt(String(req.query.userId || ''), 10);
       if (!Number.isSafeInteger(userId) || userId <= 0) {
         await miniAppAuth(req, res, async () => {
-          const user = await ensureUserByTelegramId(
+          const { user } = await ensureUserByTelegramId(
             req.miniAppUser.id,
             req.miniAppUser.username ?? null,
             req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
