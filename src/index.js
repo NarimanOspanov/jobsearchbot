@@ -759,9 +759,12 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const chatId = chat?.id ?? ctx.from?.id;
     if (!chatId || legacyKeyboardClearedByChatId.has(chatId)) return;
     try {
-      await ctx.telegram.sendMessage(chatId, 'Обновили интерфейс: старые кнопки убраны.', {
+      const cleanupMessage = await ctx.telegram.sendMessage(chatId, '\u2060', {
         reply_markup: { remove_keyboard: true },
       });
+      if (cleanupMessage?.message_id) {
+        await ctx.telegram.deleteMessage(chatId, cleanupMessage.message_id).catch(() => { });
+      }
       legacyKeyboardClearedByChatId.add(chatId);
     } catch (err) {
       console.error('Failed to remove legacy keyboard:', err?.message || err);
