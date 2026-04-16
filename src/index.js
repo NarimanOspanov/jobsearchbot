@@ -63,6 +63,8 @@ async function withTypingTelegram(telegram, chatId, ms) {
 
 /** @type {Map<number, { step: string }>} */
 const hireAgentStateByChatId = new Map();
+/** @type {Set<number>} */
+const legacyKeyboardClearedByChatId = new Set();
 
 const HIRE_AGENT_FAKE_QUEUE = [
   { role: 'Backend Engineer', company: 'Deel' },
@@ -750,6 +752,26 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       'Когда потребуются действия, я напишу.'
     );
   };
+
+  const tryRemoveLegacyKeyboard = async (ctx) => {
+    const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
+    if (chat?.type !== 'private') return;
+    const chatId = chat?.id ?? ctx.from?.id;
+    if (!chatId || legacyKeyboardClearedByChatId.has(chatId)) return;
+    try {
+      await ctx.telegram.sendMessage(chatId, 'Обновили интерфейс: старые кнопки убраны.', {
+        reply_markup: { remove_keyboard: true },
+      });
+      legacyKeyboardClearedByChatId.add(chatId);
+    } catch (err) {
+      console.error('Failed to remove legacy keyboard:', err?.message || err);
+    }
+  };
+
+  bot.use(async (ctx, next) => {
+    await tryRemoveLegacyKeyboard(ctx);
+    return next();
+  });
 
   bot.use(async (ctx, next) => {
     try {
