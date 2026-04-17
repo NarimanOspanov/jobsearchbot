@@ -81,6 +81,11 @@ const HIRE_AGENT_FAKE_QUEUE = [
 const resumeStorage = createResumeStorage(config);
 const genAI = config.geminiApiKey ? new GoogleGenAI({ apiKey: config.geminiApiKey }) : null;
 const HIRE_AGENT_SIMULATION_CONFIG_KEY = 'hireAgentSimulationVisible';
+const SCREENLY_SKILLS_URL = 'https://screenly.work/api/all-skills';
+const screenlySkillsCache = {
+  expiresAt: 0,
+  skills: [],
+};
 
 /** doneThroughIndex: rows with j <= index are ✅ (green); the rest ⬜. Use -1 so all are ⬜. */
 function formatHireAgentFullList(doneThroughIndex) {
@@ -413,6 +418,30 @@ function extractFirstJsonObject(value) {
   return text;
 }
 
+function extractFirstJsonArray(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.startsWith('```')) {
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fenceMatch?.[1]) return fenceMatch[1].trim();
+  }
+  const start = text.indexOf('[');
+  const end = text.lastIndexOf(']');
+  if (start >= 0 && end > start) return text.slice(start, end + 1).trim();
+  return text;
+}
+
+function normalizeSkillIds(raw) {
+  const items = Array.isArray(raw) ? raw : [];
+  return Array.from(
+    new Set(
+      items
+        .map((item) => Number.parseInt(String(item), 10))
+        .filter((item) => Number.isSafeInteger(item) && item > 0)
+    )
+  );
+}
+
 function normalizeResumeContacts(raw) {
   if (!raw || typeof raw !== 'object') return {};
   const name = toStringOrUndefined(raw.name, 120);
@@ -466,6 +495,77 @@ ${text}`;
   return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
+async function fetchScreenlySkillsCatalog() {
+  const now = Date.now();
+  if (screenlySkillsCache.expiresAt > now && screenlySkillsCache.skills.length > 0) {
+    return screenlySkillsCache.skills;
+  }
+
+  const response = await fetch(SCREENLY_SKILLS_URL);
+  if (!response.ok) {
+    throw new Error(`Screenly skills request failed with status ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const skills = Array.isArray(payload?.skills)
+    ? payload.skills
+      .map((item) => {
+        const id = Number.parseInt(String(item?.id), 10);
+        const name = typeof item?.name === 'string' ? item.name.trim() : '';
+        return Number.isSafeInteger(id) && id > 0 && name
+          ? {
+            id,
+            name,
+            parent: item?.parent ?? null,
+            roleName: typeof item?.roleName === 'string' ? item.roleName.trim() : '',
+          }
+          : null;
+      })
+      .filter(Boolean)
+    : [];
+
+  screenlySkillsCache.skills = skills;
+  screenlySkillsCache.expiresAt = now + 5 * 60 * 1000;
+  return skills;
+}
+
+async function extractResumeSkillIdsWithAI(resumeText, skillsCatalog) {
+  if (!genAI) return [];
+  const text = String(resumeText || '').trim();
+  if (!text) return [];
+  if (!Array.isArray(skillsCatalog) || skillsCatalog.length === 0) return [];
+
+  const allowedSkills = skillsCatalog
+    .map((skill) => `${skill.id}: ${skill.name}`)
+    .join('\n');
+  const allowedIds = new Set(skillsCatalog.map((skill) => skill.id));
+  const prompt = `You analyze resume text and map it to a predefined skills catalog.
+Return strict JSON only as an array of integer ids, for example: [4,12,35]
+Rules:
+- Use only ids from the provided catalog.
+- Include only skills clearly supported by the resume text.
+- Do not invent skills or ids.
+- If unsure, leave the skill out.
+- Return [] when no skill is confidently supported.
+
+Allowed skills catalog:
+${allowedSkills}
+
+Resume text:
+${text}`;
+
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const raw = response.text?.trim();
+  if (!raw) return [];
+
+  const jsonText = extractFirstJsonArray(raw);
+  const parsed = JSON.parse(jsonText);
+  return normalizeSkillIds(parsed).filter((id) => allowedIds.has(id));
+}
+
 function buildAdminUserContactProjection(user) {
   const resumeContacts = parseResumeContactsJson(user.ResumeContactsJson);
   const resumeName = resumeContacts.name || null;
@@ -502,6 +602,12 @@ function toIntOrNullOrUndefined(value) {
   const n = Number.parseInt(String(value), 10);
   if (!Number.isFinite(n) || n < 0) return undefined;
   return n;
+}
+
+function toSkillIdsOrNullOrUndefined(value) {
+  if (value == null || value === '') return null;
+  if (!Array.isArray(value)) return undefined;
+  return normalizeSkillIds(value);
 }
 
 function toScoreOrNullOrUndefined(value) {
@@ -962,14 +1068,19 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         ctx.from?.last_name ?? null
       );
       let resumeContactsJson = null;
+      let resumeSkillIds = [];
       try {
         const resumeText = await extractResumeTextFromUrl(resumeUrl);
-        const resumeContacts = await extractResumeContactsWithAI(resumeText);
+        const [resumeContacts, skillsCatalog] = await Promise.all([
+          extractResumeContactsWithAI(resumeText),
+          fetchScreenlySkillsCatalog(),
+        ]);
         if (resumeContacts) resumeContactsJson = JSON.stringify(resumeContacts);
+        resumeSkillIds = await extractResumeSkillIdsWithAI(resumeText, skillsCatalog);
       } catch (parseErr) {
-        console.warn('Resume contact extraction failed, keeping upload flow:', parseErr?.message || parseErr);
+        console.warn('Resume enrichment failed, keeping upload flow:', parseErr?.message || parseErr);
       }
-      await user.update({ ResumeURL: resumeUrl, ResumeContactsJson: resumeContactsJson });
+      await user.update({ ResumeURL: resumeUrl, ResumeContactsJson: resumeContactsJson, skills: resumeSkillIds });
       const totalWithResume = await models.Users.count({
         where: {
           ResumeURL: {
@@ -1239,10 +1350,8 @@ async function main() {
 
   app.get('/api/admin/skills', async (_req, res) => {
     try {
-      const response = await fetch('https://screenly.work/api/all-skills');
-      if (!response.ok) return res.status(response.status).json({ error: 'Failed to load skills from Screenly' });
-      const payload = await response.json();
-      return res.json(payload);
+      const skills = await fetchScreenlySkillsCatalog();
+      return res.json({ success: true, count: skills.length, skills });
     } catch (err) {
       console.error('GET /api/admin/skills:', err);
       return res.status(500).json({ error: 'Failed to load skills' });
@@ -1420,6 +1529,7 @@ async function main() {
         telegramChatId: String(user.TelegramChatId),
         telegramUserName: user.TelegramUserName,
         resumeUrl: user.ResumeURL,
+        skills: user.skills,
         settings: {
           hhEnabled: !!user.HhEnabled,
           linkedInEnabled: !!user.LinkedInEnabled,
@@ -1518,14 +1628,17 @@ async function main() {
         MinimumSalary: toIntOrNullOrUndefined(req.body.minimumSalary),
         RemoteOnly: toBoolOrUndefined(req.body.remoteOnly),
       };
+      const skillIds = toSkillIdsOrNullOrUndefined(req.body.skills);
 
       const updates = Object.fromEntries(
         Object.entries(patch).filter(([, v]) => typeof v === 'boolean' || typeof v === 'string' || v === null || typeof v === 'number')
       );
+      if (skillIds !== undefined) updates.skills = skillIds;
       if (Object.keys(updates).length > 0) await user.update(updates);
 
       res.json({
         ok: true,
+        skills: user.skills,
         settings: {
           hhEnabled: !!user.HhEnabled,
           linkedInEnabled: !!user.LinkedInEnabled,
