@@ -692,11 +692,13 @@ async function adminMiniAppAuth(req, res, next) {
 
 function registerHandlers(bot, appBaseUrl, options = {}) {
   const hireAgentSimulationVisible = Boolean(options.hireAgentSimulationVisible);
+  const seekerJobsUrl = appBaseUrl ? `${appBaseUrl}/app/seeker-jobs` : '';
   const applicationsUrl = appBaseUrl ? `${appBaseUrl}/app/applications` : '';
   const profileUrl = appBaseUrl ? `${appBaseUrl}/app/profile` : '';
   const companiesUrl = appBaseUrl ? `${appBaseUrl}/app/companies` : '';
   const adminUrl = appBaseUrl ? `${appBaseUrl}/app/admin` : '';
   const adminCompaniesUrl = appBaseUrl ? `${appBaseUrl}/app/admin/companies` : '';
+  const canUseSeekerJobsWebApp = isValidTelegramWebAppUrl(seekerJobsUrl);
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
   const canUseProfileWebApp = isValidTelegramWebAppUrl(profileUrl);
   const canUseCompaniesWebApp = isValidTelegramWebAppUrl(companiesUrl);
@@ -823,6 +825,21 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     await ctx.reply(START_INTRO_MESSAGE, { reply_markup: startKeyboard });
+  });
+
+  bot.command('jobsearch', async (ctx) => {
+    if (canUseSeekerJobsWebApp) {
+      await ctx.reply(
+        'Ищите удаленные вакансии, отмечайте релевантные роли и открывайте детали прямо в мини-приложении.',
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: 'Open job search', web_app: { url: seekerJobsUrl } }]],
+          },
+        }
+      );
+      return;
+    }
+    await ctx.reply('Job search page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
   });
 
   bot.command('applications', async (ctx) => {
@@ -1183,6 +1200,9 @@ async function main() {
   app.get('/app/companies', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'companies.html'));
   });
+  app.get('/app/seeker-jobs', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'seeker-jobs.html'));
+  });
   app.get('/app/admin/companies', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'admin-companies.html'));
   });
@@ -1233,7 +1253,7 @@ async function main() {
     try {
       const from = String(req.query.from || '').trim();
       const to = String(req.query.to || '').trim();
-      const skillId = String(req.query.skillId || '').trim();
+      const skillIds = String(req.query.skillIds || req.query.skillId || '').trim();
       const sourceRaw = String(req.query.source || '').trim();
       const source = sourceRaw && sourceRaw.toLowerCase() !== 'all' ? sourceRaw : '';
       const pageRaw = Number.parseInt(String(req.query.page || '1'), 10);
@@ -1245,7 +1265,7 @@ async function main() {
       if (!from || !to) return res.status(400).json({ error: 'from and to are required' });
       const url =
         `https://screenly.work/api/global-remote-positions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
-        (skillId ? `&skillIds=${encodeURIComponent(skillId)}` : '') +
+        (skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : '') +
         (source ? `&source=${encodeURIComponent(source)}` : '') +
         `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
       const response = await fetch(url);
@@ -1418,6 +1438,65 @@ async function main() {
       res.status(500).json({ error: 'Failed to load profile' });
     }
   });
+
+  app.post(
+    '/api/app/profile/resume-upload',
+    miniAppAuth,
+    express.raw({ type: 'application/octet-stream', limit: '15mb' }),
+    async (req, res) => {
+      try {
+        const { user } = await ensureUserByTelegramId(
+          req.miniAppUser.id,
+          req.miniAppUser.username ?? null,
+          req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+          req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+        );
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const bodyBuffer = Buffer.isBuffer(req.body) ? req.body : null;
+        if (!bodyBuffer || bodyBuffer.length === 0) {
+          return res.status(400).json({ error: 'Resume file bytes are required' });
+        }
+
+        const headerFileNameRaw = String(req.headers['x-file-name'] || '').trim();
+        const headerMimeTypeRaw = String(req.headers['x-file-type'] || '').trim().toLowerCase();
+        const fileName = headerFileNameRaw || `resume-${Date.now()}.pdf`;
+        const mimeType = headerMimeTypeRaw || 'application/octet-stream';
+        const isSupported =
+          mimeType.includes('pdf') ||
+          mimeType.includes('jpeg') ||
+          mimeType.includes('jpg') ||
+          mimeType.includes('png') ||
+          mimeType.includes('webp');
+        if (!isSupported) {
+          return res.status(400).json({ error: 'Unsupported resume type. Use PDF or image (JPG/PNG/WEBP).' });
+        }
+
+        const resumeUrl = await resumeStorage.uploadResumeBuffer({
+          chatId: user.TelegramChatId,
+          fileId: `webapp-${user.TelegramChatId}-${Date.now()}`,
+          fileName,
+          mimeType,
+          buffer: bodyBuffer,
+        });
+
+        let resumeContactsJson = user.ResumeContactsJson ?? null;
+        try {
+          const resumeText = await extractResumeTextFromUrl(resumeUrl);
+          const resumeContacts = await extractResumeContactsWithAI(resumeText);
+          if (resumeContacts) resumeContactsJson = JSON.stringify(resumeContacts);
+        } catch (parseErr) {
+          console.warn('WebApp resume contact extraction failed, keeping upload flow:', parseErr?.message || parseErr);
+        }
+
+        await user.update({ ResumeURL: resumeUrl, ResumeContactsJson: resumeContactsJson });
+        return res.json({ ok: true, resumeUrl });
+      } catch (err) {
+        console.error('POST /api/app/profile/resume-upload:', err);
+        return res.status(500).json({ error: 'Failed to upload resume' });
+      }
+    }
+  );
 
   app.patch('/api/app/profile/settings', miniAppAuth, async (req, res) => {
     try {
@@ -1824,10 +1903,11 @@ async function main() {
   try {
     await bot.telegram.setMyCommands([
       { command: 'start', description: 'Что умеет бот' },
-      { command: 'applications', description: 'Мои отклики' },
+      { command: 'jobsearch', description: 'Поиск вакансий' },
       { command: 'hireagent', description: 'Делегировать отклики' },
-      { command: 'profile', description: 'Настройки' },
+      { command: 'applications', description: 'Мои отклики' },
       { command: 'companies', description: 'Компании с удалёнкой' },
+      { command: 'profile', description: 'Настройки' },
       { command: 'about', description: 'О боте' },
     ]);
   } catch (err) {
