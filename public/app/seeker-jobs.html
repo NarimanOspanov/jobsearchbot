@@ -242,13 +242,6 @@
               <button id="prevPageBtn" type="button" class="ghost-btn">Prev</button>
               <span id="pageInfo" class="muted">Page 1</span>
               <button id="nextPageBtn" type="button" class="ghost-btn">Next</button>
-              <label>Page size
-                <select id="pageSizeSel">
-                  <option value="50">50</option>
-                  <option value="100" selected>100</option>
-                  <option value="200">200</option>
-                </select>
-              </label>
             </span>
           </div>
           <p id="dashMsg" class="muted"></p>
@@ -430,7 +423,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel'].forEach((id) => {
+        ['syncBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -439,11 +432,9 @@
         const info = document.getElementById('pageInfo');
         const prev = document.getElementById('prevPageBtn');
         const next = document.getElementById('nextPageBtn');
-        const sizeSel = document.getElementById('pageSizeSel');
         if (info) info.textContent = `Page ${pageInfo.page} · ${pageInfo.count} on page · Total ${pageInfo.totalRows}`;
         if (prev) prev.disabled = isSyncing || pageInfo.page <= 1;
         if (next) next.disabled = isSyncing || !pageInfo.hasMore;
-        if (sizeSel) sizeSel.value = String(pageInfo.pageSize);
       }
       function setJobBusy(on) {
         isJobBusy = on;
@@ -640,7 +631,7 @@
         const skillIds = getSelectedSkillIdsCsv();
         const query = q();
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
-        const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(query.pageSize || '100'), 10) || 100));
+        const pageSize = 100;
         if (!from || !to) throw new Error('Set from and to dates.');
 
         setQ({ from, to, skillIds, page, pageSize });
@@ -883,7 +874,6 @@
         await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
         if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
-        document.getElementById('pageSizeSel').value = String(Math.min(200, Math.max(1, Number.parseInt(String(s.pageSize || '100'), 10) || 100)));
         updatePagerUi();
       }
 
@@ -898,11 +888,6 @@
         const cur = q();
         const nextPage = (Number.parseInt(String(cur.page || '1'), 10) || 1) + 1;
         setQ({ page: nextPage });
-        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
-      });
-      document.getElementById('pageSizeSel').addEventListener('change', () => {
-        const nextSize = Math.min(200, Math.max(1, Number.parseInt(document.getElementById('pageSizeSel').value, 10) || 100));
-        setQ({ pageSize: nextSize, page: 1 });
         syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
       });
       document.getElementById('statusSel').addEventListener('change', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
