@@ -259,10 +259,6 @@
         </div>
         <div class="modal-body">
           <div id="jobInfo" class="muted">Select a job to continue.</div>
-          <div id="jobInsightBox" class="insight-box" style="display:none">
-            <h4 id="jobInsightTitle"></h4>
-            <p id="jobInsightText" class="job-summary" style="margin:0"></p>
-          </div>
           <div id="jobActions" style="display:none">
             <div class="row">
               <label>Status
@@ -286,6 +282,17 @@
               <textarea id="notesText" aria-label="My notes"></textarea>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+    <div id="insightModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="insightModalTitle">AI insight</strong>
+          <button id="insightModalClose" type="button" class="ghost-btn">Close</button>
+        </div>
+        <div class="modal-body">
+          <p id="insightModalText" class="job-summary" style="margin:0"></p>
         </div>
       </div>
     </div>
@@ -329,6 +336,7 @@
       let isJobBusy = false;
       let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
       let isJobModalOpen = false;
+      let isInsightModalOpen = false;
       let dateBounds = { min: '', max: '' };
       let isSkillPickerOpen = false;
       let isResumeRequiredModalOpen = false;
@@ -445,18 +453,16 @@
         });
       }
       function showInsight(title, text) {
-        const box = document.getElementById('jobInsightBox');
-        const titleEl = document.getElementById('jobInsightTitle');
-        const textEl = document.getElementById('jobInsightText');
-        titleEl.textContent = String(title || '').trim();
-        textEl.textContent = String(text || '').trim() || 'Нет данных.';
-        box.style.display = '';
+        document.getElementById('insightModalTitle').textContent = String(title || '').trim() || 'AI insight';
+        document.getElementById('insightModalText').textContent = String(text || '').trim() || 'No data.';
+        isInsightModalOpen = true;
+        document.getElementById('insightModal').classList.add('on');
       }
       function hideInsight() {
-        const box = document.getElementById('jobInsightBox');
-        document.getElementById('jobInsightTitle').textContent = '';
-        document.getElementById('jobInsightText').textContent = '';
-        box.style.display = 'none';
+        document.getElementById('insightModalTitle').textContent = '';
+        document.getElementById('insightModalText').textContent = '';
+        isInsightModalOpen = false;
+        document.getElementById('insightModal').classList.remove('on');
       }
       function bindJobDetailInteractions(job) {
         document.querySelectorAll('.skill-tag[data-justification]').forEach((el) => {
@@ -921,6 +927,10 @@
           closeResumeRequiredModal();
         }
       });
+      document.getElementById('insightModalClose').addEventListener('click', hideInsight);
+      document.getElementById('insightModal').addEventListener('click', (event) => {
+        if (event.target.id === 'insightModal') hideInsight();
+      });
       document.getElementById('jobModalClose').addEventListener('click', closeJobModal);
       document.getElementById('jobModal').addEventListener('click', (event) => {
         if (event.target.id === 'jobModal') closeJobModal();
@@ -937,6 +947,7 @@
             continueGenerateAfterResumeUpload = false;
             closeResumeRequiredModal();
           }
+          if (isInsightModalOpen) hideInsight();
         }
       });
 
