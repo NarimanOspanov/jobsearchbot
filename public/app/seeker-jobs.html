@@ -25,6 +25,10 @@
       input, select, button, textarea {
         border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 8px; font: inherit;
       }
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        filter: invert(1) brightness(1.4);
+        opacity: 1;
+      }
       button { cursor: pointer; background: var(--accent); border-color: var(--accent); }
       .layout { display: grid; gap: 12px; grid-template-columns: 1fr; align-items: stretch; }
       .layout .card.layout-col {
@@ -213,6 +217,32 @@
       .resume-upload-box input[type="file"] {
         width: 100%;
       }
+      .highly-relevant-filter {
+        display: none;
+        align-items: center;
+        gap: 6px;
+      }
+      .highly-relevant-filter.is-visible {
+        display: inline-flex;
+      }
+      .hint-btn {
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border-radius: 50%;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        flex-shrink: 0;
+        background: #0f1730;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .hint-btn:hover {
+        color: var(--text);
+        border-color: var(--accent);
+      }
     </style>
   </head>
   <body>
@@ -234,9 +264,13 @@
               <button id="skillPickerBtn" type="button" class="skills-picker-btn">All skills</button>
               <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
             </div>
+            <span id="highlyRelevantFilterWrap" class="highly-relevant-filter" aria-hidden="true">
+              <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
+              <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="What does this mean?" aria-label="What does Top matches mean?">?</button>
+            </span>
           </div>
           <div class="row date-range-row">
-            <button id="syncBtn">Search remote jobs</button>
+            <button id="syncBtn">Search</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
             <span class="pager">
               <button id="prevPageBtn" type="button" class="ghost-btn">Prev</button>
@@ -296,6 +330,22 @@
         </div>
       </div>
     </div>
+    <div id="highlyRelevantHintModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="highlyRelevantHintTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="highlyRelevantHintTitle">Top matches</strong>
+          <button id="highlyRelevantHintClose" type="button" class="ghost-btn">Close</button>
+        </div>
+        <div class="modal-body">
+          <p class="job-summary" style="margin:0 0 12px">
+            If <strong>Top matches</strong> is <strong>checked</strong>, you only see jobs that are <strong>especially highly relevant</strong> to the roles you selected.
+          </p>
+          <p class="job-summary" style="margin:0">
+            If it is <strong>unchecked</strong>, you also get <strong>other jobs</strong> that can still be interesting because they match your selection, but are not in that top “super relevant” tier.
+          </p>
+        </div>
+      </div>
+    </div>
     <div id="resumeRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-head">
@@ -337,6 +387,7 @@
       let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
       let isJobModalOpen = false;
       let isInsightModalOpen = false;
+      let isHighlyRelevantHintModalOpen = false;
       let dateBounds = { min: '', max: '' };
       let isSkillPickerOpen = false;
       let isResumeRequiredModalOpen = false;
@@ -349,10 +400,15 @@
           from: p.get('from') || '',
           to: p.get('to') || '',
           skillIds: p.get('skillIds') || p.get('skillId') || '',
+          showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || '',
           jobId: p.get('jobId') || '',
           page: p.get('page') || '1',
           pageSize: p.get('pageSize') || '100',
         };
+      }
+      function isTruthyQueryParam(value) {
+        const v = String(value || '').trim().toLowerCase();
+        return v === 'true' || v === '1' || v === 'yes';
       }
       function setQ(next) {
         const p = new URLSearchParams(location.search);
@@ -412,8 +468,13 @@
         if (Number.isNaN(d.getTime())) return null;
         return d;
       }
-      function isoDate(value) {
-        return new Date(value).toISOString().slice(0, 10);
+      /** Calendar date in local timezone (matches <input type="date">). Avoid toISOString() which can shift the day. */
+      function localIsoDate(d) {
+        if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
       }
       function clampDateToBounds(value) {
         const d = parseIsoDate(value);
@@ -422,7 +483,7 @@
         if (!d || !minD || !maxD) return dateBounds.max || value;
         if (d < minD) return dateBounds.min;
         if (d > maxD) return dateBounds.max;
-        return isoDate(d);
+        return localIsoDate(d);
       }
       function onLoading(id, on) {
         const el = document.getElementById(id);
@@ -435,6 +496,31 @@
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
+        updateHighlyRelevantFilterState();
+      }
+      function hasSelectedSkills() {
+        return Boolean(getSelectedSkillIdsCsv().trim());
+      }
+      function updateHighlyRelevantFilterState() {
+        const el = document.getElementById('showOnlyHighlyRelevant');
+        const wrap = document.getElementById('highlyRelevantFilterWrap');
+        if (!el || !wrap) return;
+        if (!hasSelectedSkills()) {
+          el.checked = false;
+          el.disabled = false;
+          wrap.classList.remove('is-visible');
+          wrap.setAttribute('aria-hidden', 'true');
+          setQ({ showOnlyHighlyRelevant: '' });
+          return;
+        }
+        wrap.classList.add('is-visible');
+        wrap.setAttribute('aria-hidden', 'false');
+        el.disabled = isSyncing;
+      }
+      function syncHighlyRelevantCheckboxFromQuery() {
+        const el = document.getElementById('showOnlyHighlyRelevant');
+        if (!el || !hasSelectedSkills()) return;
+        el.checked = isTruthyQueryParam(q().showOnlyHighlyRelevant);
       }
       function updatePagerUi() {
         const info = document.getElementById('pageInfo');
@@ -463,6 +549,14 @@
         document.getElementById('insightModalText').textContent = '';
         isInsightModalOpen = false;
         document.getElementById('insightModal').classList.remove('on');
+      }
+      function openHighlyRelevantHintModal() {
+        isHighlyRelevantHintModalOpen = true;
+        document.getElementById('highlyRelevantHintModal').classList.add('on');
+      }
+      function closeHighlyRelevantHintModal() {
+        isHighlyRelevantHintModalOpen = false;
+        document.getElementById('highlyRelevantHintModal').classList.remove('on');
       }
       function bindJobDetailInteractions(job) {
         document.querySelectorAll('.skill-tag[data-justification]').forEach((el) => {
@@ -534,7 +628,6 @@
           return `<div class="skills-group"><div class="skills-group-title">${esc(roleName)}</div>${optionsHtml}</div>`;
         }).join('');
         menu.innerHTML = groupedOptionsHtml;
-        renderSkillPickerSummary();
       }
 
       function getSelectedSkillIdsCsv() {
@@ -564,10 +657,11 @@
         const btn = document.getElementById('skillPickerBtn');
         if (!csv) {
           btn.textContent = 'All skills';
-          return;
+        } else {
+          const ids = csv.split(',').filter(Boolean);
+          btn.textContent = `${ids.length} role(s) selected`;
         }
-        const ids = csv.split(',').filter(Boolean);
-        btn.textContent = `${ids.length} skill(s) selected`;
+        updateHighlyRelevantFilterState();
       }
 
       function openSkillPicker() {
@@ -635,15 +729,17 @@
         document.getElementById('fromDate').value = from;
         document.getElementById('toDate').value = to;
         const skillIds = getSelectedSkillIdsCsv();
+        const showOnlyHighlyRelevant =
+          Boolean(skillIds.trim()) && document.getElementById('showOnlyHighlyRelevant').checked;
         const query = q();
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = 100;
         if (!from || !to) throw new Error('Set from and to dates.');
 
-        setQ({ from, to, skillIds, page, pageSize });
+        setQ({ from, to, skillIds, showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '', page, pageSize });
         setSyncBusy(true);
         try {
-          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
           const data = await api(posUrl);
           positions = data.positions || [];
           pageInfo = {
@@ -853,10 +949,10 @@
       function hydrateStateToInputs() {
         const s = q();
         const now = new Date();
-        const to = isoDate(now);
+        const to = localIsoDate(now);
         const prev = new Date(now);
         prev.setMonth(prev.getMonth() - 1);
-        const from = isoDate(prev);
+        const from = localIsoDate(prev);
         dateBounds = { min: from, max: to };
 
         const fromInput = document.getElementById('fromDate');
@@ -880,7 +976,12 @@
         await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
         if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
+        else renderSkillPickerSummary();
+        syncHighlyRelevantCheckboxFromQuery();
         updatePagerUi();
+        if (isTruthyQueryParam(s.showOnlyHighlyRelevant)) {
+          await syncJobs();
+        }
       }
 
       document.getElementById('syncBtn').addEventListener('click', () => syncJobs().catch((e) => setMsg('dashMsg', e.message, true)));
@@ -904,6 +1005,13 @@
       });
       document.getElementById('skillPickerMenu').addEventListener('change', () => {
         renderSkillPickerSummary();
+      });
+      document.getElementById('showOnlyHighlyRelevant').addEventListener('change', (event) => {
+        if (!hasSelectedSkills()) {
+          event.target.checked = false;
+          return;
+        }
+        setQ({ showOnlyHighlyRelevant: event.target.checked ? 'true' : '' });
       });
       document.getElementById('uploadResumeBtn').addEventListener('click', () => {
         uploadMainResumeFromUi()
@@ -931,6 +1039,15 @@
       document.getElementById('insightModal').addEventListener('click', (event) => {
         if (event.target.id === 'insightModal') hideInsight();
       });
+      document.getElementById('highlyRelevantHintBtn').addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openHighlyRelevantHintModal();
+      });
+      document.getElementById('highlyRelevantHintClose').addEventListener('click', closeHighlyRelevantHintModal);
+      document.getElementById('highlyRelevantHintModal').addEventListener('click', (event) => {
+        if (event.target.id === 'highlyRelevantHintModal') closeHighlyRelevantHintModal();
+      });
       document.getElementById('jobModalClose').addEventListener('click', closeJobModal);
       document.getElementById('jobModal').addEventListener('click', (event) => {
         if (event.target.id === 'jobModal') closeJobModal();
@@ -948,6 +1065,7 @@
             closeResumeRequiredModal();
           }
           if (isInsightModalOpen) hideInsight();
+          if (isHighlyRelevantHintModalOpen) closeHighlyRelevantHintModal();
         }
       });
 
