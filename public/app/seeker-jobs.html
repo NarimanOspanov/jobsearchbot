@@ -372,6 +372,38 @@
       const urlParams = new URLSearchParams(window.location.search);
       const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
 
+      /**
+       * Signed init payload for miniAppAuth. SDK exposes tg.initData when set; some navigations
+       * only provide the same string under location.hash as tgWebAppData=...
+       */
+      function getTgInitDataString() {
+        const fromSdk = String(tg?.initData || '').trim();
+        if (fromSdk) return fromSdk;
+        const rawHash = (window.location.hash || '').replace(/^#/, '');
+        if (!rawHash) return '';
+        try {
+          const frag = new URLSearchParams(rawHash);
+          const v = frag.get('tgWebAppData');
+          if (!v) return '';
+          try {
+            return decodeURIComponent(v);
+          } catch {
+            return v;
+          }
+        } catch {
+          return '';
+        }
+      }
+
+      function attachMiniAppAuthHeaders(headers) {
+        const data = getTgInitDataString();
+        if (data) {
+          headers['x-init-data'] = data;
+          // Some proxies strip custom headers; server also accepts `Authorization: tma <initData>`.
+          headers.Authorization = `tma ${data}`;
+        } else if (devTelegramId) headers['x-dev-telegram-id'] = devTelegramId;
+      }
+
       async function waitForTelegramInitData(maxMs = 12000) {
         if (devTelegramId) return;
         if (tg?.expand) {
@@ -383,7 +415,7 @@
         }
         const start = Date.now();
         while (Date.now() - start < maxMs) {
-          if (String(tg?.initData || '').trim()) return;
+          if (String(getTgInitDataString()).trim()) return;
           await new Promise((r) => setTimeout(r, 50));
         }
       }
@@ -641,8 +673,7 @@
       }
       async function api(url, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-        if (tg?.initData) headers['x-init-data'] = tg.initData;
-        if (!tg?.initData && devTelegramId) headers['x-dev-telegram-id'] = devTelegramId;
+        attachMiniAppAuthHeaders(headers);
         const res = await fetch(url, { ...options, headers });
         if (!res.ok) throw new Error(await res.text());
         const ct = (res.headers.get('content-type') || '').toLowerCase();
@@ -652,8 +683,7 @@
 
       function postAnalytics(path, body) {
         const headers = { 'Content-Type': 'application/json' };
-        if (tg?.initData) headers['x-init-data'] = tg.initData;
-        if (!tg?.initData && devTelegramId) headers['x-dev-telegram-id'] = devTelegramId;
+        attachMiniAppAuthHeaders(headers);
         const url = `${API_BASE}${path}`;
         fetch(url, { method: 'POST', headers, body: JSON.stringify(body || {}) }).catch(() => {});
       }
@@ -766,8 +796,7 @@
             'x-file-name': file.name || `resume-${Date.now()}`,
             'x-file-type': file.type || 'application/octet-stream',
           };
-          if (tg?.initData) headers['x-init-data'] = tg.initData;
-          if (!tg?.initData && devTelegramId) headers['x-dev-telegram-id'] = devTelegramId;
+          attachMiniAppAuthHeaders(headers);
           const bytes = await file.arrayBuffer();
           const response = await fetch('/api/app/profile/resume-upload', {
             method: 'POST',

@@ -766,8 +766,30 @@ async function downloadTelegramFileAsBuffer(telegram, fileId) {
   return Buffer.from(bytes);
 }
 
+function extractMiniAppInitData(req) {
+  const fromHeader = req.headers['x-init-data'];
+  if (fromHeader) return String(fromHeader);
+  const auth = req.headers.authorization || req.headers.Authorization;
+  if (auth && /^tma\s+/i.test(String(auth))) {
+    return String(auth).replace(/^tma\s+/i, '').trim();
+  }
+  return '';
+}
+
 async function miniAppAuth(req, res, next) {
-  const initData = req.headers['x-init-data'];
+  const initData = extractMiniAppInitData(req);
+
+  if (!initData && process.env.LOG_MINIAPP_AUTH === '1') {
+    console.warn('[miniAppAuth] missing init data', {
+      path: req.path,
+      ua: req.get('user-agent'),
+      hasXInitData: Boolean(req.headers['x-init-data']),
+      hasAuthorizationTma: Boolean(
+        (req.headers.authorization && /^tma\s+/i.test(req.headers.authorization)) ||
+          (req.headers.Authorization && /^tma\s+/i.test(req.headers.Authorization))
+      ),
+    });
+  }
 
   if (!initData && process.env.NODE_ENV !== 'production') {
     const fallbackId = Number(req.headers['x-dev-telegram-id']);
