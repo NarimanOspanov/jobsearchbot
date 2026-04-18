@@ -49,16 +49,25 @@
             // Keep payload as-is when already decoded.
           }
 
-          // Support both encoded payload and plain URL params after startapp.
-          // Example plain link:
-          // /app?startapp=seekerjobs__from=2026-03-17&to=2026-04-15&skillIds=9,72...
-          // In this form, everything after first "&" becomes top-level query params.
-          const seekerParams = new URLSearchParams(rawQuery.startsWith('?') ? rawQuery.slice(1) : rawQuery);
+          // Telegram splits `startapp` at the first `&`, so e.g.
+          // ?startapp=seekerjobs__from=2026-03-17&to=2026-04-15&skillIds=9,72
+          // yields startapp=seekerjobs__from=2026-03-17 only — merge all other query keys.
           const allowedKeys = ['from', 'to', 'skillIds', 'page', 'pageSize', 'showOnlyHighlyRelevant', 'jobId'];
+          const merged = new Map();
+          const inner = new URLSearchParams(rawQuery.startsWith('?') ? rawQuery.slice(1) : rawQuery);
+          allowedKeys.forEach((key) => {
+            const v = String(inner.get(key) || '').trim();
+            if (v) merged.set(key, v);
+          });
+          for (const [key, value] of params.entries()) {
+            if (key === 'startapp' || key === 'startApp') continue;
+            if (!allowedKeys.includes(key)) continue;
+            const v = String(value || '').trim();
+            if (v) merged.set(key, v);
+          }
           const nextParts = [];
           allowedKeys.forEach((key) => {
-            const value = String(seekerParams.get(key) || params.get(key) || '').trim();
-            if (value) nextParts.push(`${key}=${value}`);
+            if (merged.has(key)) nextParts.push(`${encodeURIComponent(key)}=${encodeURIComponent(merged.get(key))}`);
           });
           const targetUrl = nextParts.length ? `/app/seeker-jobs?${nextParts.join('&')}` : '/app/seeker-jobs';
           window.location.replace(targetUrl);

@@ -372,6 +372,15 @@
       const urlParams = new URLSearchParams(window.location.search);
       const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
 
+      async function waitForTelegramInitData(maxMs = 5000) {
+        if (devTelegramId) return;
+        const start = Date.now();
+        while (Date.now() - start < maxMs) {
+          if (String(tg?.initData || '').trim()) return;
+          await new Promise((r) => setTimeout(r, 50));
+        }
+      }
+
       const API_BASE = '';
       const SKILLS_URL = '/api/admin/skills';
       const POSITIONS_URL = '/api/admin/positions';
@@ -987,6 +996,7 @@
 
       async function boot() {
         hydrateStateToInputs();
+        await waitForTelegramInitData();
         await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
         if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
