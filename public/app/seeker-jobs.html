@@ -373,26 +373,52 @@
       const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
 
       /**
-       * Signed init payload for miniAppAuth. SDK exposes tg.initData when set; some navigations
-       * only provide the same string under location.hash as tgWebAppData=...
+       * Signed init payload for miniAppAuth.
+       * - Telegram sets WebApp.initData once from location.hash; if the hash appears later, initData
+       *   stays empty forever, so we always re-parse the current hash the same way telegram-web-app.js does.
+       * - Use Telegram.Utils.urlParseHashParams when present (handles non-trivial hash shapes).
        */
       function getTgInitDataString() {
-        const fromSdk = String(tg?.initData || '').trim();
-        if (fromSdk) return fromSdk;
-        const rawHash = (window.location.hash || '').replace(/^#/, '');
-        if (!rawHash) return '';
         try {
-          const frag = new URLSearchParams(rawHash);
-          const v = frag.get('tgWebAppData');
-          if (!v) return '';
-          try {
-            return decodeURIComponent(v);
-          } catch {
-            return v;
+          const utils = window.Telegram?.Utils;
+          const hash = window.location.hash || '';
+          if (utils?.urlParseHashParams) {
+            const p = utils.urlParseHashParams(hash);
+            const v = String(p?.tgWebAppData || '').trim();
+            if (v) return v;
+          } else {
+            const rawHash = hash.replace(/^#/, '');
+            if (rawHash) {
+              const frag = new URLSearchParams(rawHash);
+              const raw = frag.get('tgWebAppData');
+              if (raw) {
+                try {
+                  return decodeURIComponent(String(raw).replace(/\+/g, '%20'));
+                } catch {
+                  return String(raw);
+                }
+              }
+            }
           }
         } catch {
-          return '';
+          // ignore
         }
+        const fromSdk = String(tg?.initData || '').trim();
+        if (fromSdk) return fromSdk;
+        try {
+          const q = new URLSearchParams(window.location.search);
+          const raw = q.get('tgWebAppData');
+          if (raw) {
+            try {
+              return decodeURIComponent(String(raw).replace(/\+/g, '%20'));
+            } catch {
+              return String(raw);
+            }
+          }
+        } catch {
+          // ignore
+        }
+        return String(window.Telegram?.WebView?.initParams?.tgWebAppData || '').trim();
       }
 
       function attachMiniAppAuthHeaders(headers) {
@@ -404,7 +430,7 @@
         } else if (devTelegramId) headers['x-dev-telegram-id'] = devTelegramId;
       }
 
-      async function waitForTelegramInitData(maxMs = 12000) {
+      async function waitForTelegramInitData(maxMs = 20000) {
         if (devTelegramId) return;
         if (tg?.expand) {
           try {
@@ -416,7 +442,18 @@
         const start = Date.now();
         while (Date.now() - start < maxMs) {
           if (String(getTgInitDataString()).trim()) return;
-          await new Promise((r) => setTimeout(r, 50));
+          await new Promise((resolve) => {
+            const t = setTimeout(() => {
+              window.removeEventListener('hashchange', onHash);
+              resolve();
+            }, 50);
+            function onHash() {
+              clearTimeout(t);
+              window.removeEventListener('hashchange', onHash);
+              resolve();
+            }
+            window.addEventListener('hashchange', onHash);
+          });
         }
       }
 
@@ -1096,6 +1133,14 @@
       async function boot() {
         hydrateStateToInputs();
         await waitForTelegramInitData();
+        if (!String(getTgInitDataString()).trim() && !devTelegramId) {
+          const hrefLen = String(window.location.href || '').length;
+          const hint =
+            hrefLen > 6000
+              ? ' This link may be too long for Telegram on iOS (the signed part can be dropped). Open job search from the bot menu, or shorten filters in the shared link.'
+              : ' Open this screen only from Telegram (bot menu or in-chat button), not from an external browser or a raw HTTPS bookmark.';
+          throw new Error(`Missing Telegram Web App credentials (no init data).${hint}`);
+        }
         await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
         if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
