@@ -18,25 +18,54 @@
         const initStartParam = tg?.initDataUnsafe?.start_param || '';
         const rawStart = String(initStartParam || directStartApp || '').trim();
 
-        if (!rawStart || !rawStart.startsWith('search__')) {
+        if (!rawStart) {
           window.location.replace(fallbackUrl);
           return;
         }
 
-        let rawQ = rawStart.slice('search__'.length).trim();
-        if (!rawQ) {
-          window.location.replace(fallbackUrl);
+        if (rawStart.startsWith('search__')) {
+          let rawQ = rawStart.slice('search__'.length).trim();
+          if (!rawQ) {
+            window.location.replace(fallbackUrl);
+            return;
+          }
+
+          try {
+            rawQ = decodeURIComponent(rawQ);
+          } catch {
+            // Keep token as-is when already decoded.
+          }
+
+          const targetUrl = `https://screenly.work/JobSearch/Search?q=${encodeURIComponent(rawQ)}`;
+          window.location.replace(targetUrl);
           return;
         }
 
-        try {
-          rawQ = decodeURIComponent(rawQ);
-        } catch {
-          // Keep token as-is when already decoded.
+        if (rawStart.startsWith('seekerjobs__')) {
+          let rawQuery = rawStart.slice('seekerjobs__'.length).trim();
+          try {
+            rawQuery = decodeURIComponent(rawQuery);
+          } catch {
+            // Keep payload as-is when already decoded.
+          }
+
+          // Support both encoded payload and plain URL params after startapp.
+          // Example plain link:
+          // /app?startapp=seekerjobs__from=2026-03-17&to=2026-04-15&skillIds=9,72...
+          // In this form, everything after first "&" becomes top-level query params.
+          const seekerParams = new URLSearchParams(rawQuery.startsWith('?') ? rawQuery.slice(1) : rawQuery);
+          const allowedKeys = ['from', 'to', 'skillIds', 'page', 'pageSize', 'showOnlyHighlyRelevant', 'jobId'];
+          const nextParts = [];
+          allowedKeys.forEach((key) => {
+            const value = String(seekerParams.get(key) || params.get(key) || '').trim();
+            if (value) nextParts.push(`${key}=${value}`);
+          });
+          const targetUrl = nextParts.length ? `/app/seeker-jobs?${nextParts.join('&')}` : '/app/seeker-jobs';
+          window.location.replace(targetUrl);
+          return;
         }
 
-        const targetUrl = `https://screenly.work/JobSearch/Search?q=${encodeURIComponent(rawQ)}`;
-        window.location.replace(targetUrl);
+        window.location.replace(fallbackUrl);
       })();
     </script>
   </body>
