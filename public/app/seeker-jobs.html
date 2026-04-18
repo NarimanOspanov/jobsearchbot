@@ -412,6 +412,40 @@
 
       function q() {
         const p = new URLSearchParams(location.search);
+        const paramStart = String(p.get('startapp') || p.get('startApp') || '').trim();
+        const initStart = String(tg?.initDataUnsafe?.start_param || '').trim();
+        let rawStart = paramStart;
+        if (initStart.startsWith('seekerjobs__')) {
+          if (!paramStart.startsWith('seekerjobs__') || initStart.length > paramStart.length) {
+            rawStart = initStart;
+          }
+        }
+
+        if (rawStart.startsWith('seekerjobs__')) {
+          let rawQuery = rawStart.slice('seekerjobs__'.length).trim();
+          try {
+            rawQuery = decodeURIComponent(rawQuery);
+          } catch {
+            // keep as-is
+          }
+          const inner = new URLSearchParams(rawQuery.startsWith('?') ? rawQuery.slice(1) : rawQuery);
+          const pick = (key) => {
+            const a = String(inner.get(key) || '').trim();
+            const b = String(p.get(key) || '').trim();
+            return a || b || '';
+          };
+          return {
+            from: pick('from'),
+            to: pick('to'),
+            skillIds: pick('skillIds') || pick('skillId'),
+            sourceIds: pick('sourceIds'),
+            showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
+            jobId: pick('jobId'),
+            page: pick('page') || '1',
+            pageSize: pick('pageSize') || '100',
+          };
+        }
+
         return {
           from: p.get('from') || '',
           to: p.get('to') || '',
