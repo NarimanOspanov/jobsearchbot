@@ -1370,6 +1370,7 @@ async function main() {
         showOnlyHighlyRelevantRaw === 'yes';
       const sourceRaw = String(req.query.source || '').trim();
       const source = sourceRaw && sourceRaw.toLowerCase() !== 'all' ? sourceRaw : '';
+      const sourceIds = String(req.query.sourceIds || '').trim();
       const pageRaw = Number.parseInt(String(req.query.page || '1'), 10);
       const pageSizeRaw = Number.parseInt(String(req.query.pageSize || '100'), 10);
       const page = Number.isSafeInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
@@ -1382,6 +1383,7 @@ async function main() {
         (skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : '') +
         (showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : '') +
         (source ? `&source=${encodeURIComponent(source)}` : '') +
+        (sourceIds ? `&sourceIds=${encodeURIComponent(sourceIds)}` : '') +
         `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
       const response = await fetch(url);
       if (!response.ok) {

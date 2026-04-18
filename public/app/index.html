@@ -52,7 +52,16 @@
           // Telegram splits `startapp` at the first `&`, so e.g.
           // ?startapp=seekerjobs__from=2026-03-17&to=2026-04-15&skillIds=9,72
           // yields startapp=seekerjobs__from=2026-03-17 only — merge all other query keys.
-          const allowedKeys = ['from', 'to', 'skillIds', 'page', 'pageSize', 'showOnlyHighlyRelevant', 'jobId'];
+          const allowedKeys = [
+            'from',
+            'to',
+            'skillIds',
+            'sourceIds',
+            'page',
+            'pageSize',
+            'showOnlyHighlyRelevant',
+            'jobId',
+          ];
           const merged = new Map();
           const inner = new URLSearchParams(rawQuery.startsWith('?') ? rawQuery.slice(1) : rawQuery);
           allowedKeys.forEach((key) => {

@@ -372,8 +372,15 @@
       const urlParams = new URLSearchParams(window.location.search);
       const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
 
-      async function waitForTelegramInitData(maxMs = 5000) {
+      async function waitForTelegramInitData(maxMs = 12000) {
         if (devTelegramId) return;
+        if (tg?.expand) {
+          try {
+            tg.expand();
+          } catch {
+            // ignore
+          }
+        }
         const start = Date.now();
         while (Date.now() - start < maxMs) {
           if (String(tg?.initData || '').trim()) return;
@@ -409,6 +416,7 @@
           from: p.get('from') || '',
           to: p.get('to') || '',
           skillIds: p.get('skillIds') || p.get('skillId') || '',
+          sourceIds: p.get('sourceIds') || '',
           showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || '',
           jobId: p.get('jobId') || '',
           page: p.get('page') || '1',
@@ -617,10 +625,24 @@
       }
 
       async function loadProfile() {
-        const profile = await api('/api/app/profile');
-        seekerId = Number(profile?.id || 0) || null;
-        currentResumeUrl = String(profile?.resumeUrl || '').trim();
-        if (!seekerId) throw new Error('Could not resolve current user.');
+        const apply = (profile) => {
+          seekerId = Number(profile?.id || 0) || null;
+          currentResumeUrl = String(profile?.resumeUrl || '').trim();
+        };
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const profile = await api('/api/app/profile');
+            apply(profile);
+            if (!seekerId) throw new Error('Could not resolve current user.');
+            return;
+          } catch (err) {
+            const msg = String(err?.message || '');
+            const isAuth = msg.includes('Unauthorized') || msg.includes('"error":"Unauthorized"');
+            if (attempt === 1 || !isAuth) throw err;
+            await new Promise((r) => setTimeout(r, 600));
+            await waitForTelegramInitData(6000);
+          }
+        }
       }
 
       async function loadSkills() {
@@ -751,9 +773,18 @@
         const query = q();
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = 100;
+        const sourceIds = String(query.sourceIds || '').trim();
         if (!from || !to) throw new Error('Set from and to dates.');
 
-        setQ({ from, to, skillIds, showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '', page, pageSize });
+        setQ({
+          from,
+          to,
+          skillIds,
+          sourceIds,
+          showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '',
+          page,
+          pageSize,
+        });
         if (options.trackSearchClick) {
           const searchUrl =
             (window.location.origin || '') + window.location.pathname + (window.location.search || '');
@@ -761,7 +792,12 @@
         }
         setSyncBusy(true);
         try {
-          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+          const posUrl =
+            `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
+            `${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}` +
+            `${sourceIds ? `&sourceIds=${encodeURIComponent(sourceIds)}` : ''}` +
+            `${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}` +
+            `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
           const data = await api(posUrl);
           positions = data.positions || [];
           pageInfo = {
