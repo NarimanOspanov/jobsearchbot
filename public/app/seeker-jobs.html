@@ -599,6 +599,14 @@
         return res.text();
       }
 
+      function postAnalytics(path, body) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (tg?.initData) headers['x-init-data'] = tg.initData;
+        if (!tg?.initData && devTelegramId) headers['x-dev-telegram-id'] = devTelegramId;
+        const url = `${API_BASE}${path}`;
+        fetch(url, { method: 'POST', headers, body: JSON.stringify(body || {}) }).catch(() => {});
+      }
+
       async function loadProfile() {
         const profile = await api('/api/app/profile');
         seekerId = Number(profile?.id || 0) || null;
@@ -719,7 +727,7 @@
         applications = await api(`${API_BASE}/api/app/applications/by-user?userId=${encodeURIComponent(seekerId)}&limit=100&offset=0`);
       }
 
-      async function syncJobs() {
+      async function syncJobs(options = {}) {
         if (isSyncing) return;
         let from = document.getElementById('fromDate').value;
         let to = document.getElementById('toDate').value;
@@ -737,6 +745,11 @@
         if (!from || !to) throw new Error('Set from and to dates.');
 
         setQ({ from, to, skillIds, showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '', page, pageSize });
+        if (options.trackSearchClick) {
+          const searchUrl =
+            (window.location.origin || '') + window.location.pathname + (window.location.search || '');
+          postAnalytics('/api/app/analytics/search-click', { searchUrl });
+        }
         setSyncBusy(true);
         try {
           const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
@@ -790,6 +803,7 @@
           row.addEventListener('click', () => {
             const id = Number(row.getAttribute('data-open-job'));
             setQ({ jobId: id });
+            postAnalytics('/api/app/analytics/job-details-open', { jobId: id });
             openJobById(id);
           });
         });
@@ -984,7 +998,9 @@
         }
       }
 
-      document.getElementById('syncBtn').addEventListener('click', () => syncJobs().catch((e) => setMsg('dashMsg', e.message, true)));
+      document.getElementById('syncBtn').addEventListener('click', () =>
+        syncJobs({ trackSearchClick: true }).catch((e) => setMsg('dashMsg', e.message, true))
+      );
       document.getElementById('prevPageBtn').addEventListener('click', () => {
         const cur = q();
         const nextPage = Math.max(1, (Number.parseInt(String(cur.page || '1'), 10) || 1) - 1);

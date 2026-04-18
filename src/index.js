@@ -1555,6 +1555,47 @@ async function main() {
     }
   });
 
+  app.post('/api/app/analytics/search-click', miniAppAuth, async (req, res) => {
+    try {
+      const searchUrl = String(req.body?.searchUrl ?? '').trim();
+      if (!searchUrl) return res.status(400).json({ error: 'searchUrl is required' });
+      if (searchUrl.length > 8192) return res.status(400).json({ error: 'searchUrl is too long' });
+      const { user } = await ensureUserByTelegramId(
+        req.miniAppUser.id,
+        req.miniAppUser.username ?? null,
+        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+      );
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      await models.SearchClicks.create({ UserId: user.Id, SearchUrl: searchUrl });
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('POST /api/app/analytics/search-click:', err);
+      return res.status(500).json({ error: 'Failed to record search click' });
+    }
+  });
+
+  app.post('/api/app/analytics/job-details-open', miniAppAuth, async (req, res) => {
+    try {
+      const jobId = Number.parseInt(String(req.body?.jobId ?? ''), 10);
+      if (!Number.isSafeInteger(jobId) || jobId <= 0) {
+        return res.status(400).json({ error: 'jobId is required and must be a positive integer' });
+      }
+      const { user } = await ensureUserByTelegramId(
+        req.miniAppUser.id,
+        req.miniAppUser.username ?? null,
+        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+      );
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      await models.JobDetailsOpens.create({ UserId: user.Id, JobId: jobId });
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('POST /api/app/analytics/job-details-open:', err);
+      return res.status(500).json({ error: 'Failed to record job details open' });
+    }
+  });
+
   app.post(
     '/api/app/profile/resume-upload',
     miniAppAuth,

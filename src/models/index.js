@@ -2,6 +2,8 @@ import defineUser from './User.js';
 import defineApplication from './Application.js';
 import defineRemoteCompany from './RemoteCompany.js';
 import defineConfig from './Config.js';
+import defineSearchClick from './SearchClick.js';
+import defineJobDetailsOpen from './JobDetailsOpen.js';
 
 /**
  * Initialize only the User model for empty bot runtime.
@@ -11,9 +13,15 @@ export function initModels(sequelize) {
   const Application = defineApplication(sequelize);
   const RemoteCompany = defineRemoteCompany(sequelize);
   const Config = defineConfig(sequelize);
+  const SearchClick = defineSearchClick(sequelize);
+  const JobDetailsOpen = defineJobDetailsOpen(sequelize);
 
   User.hasMany(Application, { foreignKey: 'UserId' });
   Application.belongsTo(User, { foreignKey: 'UserId' });
+  User.hasMany(SearchClick, { foreignKey: 'UserId' });
+  SearchClick.belongsTo(User, { foreignKey: 'UserId' });
+  User.hasMany(JobDetailsOpen, { foreignKey: 'UserId' });
+  JobDetailsOpen.belongsTo(User, { foreignKey: 'UserId' });
 
   return {
     User,
@@ -24,5 +32,9 @@ export function initModels(sequelize) {
     RemoteCompanies: RemoteCompany,
     Config,
     Configs: Config,
+    SearchClick,
+    SearchClicks: SearchClick,
+    JobDetailsOpen,
+    JobDetailsOpens: JobDetailsOpen,
   };
 }
