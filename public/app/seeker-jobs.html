@@ -479,6 +479,52 @@
       let currentResumeUrl = '';
       let continueGenerateAfterResumeUpload = false;
 
+      const SEEKER_FILTER_KEYS = [
+        'from',
+        'to',
+        'skillIds',
+        'sourceIds',
+        'page',
+        'pageSize',
+        'showOnlyHighlyRelevant',
+        'jobId',
+        'skillId',
+      ];
+
+      function decodeBase64UrlToUtf8(b64) {
+        let s = String(b64).trim().replace(/-/g, '+').replace(/_/g, '/');
+        const padLen = (4 - (s.length % 4)) % 4;
+        s += '='.repeat(padLen);
+        const bin = atob(s);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      }
+
+      /** `seekerjobs__` payload: either `from=...&to=...` or opaque token (base64url of that string, or pass-through like search__). */
+      function innerParamsFromSeekerPayload(rawQuery) {
+        let raw = String(rawQuery || '').trim().replace(/^_+/, '');
+        if (!raw) return new URLSearchParams();
+        try {
+          raw = decodeURIComponent(raw);
+        } catch {
+          // keep as-is
+        }
+        const tryParse = (s) => new URLSearchParams(String(s).startsWith('?') ? String(s).slice(1) : String(s));
+        const hasAny = (sp) =>
+          SEEKER_FILTER_KEYS.some((k) => String(sp.get(k) || '').trim());
+        const direct = tryParse(raw);
+        if (hasAny(direct)) return direct;
+        try {
+          const decoded = decodeBase64UrlToUtf8(raw);
+          const inner = tryParse(decoded);
+          if (hasAny(inner)) return inner;
+        } catch {
+          // not base64utf8 query
+        }
+        return new URLSearchParams();
+      }
+
       function q() {
         const p = new URLSearchParams(location.search);
         const paramStart = String(p.get('startapp') || p.get('startApp') || '').trim();
@@ -492,12 +538,27 @@
 
         if (rawStart.startsWith('seekerjobs__')) {
           let rawQuery = rawStart.slice('seekerjobs__'.length).trim();
-          try {
-            rawQuery = decodeURIComponent(rawQuery);
-          } catch {
-            // keep as-is
-          }
-          const inner = new URLSearchParams(rawQuery.startsWith('?') ? rawQuery.slice(1) : rawQuery);
+          const inner = innerParamsFromSeekerPayload(rawQuery);
+          const pick = (key) => {
+            const a = String(inner.get(key) || '').trim();
+            const b = String(p.get(key) || '').trim();
+            return a || b || '';
+          };
+          return {
+            from: pick('from'),
+            to: pick('to'),
+            skillIds: pick('skillIds') || pick('skillId'),
+            sourceIds: pick('sourceIds'),
+            showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
+            jobId: pick('jobId'),
+            page: pick('page') || '1',
+            pageSize: pick('pageSize') || '100',
+          };
+        }
+
+        const qParam = String(p.get('q') || '').trim();
+        if (qParam) {
+          const inner = innerParamsFromSeekerPayload(qParam);
           const pick = (key) => {
             const a = String(inner.get(key) || '').trim();
             const b = String(p.get(key) || '').trim();

@@ -42,16 +42,13 @@
         }
 
         if (rawStart.startsWith('seekerjobs__')) {
-          let rawQuery = rawStart.slice('seekerjobs__'.length).trim();
+          let rawQuery = rawStart.slice('seekerjobs__'.length).trim().replace(/^_+/, '');
           try {
             rawQuery = decodeURIComponent(rawQuery);
           } catch {
             // Keep payload as-is when already decoded.
           }
 
-          // Telegram splits `startapp` at the first `&`, so e.g.
-          // ?startapp=seekerjobs__from=2026-03-17&to=2026-04-15&skillIds=9,72
-          // yields startapp=seekerjobs__from=2026-03-17 only — merge all other query keys.
           const allowedKeys = [
             'from',
             'to',
@@ -62,8 +59,48 @@
             'showOnlyHighlyRelevant',
             'jobId',
           ];
+          const hashFrag = window.location.hash || '';
+
+          function decodeBase64UrlToUtf8(b64) {
+            let s = String(b64).trim().replace(/-/g, '+').replace(/_/g, '/');
+            const padLen = (4 - (s.length % 4)) % 4;
+            s += '='.repeat(padLen);
+            const bin = atob(s);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+            return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          }
+
+          function innerParamsFromSeekerPayload(raw) {
+            let r = String(raw || '').trim();
+            if (!r) return new URLSearchParams();
+            const tryParse = (s) => new URLSearchParams(String(s).startsWith('?') ? String(s).slice(1) : String(s));
+            const keys = allowedKeys.concat(['skillId']);
+            const hasAny = (sp) => keys.some((k) => String(sp.get(k) || '').trim());
+            const direct = tryParse(r);
+            if (hasAny(direct)) return direct;
+            try {
+              const decoded = decodeBase64UrlToUtf8(r);
+              const inner = tryParse(decoded);
+              if (hasAny(inner)) return inner;
+            } catch (e) {
+              // not base64utf8 query
+            }
+            return new URLSearchParams();
+          }
+
+          const inner = innerParamsFromSeekerPayload(rawQuery);
+          const keysCheck = allowedKeys.concat(['skillId']);
+          const hasStructured = keysCheck.some((k) => String(inner.get(k) || '').trim());
+
+          if (!hasStructured) {
+            const targetUrl = '/app/seeker-jobs?q=' + encodeURIComponent(rawQuery);
+            window.location.replace(targetUrl + hashFrag);
+            return;
+          }
+
+          // Telegram splits `startapp` at the first `&`, so merge other query keys.
           const merged = new Map();
-          const inner = new URLSearchParams(rawQuery.startsWith('?') ? rawQuery.slice(1) : rawQuery);
           allowedKeys.forEach((key) => {
             const v = String(inner.get(key) || '').trim();
             if (v) merged.set(key, v);
@@ -79,7 +116,7 @@
             if (merged.has(key)) nextParts.push(`${encodeURIComponent(key)}=${encodeURIComponent(merged.get(key))}`);
           });
           const targetUrl = nextParts.length ? `/app/seeker-jobs?${nextParts.join('&')}` : '/app/seeker-jobs';
-          window.location.replace(targetUrl);
+          window.location.replace(targetUrl + hashFrag);
           return;
         }
 
