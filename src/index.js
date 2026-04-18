@@ -1293,6 +1293,35 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   });
 }
 
+function buildSeekerJobsDeeplinkRedirectPath(req) {
+  const rawStart = String(req.query.startapp || req.query.startApp || '').trim();
+  if (!rawStart.startsWith('seekerjobs__')) return null;
+  let rawQuery = rawStart.slice('seekerjobs__'.length).trim();
+  try {
+    rawQuery = decodeURIComponent(rawQuery);
+  } catch {
+    // keep as-is
+  }
+  // Telegram splits startapp at first `&`; remaining keys are separate req.query fields.
+  const allowedKeys = ['from', 'to', 'skillIds', 'sourceIds', 'page', 'pageSize', 'showOnlyHighlyRelevant', 'jobId'];
+  const merged = new Map();
+  const inner = new URLSearchParams(rawQuery.startsWith('?') ? rawQuery.slice(1) : rawQuery);
+  for (const key of allowedKeys) {
+    const v = String(inner.get(key) || '').trim();
+    if (v) merged.set(key, v);
+  }
+  for (const key of allowedKeys) {
+    const v = String(req.query[key] ?? '').trim();
+    if (v) merged.set(key, v);
+  }
+  const out = new URLSearchParams();
+  for (const key of allowedKeys) {
+    if (merged.has(key)) out.set(key, merged.get(key));
+  }
+  const qs = out.toString();
+  return qs ? `/app/seeker-jobs?${qs}` : '/app/seeker-jobs';
+}
+
 async function main() {
   process.stdout.write('App: main() started\n');
   const port = process.env.PORT || 3000;
@@ -1301,6 +1330,14 @@ async function main() {
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/', (_req, res) => res.status(200).send('OK'));
+  /** HTTP redirect avoids loading /app/index.html then client-navigating; some Telegram clients lose initData on that hop. */
+  const redirectSeekerDeeplink = (req, res, next) => {
+    const loc = buildSeekerJobsDeeplinkRedirectPath(req);
+    if (!loc) return next();
+    return res.redirect(302, loc);
+  };
+  app.get('/app', redirectSeekerDeeplink);
+  app.get('/app/', redirectSeekerDeeplink);
   app.use('/app', express.static(join(__dirname, '..', 'public', 'app')));
   app.get('/app/applications', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'applications.html'));
