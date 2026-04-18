@@ -81,11 +81,14 @@ const HIRE_AGENT_FAKE_QUEUE = [
 const resumeStorage = createResumeStorage(config);
 const genAI = config.geminiApiKey ? new GoogleGenAI({ apiKey: config.geminiApiKey }) : null;
 const HIRE_AGENT_SIMULATION_CONFIG_KEY = 'hireAgentSimulationVisible';
+// Configs key: free job-details opens before channel subscription gate starts (0 = disabled).
+const JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY = 'JobDetailsOpensBeforeSubscribeGate';
 const SCREENLY_SKILLS_URL = 'https://screenly.work/api/all-skills';
 const screenlySkillsCache = {
   expiresAt: 0,
   skills: [],
 };
+let runtimeBotTelegram = null;
 
 /** doneThroughIndex: rows with j <= index are ✅ (green); the rest ⬜. Use -1 so all are ⬜. */
 function formatHireAgentFullList(doneThroughIndex) {
@@ -144,6 +147,86 @@ function parseConfigBoolean(value, fallback = false) {
   if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
   if (['false', '0', 'no', 'off'].includes(normalized)) return false;
   return fallback;
+}
+
+function parseConfigInt(value, fallback = 0) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return fallback;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isSafeInteger(n)) return fallback;
+  return n;
+}
+
+async function getConfigInt(key, fallback = 0) {
+  const safeFallback = Number.isSafeInteger(fallback) ? fallback : 0;
+  if (!models.Configs) return safeFallback;
+  try {
+    const row = await models.Configs.findOne({ where: { Key: key } });
+    if (!row) return safeFallback;
+    return parseConfigInt(row.Value, safeFallback);
+  } catch (err) {
+    console.error(`Failed to read Configs.${key}; fallback=${safeFallback}:`, err?.message || err);
+    return safeFallback;
+  }
+}
+
+async function getJobDetailsSubscribeGateN() {
+  return Math.max(0, await getConfigInt(JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY, 0));
+}
+
+function normalizeChatId(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  if (/^-?\d+$/.test(s)) return Number.parseInt(s, 10);
+  return s;
+}
+
+async function getMissingRequiredChannelsForUser(telegram, telegramUserId) {
+  if (!telegram || !telegramUserId || !models.RequiredChannels) return [];
+  const channels = await models.RequiredChannels.findAll({
+    where: { IsActive: true },
+    order: [['SortOrder', 'ASC'], ['Id', 'ASC']],
+  });
+  if (!channels || channels.length === 0) return [];
+
+  const okStatuses = new Set(['member', 'administrator', 'creator']);
+  const missing = [];
+  for (const ch of channels) {
+    const chatId = normalizeChatId(ch.ChannelId);
+    if (!chatId) {
+      missing.push(ch);
+      continue;
+    }
+    try {
+      // Bot must be able to call getChatMember for this channel (usually bot added as channel admin).
+      const member = await telegram.getChatMember(chatId, telegramUserId);
+      if (!okStatuses.has(member?.status)) {
+        missing.push(ch);
+        continue;
+      }
+      if (models.RequiredChannelUsers) {
+        try {
+          await models.RequiredChannelUsers.findOrCreate({
+            where: { ChannelId: String(ch.ChannelId), UserId: String(telegramUserId) },
+            defaults: {
+              ChannelId: String(ch.ChannelId),
+              UserId: String(telegramUserId),
+              DateTime: new Date(),
+            },
+          });
+        } catch (e) {
+          if (e?.name !== 'SequelizeUniqueConstraintError') {
+            console.warn('RequiredChannelUsers upsert error:', e?.message || e);
+          }
+        }
+      }
+    } catch (err) {
+      // If Telegram API check fails, require subscription to avoid bypasses.
+      console.warn('getChatMember check error:', ch.ChannelId, err?.message || err);
+      missing.push(ch);
+    }
+  }
+  return missing;
 }
 
 async function ensureHireAgentSimulationVisibleConfig() {
@@ -1628,11 +1711,52 @@ async function main() {
         req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
       );
       if (!user) return res.status(404).json({ error: 'User not found' });
+      const gateAt = await getJobDetailsSubscribeGateN();
+      const opens = await models.JobDetailsOpens.count({ where: { UserId: user.Id } });
+      // Gate starts when historical opens reach N: count < N is free, count >= N requires subscription.
+      if (gateAt > 0 && opens >= gateAt) {
+        if (!runtimeBotTelegram) {
+          return res.status(503).json({ error: 'Subscription check is temporarily unavailable' });
+        }
+        const missing = await getMissingRequiredChannelsForUser(runtimeBotTelegram, req.miniAppUser.id);
+        if (missing.length > 0) {
+          return res.status(403).json({
+            error: 'subscribe_required',
+            opens,
+            gateAt,
+            channels: missing.map((ch) => ({
+              channelId: String(ch.ChannelId || ''),
+              joinUrl: String(ch.JoinUrl || ''),
+            })),
+            configKey: JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY,
+          });
+        }
+      }
       await models.JobDetailsOpens.create({ UserId: user.Id, JobId: jobId });
-      return res.json({ ok: true });
+      return res.json({ ok: true, opens: opens + 1, gateAt, subscribeSatisfied: true });
     } catch (err) {
       console.error('POST /api/app/analytics/job-details-open:', err);
       return res.status(500).json({ error: 'Failed to record job details open' });
+    }
+  });
+
+  app.post('/api/app/required-channels/verify', miniAppAuth, async (req, res) => {
+    try {
+      if (!runtimeBotTelegram) {
+        return res.status(503).json({ error: 'Subscription check is temporarily unavailable' });
+      }
+      const missing = await getMissingRequiredChannelsForUser(runtimeBotTelegram, req.miniAppUser.id);
+      return res.json({
+        ok: missing.length === 0,
+        channels: missing.map((ch) => ({
+          channelId: String(ch.ChannelId || ''),
+          joinUrl: String(ch.JoinUrl || ''),
+        })),
+        configKey: JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY,
+      });
+    } catch (err) {
+      console.error('POST /api/app/required-channels/verify:', err);
+      return res.status(500).json({ error: 'Failed to verify required channels' });
     }
   });
 
@@ -2090,6 +2214,7 @@ async function main() {
   try {
     const me = await bot.telegram.getMe();
     runtimeBotUsername = me?.username || '';
+    runtimeBotTelegram = bot.telegram;
     console.log('Telegram OK.', runtimeBotUsername ? `@${runtimeBotUsername}` : '(username not set)');
   } catch (err) {
     console.error('Cannot reach Telegram:', err.message);

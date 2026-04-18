@@ -365,6 +365,23 @@
         </div>
       </div>
     </div>
+    <div id="subscribeRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Subscription required</strong>
+          <button id="subscribeRequiredClose" type="button" class="ghost-btn">Close</button>
+        </div>
+        <div class="modal-body">
+          <p class="muted">You reached the free job-details limit. Subscribe to required channel(s) to continue.</p>
+          <div id="subscribeChannelsList" class="row" style="display:grid;gap:8px"></div>
+          <div class="row" style="margin-top:10px">
+            <button id="verifySubscriptionBtn" type="button">I subscribed - check again</button>
+            <span id="verifySubscriptionLoader" class="loader" aria-hidden="true"></span>
+          </div>
+          <p id="subscribeGateMsg" class="muted"></p>
+        </div>
+      </div>
+    </div>
 
     <script>
       const tg = window.Telegram?.WebApp;
@@ -476,8 +493,10 @@
       let dateBounds = { min: '', max: '' };
       let isSkillPickerOpen = false;
       let isResumeRequiredModalOpen = false;
+      let isSubscribeRequiredModalOpen = false;
       let currentResumeUrl = '';
       let continueGenerateAfterResumeUpload = false;
+      let pendingSubscribeJobId = null;
 
       const SEEKER_FILTER_KEYS = [
         'from',
@@ -769,6 +788,40 @@
         isResumeRequiredModalOpen = false;
         document.getElementById('resumeRequiredModal').classList.remove('on');
       }
+      function openSubscribeRequiredModal(payload, jobId) {
+        pendingSubscribeJobId = Number(jobId) || null;
+        isSubscribeRequiredModalOpen = true;
+        const channels = Array.isArray(payload?.channels) ? payload.channels : [];
+        const list = document.getElementById('subscribeChannelsList');
+        if (channels.length === 0) {
+          list.innerHTML = '<div class="muted">No channels configured. Ask admin to populate RequiredChannels.</div>';
+        } else {
+          list.innerHTML = channels
+            .map((ch, i) => {
+              const url = String(ch?.joinUrl || '').trim();
+              const label = url ? `Open channel ${i + 1}` : `Channel ${i + 1} has no link`;
+              if (!url) return `<span class="muted">${esc(label)}</span>`;
+              return `<a href="${attrEsc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+            })
+            .join('');
+        }
+        setMsg('subscribeGateMsg', '');
+        document.getElementById('subscribeRequiredModal').classList.add('on');
+      }
+      function closeSubscribeRequiredModal() {
+        isSubscribeRequiredModalOpen = false;
+        document.getElementById('subscribeRequiredModal').classList.remove('on');
+        setMsg('subscribeGateMsg', '');
+      }
+      function parseErrorPayload(raw) {
+        const txt = String(raw || '').trim();
+        if (!txt) return {};
+        try {
+          return JSON.parse(txt);
+        } catch {
+          return { error: txt };
+        }
+      }
       async function api(url, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
         attachMiniAppAuthHeaders(headers);
@@ -784,6 +837,37 @@
         attachMiniAppAuthHeaders(headers);
         const url = `${API_BASE}${path}`;
         fetch(url, { method: 'POST', headers, body: JSON.stringify(body || {}) }).catch(() => {});
+      }
+      async function trackJobDetailsOpen(jobId) {
+        const headers = { 'Content-Type': 'application/json' };
+        attachMiniAppAuthHeaders(headers);
+        const res = await fetch('/api/app/analytics/job-details-open', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ jobId }),
+        });
+        if (res.ok) {
+          return res.json().catch(() => ({ ok: true }));
+        }
+        const raw = await res.text();
+        const payload = parseErrorPayload(raw);
+        if (res.status === 403 && String(payload?.error || '') === 'subscribe_required') {
+          const err = new Error('subscribe_required');
+          err.code = 'subscribe_required';
+          err.payload = payload;
+          throw err;
+        }
+        throw new Error(String(payload?.error || raw || 'Failed to record job details open'));
+      }
+      async function verifyRequiredChannels() {
+        const payload = await api('/api/app/required-channels/verify', {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
+        const channels = Array.isArray(payload?.channels) ? payload.channels : [];
+        if (payload?.ok) return true;
+        openSubscribeRequiredModal({ channels }, pendingSubscribeJobId);
+        return false;
       }
 
       async function loadProfile() {
@@ -1006,11 +1090,19 @@
           </div>`;
         }).join('');
         body.querySelectorAll('[data-open-job]').forEach((row) => {
-          row.addEventListener('click', () => {
+          row.addEventListener('click', async () => {
             const id = Number(row.getAttribute('data-open-job'));
             setQ({ jobId: id });
-            postAnalytics('/api/app/analytics/job-details-open', { jobId: id });
-            openJobById(id);
+            try {
+              await trackJobDetailsOpen(id);
+              openJobById(id);
+            } catch (err) {
+              if (err?.code === 'subscribe_required') {
+                openSubscribeRequiredModal(err.payload || {}, id);
+                return;
+              }
+              setMsg('dashMsg', err?.message || 'Could not open job details.', true);
+            }
           });
         });
       }
@@ -1266,6 +1358,37 @@
           closeResumeRequiredModal();
         }
       });
+      document.getElementById('subscribeRequiredClose').addEventListener('click', closeSubscribeRequiredModal);
+      document.getElementById('subscribeRequiredModal').addEventListener('click', (event) => {
+        if (event.target.id === 'subscribeRequiredModal') closeSubscribeRequiredModal();
+      });
+      document.getElementById('verifySubscriptionBtn').addEventListener('click', async () => {
+        onLoading('verifySubscriptionLoader', true);
+        try {
+          const ok = await verifyRequiredChannels();
+          if (!ok) {
+            setMsg('subscribeGateMsg', 'Still not subscribed to all required channels.', true);
+            return;
+          }
+          const pendingJobId = Number(pendingSubscribeJobId || 0);
+          if (!Number.isSafeInteger(pendingJobId) || pendingJobId <= 0) {
+            closeSubscribeRequiredModal();
+            return;
+          }
+          await trackJobDetailsOpen(pendingJobId);
+          closeSubscribeRequiredModal();
+          openJobById(pendingJobId);
+        } catch (err) {
+          if (err?.code === 'subscribe_required') {
+            openSubscribeRequiredModal(err.payload || {}, pendingSubscribeJobId);
+            setMsg('subscribeGateMsg', 'Still not subscribed to all required channels.', true);
+            return;
+          }
+          setMsg('subscribeGateMsg', err?.message || 'Failed to verify subscription.', true);
+        } finally {
+          onLoading('verifySubscriptionLoader', false);
+        }
+      });
       document.getElementById('insightModalClose').addEventListener('click', hideInsight);
       document.getElementById('insightModal').addEventListener('click', (event) => {
         if (event.target.id === 'insightModal') hideInsight();
@@ -1295,6 +1418,7 @@
             continueGenerateAfterResumeUpload = false;
             closeResumeRequiredModal();
           }
+          if (isSubscribeRequiredModalOpen) closeSubscribeRequiredModal();
           if (isInsightModalOpen) hideInsight();
           if (isHighlyRelevantHintModalOpen) closeHighlyRelevantHintModal();
         }

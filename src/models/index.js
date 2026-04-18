@@ -4,6 +4,8 @@ import defineRemoteCompany from './RemoteCompany.js';
 import defineConfig from './Config.js';
 import defineSearchClick from './SearchClick.js';
 import defineJobDetailsOpen from './JobDetailsOpen.js';
+import defineRequiredChannel from './RequiredChannel.js';
+import defineRequiredChannelUser from './RequiredChannelUser.js';
 
 /**
  * Initialize only the User model for empty bot runtime.
@@ -15,6 +17,8 @@ export function initModels(sequelize) {
   const Config = defineConfig(sequelize);
   const SearchClick = defineSearchClick(sequelize);
   const JobDetailsOpen = defineJobDetailsOpen(sequelize);
+  const RequiredChannel = defineRequiredChannel(sequelize);
+  const RequiredChannelUser = defineRequiredChannelUser(sequelize);
 
   User.hasMany(Application, { foreignKey: 'UserId' });
   Application.belongsTo(User, { foreignKey: 'UserId' });
@@ -36,5 +40,9 @@ export function initModels(sequelize) {
     SearchClicks: SearchClick,
     JobDetailsOpen,
     JobDetailsOpens: JobDetailsOpen,
+    RequiredChannel,
+    RequiredChannels: RequiredChannel,
+    RequiredChannelUser,
+    RequiredChannelUsers: RequiredChannelUser,
   };
 }
