@@ -213,6 +213,7 @@
                 <option value="hirehi">hirehi</option>
               </select>
             </label>
+            <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
           </div>
           <div class="row date-range-row">
             <button id="syncBtn">Search remote jobs</button>
@@ -315,6 +316,7 @@
           to: p.get('to') || '',
           skillId: p.get('skillId') || '',
           source: p.get('source') || '',
+          showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || '',
           jobId: p.get('jobId') || '',
           page: p.get('page') || '1',
           pageSize: p.get('pageSize') || '100',
@@ -331,6 +333,10 @@
         const el = document.getElementById(id);
         el.textContent = txt || '';
         el.className = isErr ? 'bad' : 'muted';
+      }
+      function isTruthyQueryParam(value) {
+        const v = String(value || '').trim().toLowerCase();
+        return v === 'true' || v === '1' || v === 'yes';
       }
       function esc(v) {
         return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -437,7 +443,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'fromDate', 'toDate', 'skillId', 'sourceSel', 'openResumeBtn', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel'].forEach((id) => {
+        ['syncBtn', 'fromDate', 'toDate', 'skillId', 'sourceSel', 'showOnlyHighlyRelevant', 'openResumeBtn', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -596,16 +602,17 @@
         const to = document.getElementById('toDate').value;
         const skillId = document.getElementById('skillId').value;
         const source = document.getElementById('sourceSel').value;
+        const showOnlyHighlyRelevant = document.getElementById('showOnlyHighlyRelevant').checked;
         const query = q();
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(query.pageSize || '100'), 10) || 100));
         if (!seekerId) throw new Error('Select seeker first.');
         if (!from || !to) throw new Error('Set from and to dates.');
 
-        setQ({ seekerId, from, to, skillId, source, page, pageSize });
+        setQ({ seekerId, from, to, skillId, source, showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '', page, pageSize });
         setSyncBusy(true);
         try {
-          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillId ? `&skillId=${encodeURIComponent(skillId)}` : ''}${source ? `&source=${encodeURIComponent(source)}` : ''}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillId ? `&skillId=${encodeURIComponent(skillId)}` : ''}${source ? `&source=${encodeURIComponent(source)}` : ''}${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
           const data = await api(posUrl);
           positions = data.positions || [];
           pageInfo = {
@@ -850,7 +857,7 @@
         const now = new Date();
         const to = now.toISOString().slice(0, 10);
         const prev = new Date(now);
-        prev.setMonth(prev.getMonth() - 1);
+        prev.setDate(prev.getDate() - 7);
         const from = prev.toISOString().slice(0, 10);
         document.getElementById('fromDate').value = from;
         document.getElementById('toDate').value = to;
@@ -863,6 +870,7 @@
         const s = q();
         if (s.skillId) document.getElementById('skillId').value = s.skillId;
         if (s.source) document.getElementById('sourceSel').value = s.source;
+        document.getElementById('showOnlyHighlyRelevant').checked = isTruthyQueryParam(s.showOnlyHighlyRelevant);
         document.getElementById('pageSizeSel').value = String(Math.min(200, Math.max(1, Number.parseInt(String(s.pageSize || '100'), 10) || 100)));
         updatePagerUi();
         if (s.seekerId && s.from && s.to) {
@@ -888,6 +896,19 @@
         const nextSize = Math.min(200, Math.max(1, Number.parseInt(document.getElementById('pageSizeSel').value, 10) || 100));
         setQ({ pageSize: nextSize, page: 1 });
         syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('showOnlyHighlyRelevant').addEventListener('change', (event) => {
+        if (!document.getElementById('skillId').value) {
+          event.target.checked = false;
+          setQ({ showOnlyHighlyRelevant: '' });
+          return;
+        }
+        setQ({ showOnlyHighlyRelevant: event.target.checked ? 'true' : '', page: 1 });
+      });
+      document.getElementById('skillId').addEventListener('change', () => {
+        if (document.getElementById('skillId').value) return;
+        document.getElementById('showOnlyHighlyRelevant').checked = false;
+        setQ({ showOnlyHighlyRelevant: '' });
       });
       document.getElementById('toggleUserInfoBtn').addEventListener('click', () => {
         setUserInfoVisibility(!isUserInfoHidden);

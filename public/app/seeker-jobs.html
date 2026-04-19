@@ -1262,19 +1262,22 @@
         const s = q();
         const now = new Date();
         const to = localIsoDate(now);
-        const prev = new Date(now);
-        prev.setMonth(prev.getMonth() - 1);
-        const from = localIsoDate(prev);
-        dateBounds = { min: from, max: to };
+        const minBound = new Date(now);
+        minBound.setMonth(minBound.getMonth() - 1);
+        const minStr = localIsoDate(minBound);
+        const defaultFrom = new Date(now);
+        defaultFrom.setDate(defaultFrom.getDate() - 7);
+        const defaultFromStr = localIsoDate(defaultFrom);
+        dateBounds = { min: minStr, max: to };
 
         const fromInput = document.getElementById('fromDate');
         const toInput = document.getElementById('toDate');
-        fromInput.min = from;
+        fromInput.min = minStr;
         fromInput.max = to;
-        toInput.min = from;
+        toInput.min = minStr;
         toInput.max = to;
 
-        const resolvedFrom = clampDateToBounds(s.from || from);
+        const resolvedFrom = clampDateToBounds(s.from || defaultFromStr);
         const resolvedTo = clampDateToBounds(s.to || to);
         const finalFrom = resolvedFrom > resolvedTo ? resolvedTo : resolvedFrom;
         const finalTo = resolvedTo < resolvedFrom ? resolvedFrom : resolvedTo;
