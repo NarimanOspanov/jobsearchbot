@@ -42,7 +42,7 @@
       }
       @media (min-width: 1024px) {
         .layout {
-          grid-template-columns: minmax(0, 10%) minmax(0, 45%) minmax(0, 45%);
+          grid-template-columns: minmax(240px, 28%) minmax(0, 72%);
           min-height: calc(100vh - 100px);
         }
         .layout .card.layout-col {
@@ -236,41 +236,11 @@
             <table>
               <thead>
                 <tr>
-                  <th>Id</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Apply type</th><th>Status</th>
+                  <th>Id</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Apply type</th><th>Status</th>
                 </tr>
               </thead>
               <tbody id="jobsBody"></tbody>
             </table>
-          </div>
-        </section>
-
-        <section class="card layout-col">
-          <h2>Job details</h2>
-          <div class="layout-col-body">
-            <div id="jobInfo" class="muted">Select a job to continue.</div>
-            <div id="jobActions" style="display:none">
-              <div class="row">
-                <label>Status
-                  <select id="statusSel">
-                    <option value="new">new</option>
-                    <option value="applied">applied</option>
-                    <option value="skipped">skipped</option>
-                  </select>
-                </label>
-                <button id="genBtn">Generate Tailored CV + Cover Letter</button>
-                <span id="jobLoader" class="loader" aria-hidden="true"></span>
-              </div>
-              <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
-              <label>Cover Letter</label>
-              <textarea id="coverPreview" readonly></textarea>
-              <p id="jobMsg" class="muted"></p>
-            </div>
-            <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
-              <div class="skills-block">
-                <h4>Admin notes</h4>
-                <textarea id="notesText" aria-label="Admin notes"></textarea>
-              </div>
-            </div>
           </div>
         </section>
       </div>
@@ -283,6 +253,40 @@
         </div>
         <div class="modal-body">
           <iframe id="cvModalFrame" title="Document preview"></iframe>
+        </div>
+      </div>
+    </div>
+    <div id="jobModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Job details</strong>
+          <button id="jobModalClose" type="button">Close</button>
+        </div>
+        <div class="modal-body" style="padding:12px;overflow:auto;background:#0a1020">
+          <div id="jobInfo" class="muted">Select a job to continue.</div>
+          <div id="jobActions" style="display:none">
+            <div class="row">
+              <label>Status
+                <select id="statusSel">
+                  <option value="new">new</option>
+                  <option value="applied">applied</option>
+                  <option value="skipped">skipped</option>
+                </select>
+              </label>
+              <button id="genBtn">Generate Tailored CV + Cover Letter</button>
+              <span id="jobLoader" class="loader" aria-hidden="true"></span>
+            </div>
+            <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
+            <label>Cover Letter</label>
+            <textarea id="coverPreview" readonly></textarea>
+            <p id="jobMsg" class="muted"></p>
+          </div>
+          <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
+            <div class="skills-block">
+              <h4>Admin notes</h4>
+              <textarea id="notesText" aria-label="Admin notes"></textarea>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -482,6 +486,12 @@
         document.getElementById('cvModal').classList.remove('on');
         document.getElementById('cvModalFrame').src = 'about:blank';
       }
+      function openJobModal() {
+        document.getElementById('jobModal').classList.add('on');
+      }
+      function closeJobModal() {
+        document.getElementById('jobModal').classList.remove('on');
+      }
       async function api(url, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
         const res = await fetch(url, { ...options, headers });
@@ -644,6 +654,7 @@
           <th><button type="button" data-sort="company">Company${sortArrow('company')}</button></th>
           <th><button type="button" data-sort="location">Location${sortArrow('location')}</button></th>
           <th><button type="button" data-sort="posted">Posted${sortArrow('posted')}</button></th>
+          <th>Source</th>
           <th>Apply type</th>
           <th><button type="button" data-sort="status">Status${sortArrow('status')}</button></th>
         `;
@@ -652,7 +663,7 @@
         });
 
         if (!positions.length) {
-          body.innerHTML = '<tr><td colspan="7" class="muted">No jobs loaded.</td></tr>';
+          body.innerHTML = '<tr><td colspan="8" class="muted">No jobs loaded.</td></tr>';
           return;
         }
         const sorted = [...positions].sort(compareJobs);
@@ -664,6 +675,7 @@
             <td>${esc(p.company)}</td>
             <td>${esc(p.location)}</td>
             <td>${esc(formatPostedDate(p.publishedAt))}</td>
+            <td>${esc(p.source || '—')}</td>
             <td>${esc(p.applyType || '—')}</td>
             <td>${esc(app?.Status || 'new')}</td>
           </tr>`;
@@ -731,6 +743,7 @@
         document.getElementById('statusSel').value = selectedApplication?.Status || 'new';
         document.getElementById('notesText').value = selectedApplication?.Notes || '';
         renderArtifacts();
+        openJobModal();
       }
 
       function renderArtifacts() {
@@ -920,6 +933,16 @@
       document.getElementById('cvModalClose').addEventListener('click', closeCvModal);
       document.getElementById('cvModal').addEventListener('click', (e) => {
         if (e.target.id === 'cvModal') closeCvModal();
+      });
+      document.getElementById('jobModalClose').addEventListener('click', closeJobModal);
+      document.getElementById('jobModal').addEventListener('click', (e) => {
+        if (e.target.id === 'jobModal') closeJobModal();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeCvModal();
+          closeJobModal();
+        }
       });
 
       boot().catch((err) => {
