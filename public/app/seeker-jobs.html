@@ -261,7 +261,7 @@
           <div class="row date-range-row">
             <label>Roles</label>
             <div class="skills-picker">
-              <button id="skillPickerBtn" type="button" class="skills-picker-btn">All skills</button>
+              <button id="skillPickerBtn" type="button" class="skills-picker-btn">All roles</button>
               <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
             </div>
             <span id="highlyRelevantFilterWrap" class="highly-relevant-filter" aria-hidden="true">
@@ -941,7 +941,7 @@
         const csv = getSelectedSkillIdsCsv();
         const btn = document.getElementById('skillPickerBtn');
         if (!csv) {
-          btn.textContent = 'All skills';
+          btn.textContent = 'All roles';
         } else {
           const ids = csv.split(',').filter(Boolean);
           btn.textContent = `${ids.length} role(s) selected`;
