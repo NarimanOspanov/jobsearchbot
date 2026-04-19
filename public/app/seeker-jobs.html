@@ -251,7 +251,7 @@
 
       <div class="layout">
         <section class="card layout-col">
-          <h2>100% remote jobs aggregator</h2>
+          <h2>100% remote job finder</h2>
           <div class="row date-range-row">
             <span class="date-range">
               <label>From <input id="fromDate" type="date" /></label>
@@ -268,6 +268,13 @@
               <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
               <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="What does this mean?" aria-label="What does Top matches mean?">?</button>
             </span>
+          </div>
+          <div class="row date-range-row">
+            <label>Find in</label>
+            <div class="skills-picker">
+              <button id="sourcePickerBtn" type="button" class="skills-picker-btn">All sources</button>
+              <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            </div>
           </div>
           <div class="row date-range-row">
             <button id="syncBtn">Search</button>
@@ -492,11 +499,13 @@
       let isHighlyRelevantHintModalOpen = false;
       let dateBounds = { min: '', max: '' };
       let isSkillPickerOpen = false;
+      let isSourcePickerOpen = false;
       let isResumeRequiredModalOpen = false;
       let isSubscribeRequiredModalOpen = false;
       let currentResumeUrl = '';
       let continueGenerateAfterResumeUpload = false;
       let pendingSubscribeJobId = null;
+      const FIND_IN_OPTIONS = ['Linkedin', 'Indeed', 'Telegram channels', 'Company sites'];
 
       const SEEKER_FILTER_KEYS = [
         'from',
@@ -959,6 +968,39 @@
         document.getElementById('skillPickerMenu').classList.remove('open');
       }
 
+      function renderSourcePickerOptions() {
+        const menu = document.getElementById('sourcePickerMenu');
+        menu.innerHTML = FIND_IN_OPTIONS
+          .map(
+            (name) =>
+              `<label class="skill-check"><input type="checkbox" value="${attrEsc(name)}" />${esc(name)}</label>`
+          )
+          .join('');
+      }
+
+      function getSelectedSources() {
+        const checked = document.querySelectorAll('#sourcePickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => String(opt.value || '').trim())
+          .filter(Boolean);
+      }
+
+      function renderSourcePickerSummary() {
+        const selected = getSelectedSources();
+        const btn = document.getElementById('sourcePickerBtn');
+        btn.textContent = selected.length ? `${selected.length} source(s) selected` : 'All sources';
+      }
+
+      function openSourcePicker() {
+        isSourcePickerOpen = true;
+        document.getElementById('sourcePickerMenu').classList.add('open');
+      }
+
+      function closeSourcePicker() {
+        isSourcePickerOpen = false;
+        document.getElementById('sourcePickerMenu').classList.remove('open');
+      }
+
       async function uploadMainResumeFromUi() {
         const fileInput = document.getElementById('resumeFileInput');
         const uploadBtn = document.getElementById('uploadResumeBtn');
@@ -1288,6 +1330,8 @@
 
       async function boot() {
         hydrateStateToInputs();
+        renderSourcePickerOptions();
+        renderSourcePickerSummary();
         await waitForTelegramInitData();
         if (!String(getTgInitDataString()).trim() && !devTelegramId) {
           const hrefLen = String(window.location.href || '').length;
@@ -1331,6 +1375,12 @@
       });
       document.getElementById('skillPickerMenu').addEventListener('change', () => {
         renderSkillPickerSummary();
+      });
+      document.getElementById('sourcePickerBtn').addEventListener('click', () => {
+        if (isSourcePickerOpen) closeSourcePicker(); else openSourcePicker();
+      });
+      document.getElementById('sourcePickerMenu').addEventListener('change', () => {
+        renderSourcePickerSummary();
       });
       document.getElementById('showOnlyHighlyRelevant').addEventListener('change', (event) => {
         if (!hasSelectedSkills()) {
@@ -1411,12 +1461,16 @@
       });
       document.addEventListener('click', (event) => {
         const picker = event.target.closest('.skills-picker');
-        if (!picker && isSkillPickerOpen) closeSkillPicker();
+        if (!picker) {
+          if (isSkillPickerOpen) closeSkillPicker();
+          if (isSourcePickerOpen) closeSourcePicker();
+        }
       });
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
           if (isJobModalOpen) closeJobModal();
           if (isSkillPickerOpen) closeSkillPicker();
+          if (isSourcePickerOpen) closeSourcePicker();
           if (isResumeRequiredModalOpen) {
             continueGenerateAfterResumeUpload = false;
             closeResumeRequiredModal();
