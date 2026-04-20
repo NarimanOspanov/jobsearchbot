@@ -1867,6 +1867,116 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     });
   });
 
+  const ensurePrivateAdminForHiddenCommand = async (ctx, commandName = 'This command') => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply(`${commandName} only works in a private chat with the bot.`);
+      return false;
+    }
+    const adminIds = config.botAdminTelegramIds;
+    if (adminIds.size === 0) {
+      await ctx.reply('This command is disabled. Set BOT_ADMIN_TELEGRAM_IDS in the server environment.');
+      return false;
+    }
+    const fromId = ctx.from?.id;
+    if (!fromId || !adminIds.has(fromId)) {
+      await ctx.reply('Unauthorized.');
+      return false;
+    }
+    return true;
+  };
+
+  const parsePeriodDays = (raw, fallback = 7) => {
+    const parsed = Number.parseInt(String(raw || ''), 10);
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) return fallback;
+    return Math.min(365, parsed);
+  };
+
+  const getPeriodStartUtc = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  const buildStat2Keyboard = (selectedDays) => ({
+    inline_keyboard: [
+      [
+        { text: selectedDays === 1 ? '• 1d' : '1d', callback_data: 'stat2_period_1' },
+        { text: selectedDays === 7 ? '• 7d' : '7d', callback_data: 'stat2_period_7' },
+        { text: selectedDays === 30 ? '• 30d' : '30d', callback_data: 'stat2_period_30' },
+      ],
+    ],
+  });
+
+  const loadStat2Metrics = async (periodDays) => {
+    const since = getPeriodStartUtc(periodDays);
+    const usersJoinedPromise = models.Users
+      ? models.Users.count({ where: { DateJoined: { [Sequelize.Op.gte]: since } } })
+      : Promise.resolve(0);
+    const usersJoinedByInvitePromise = models.Referrals
+      ? models.Referrals.count({ where: { ReferredAt: { [Sequelize.Op.gte]: since } } })
+      : Promise.resolve(0);
+    const paymentsPromise = models.TelegramPayments
+      ? models.TelegramPayments.count({ where: { PaidAt: { [Sequelize.Op.gte]: since } } })
+      : Promise.resolve(0);
+    const requiredChannelUsersPromise = models.RequiredChannelUsers
+      ? models.RequiredChannelUsers.count({ where: { DateTime: { [Sequelize.Op.gte]: since } } })
+      : Promise.resolve(0);
+    const [usersJoined, usersJoinedByInvite, payments, requiredChannelUsers] = await Promise.all([
+      usersJoinedPromise,
+      usersJoinedByInvitePromise,
+      paymentsPromise,
+      requiredChannelUsersPromise,
+    ]);
+    return { usersJoined, usersJoinedByInvite, payments, requiredChannelUsers };
+  };
+
+  const renderStat2Text = (periodDays, metrics) => {
+    return [
+      `📊 Stat2 for last ${periodDays} day(s)`,
+      '',
+      `Users joined: ${metrics.usersJoined}`,
+      `Users joined by invite: ${metrics.usersJoinedByInvite}`,
+      `Payments: ${metrics.payments}`,
+      `Required channel users: ${metrics.requiredChannelUsers}`,
+    ].join('\n');
+  };
+
+  bot.command('stat2', async (ctx) => {
+    const ok = await ensurePrivateAdminForHiddenCommand(ctx, 'This command');
+    if (!ok) return;
+    const text = String(ctx.message?.text || '').trim();
+    const parts = text.split(/\s+/).filter(Boolean);
+    const periodDays = parsePeriodDays(parts[1], 7);
+    try {
+      const metrics = await loadStat2Metrics(periodDays);
+      await ctx.reply(renderStat2Text(periodDays, metrics), {
+        reply_markup: buildStat2Keyboard(periodDays),
+      });
+    } catch (err) {
+      console.error('stat2 failed:', err);
+      await ctx.reply('Failed to build stat2. Check server logs.');
+    }
+  });
+
+  bot.action(/^stat2_period_(\d+)$/, async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    const ok = await ensurePrivateAdminForHiddenCommand(ctx, 'This command');
+    if (!ok) return;
+    const periodDays = parsePeriodDays(ctx.match?.[1], 7);
+    try {
+      const metrics = await loadStat2Metrics(periodDays);
+      const text = renderStat2Text(periodDays, metrics);
+      await ctx.editMessageText(text, {
+        reply_markup: buildStat2Keyboard(periodDays),
+      }).catch(async () => {
+        await ctx.reply(text, { reply_markup: buildStat2Keyboard(periodDays) });
+      });
+    } catch (err) {
+      console.error('stat2 period action failed:', err);
+      await ctx.reply('Failed to build stat2 for selected period.');
+    }
+  });
+
   bot.command('removeuser', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
       await ctx.reply('This command only works in a private chat with the bot.');
