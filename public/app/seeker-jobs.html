@@ -1433,7 +1433,7 @@
           if (rawMessage.includes('gold_required')) {
             const payload = parseErrorPayload(rawMessage);
             openPaymentRequiredModal(payload || {});
-            setMsg('jobMsg', 'Gold plan is required for AI CV and cover letter.', true);
+            setMsg('jobMsg', 'AI tools require Premium plan or available openings.', true);
             return;
           }
           throw err;

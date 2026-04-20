@@ -386,7 +386,9 @@ async function getUserEntitlement(userId, now = new Date()) {
 }
 
 async function canUseAiToolsForUser(userId, now = new Date()) {
-  const activeSub = await getActiveSubscriptionForUser(userId, now);
+  const entitlement = await getUserEntitlement(userId, now);
+  if (Number(entitlement?.remainingOpens || 0) > 0) return true;
+  const activeSub = entitlement?.activeSubscription || null;
   if (!activeSub) return false;
   const plan = await getPlanById(activeSub.PlanId);
   return Boolean(plan?.IncludesAiTools);
@@ -407,7 +409,7 @@ async function buildMonetizationStatus(userId, now = new Date()) {
     bonusOpensTotal: entitlement.bonusOpensTotal,
     totalAllowance: entitlement.totalAllowance,
     remainingOpens: entitlement.remainingOpens,
-    canUseAiTools: Boolean(planSummary?.includesAiTools),
+    canUseAiTools: Boolean(planSummary?.includesAiTools) || Number(entitlement?.remainingOpens || 0) > 0,
     freeMonthlyLimit: entitlement.freeMonthlyLimit,
     plans,
   };
@@ -2396,7 +2398,7 @@ async function main() {
       if (!canUseAiTools) {
         return res.status(402).json({
           error: 'gold_required',
-          message: 'Gold plan is required for AI CV generation.',
+          message: 'AI tools are available with Premium plan or available openings.',
           monetization: await buildMonetizationStatus(user.Id),
         });
       }
@@ -2445,7 +2447,7 @@ async function main() {
       if (!canUseAiTools) {
         return res.status(402).json({
           error: 'gold_required',
-          message: 'Gold plan is required for AI cover letter generation.',
+          message: 'AI tools are available with Premium plan or available openings.',
           monetization: await buildMonetizationStatus(user.Id),
         });
       }
