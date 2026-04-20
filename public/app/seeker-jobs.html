@@ -1143,9 +1143,20 @@
         uploadBtn.disabled = true;
         onLoading(loaderId, true);
         try {
+          const resolveExtension = () => {
+            const name = String(file.name || '').toLowerCase();
+            const extMatch = name.match(/\.([a-z0-9]+)$/);
+            if (extMatch?.[1]) return extMatch[1];
+            if (file.type === 'application/pdf') return 'pdf';
+            if (file.type === 'image/png') return 'png';
+            if (file.type === 'image/webp') return 'webp';
+            return 'jpg';
+          };
+          // Android WebView may reject non ISO-8859-1 header values.
+          const safeFileName = `resume-${Date.now()}.${resolveExtension()}`;
           const headers = {
             'Content-Type': 'application/octet-stream',
-            'x-file-name': file.name || `resume-${Date.now()}`,
+            'x-file-name': safeFileName,
             'x-file-type': file.type || 'application/octet-stream',
           };
           attachMiniAppAuthHeaders(headers);
