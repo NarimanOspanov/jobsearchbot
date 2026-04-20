@@ -972,6 +972,21 @@
         return botUsername;
       }
 
+      function openTelegramLinkAndCloseMiniApp(url) {
+        const tgApp = window.Telegram?.WebApp;
+        if (!tgApp?.openTelegramLink) return false;
+        tgApp.openTelegramLink(url);
+        // On iOS, explicitly collapse the mini app after navigation.
+        setTimeout(() => {
+          try {
+            tgApp.close?.();
+          } catch {
+            // Ignore close failures to avoid breaking navigation.
+          }
+        }, 220);
+        return true;
+      }
+
       async function openTelegramPaymentForPlan(planCode) {
         const code = String(planCode || '').trim().toLowerCase();
         const endpoint = code
@@ -980,10 +995,7 @@
         const payload = await api(endpoint);
         const url = String(payload?.deepLink || '').trim();
         if (!url) throw new Error('Payment link is empty.');
-        if (window.Telegram?.WebApp?.openTelegramLink) {
-          window.Telegram.WebApp.openTelegramLink(url);
-          return;
-        }
+        if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
       }
 
@@ -991,10 +1003,7 @@
         const username = await loadBotUsername();
         if (!username) throw new Error('Bot username is unavailable.');
         const url = `https://t.me/${username}?start=referrals`;
-        if (window.Telegram?.WebApp?.openTelegramLink) {
-          window.Telegram.WebApp.openTelegramLink(url);
-          return;
-        }
+        if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
       }
 

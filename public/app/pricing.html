@@ -87,6 +87,21 @@
         return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       }
 
+      function openTelegramLinkAndCloseMiniApp(url) {
+        const tgApp = window.Telegram?.WebApp;
+        if (!tgApp?.openTelegramLink) return false;
+        tgApp.openTelegramLink(url);
+        // iOS can keep the mini app open; collapse it explicitly.
+        setTimeout(() => {
+          try {
+            tgApp.close?.();
+          } catch {
+            // Ignore close errors; link opening already happened.
+          }
+        }, 220);
+        return true;
+      }
+
       async function openPayment(planCode) {
         const code = String(planCode || '').trim().toLowerCase();
         const endpoint = code
@@ -95,10 +110,7 @@
         const payload = await api(endpoint);
         const url = String(payload?.deepLink || '').trim();
         if (!url) throw new Error('Payment link is empty');
-        if (window.Telegram?.WebApp?.openTelegramLink) {
-          window.Telegram.WebApp.openTelegramLink(url);
-          return;
-        }
+        if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
       }
 
