@@ -15,13 +15,9 @@ import { createResumeStorage } from './services/resumeStorage.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const START_INTRO_MESSAGE = [
-  'Что умеет бот',
+  'Привет',
   '',
-  'Привет! Меня зовут Ayala, я ваш персональный карьерный агент.',
-  '',
-  'Я помогаю в двух направлениях:',
-  '1) Каждый день ищу global remote вакансии и публикую их в Telegram-канале.',
-  '2) Хотите делегировать отклики? Я откликаюсь от вашего лица.',
+  'Получи доступ к вакансиям на 100% удалёнку',
 ].join('\n');
 const ABOUT_MESSAGE = [
   'Забудьте про поиск работы вручную.',
@@ -83,12 +79,40 @@ const genAI = config.geminiApiKey ? new GoogleGenAI({ apiKey: config.geminiApiKe
 const HIRE_AGENT_SIMULATION_CONFIG_KEY = 'hireAgentSimulationVisible';
 // Configs key: free job-details opens before channel subscription gate starts (0 = disabled).
 const JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY = 'JobDetailsOpensBeforeSubscribeGate';
+const FREE_JOB_OPENS_MONTHLY_LIMIT_CONFIG_KEY = 'FreeJobOpensMonthlyLimit';
+const CHANNEL_SUBSCRIBE_BONUS_OPENS_CONFIG_KEY = 'ChannelSubscribeBonusOpens';
 const SCREENLY_SKILLS_URL = 'https://screenly.work/api/all-skills';
+const DIGITAL_NOMADS_CHANNEL_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
 const screenlySkillsCache = {
   expiresAt: 0,
   skills: [],
 };
 let runtimeBotTelegram = null;
+
+const FALLBACK_PLANS = [
+  {
+    Id: 1,
+    Code: 'silver',
+    Name: 'Silver',
+    PriceInStars: 500,
+    DurationDays: 30,
+    JobOpenMonthlyLimit: 300,
+    IncludesAiTools: false,
+    IsActive: true,
+    SortOrder: 10,
+  },
+  {
+    Id: 2,
+    Code: 'gold',
+    Name: 'Gold',
+    PriceInStars: 1000,
+    DurationDays: 30,
+    JobOpenMonthlyLimit: 1000,
+    IncludesAiTools: true,
+    IsActive: true,
+    SortOrder: 20,
+  },
+];
 
 /** doneThroughIndex: rows with j <= index are ✅ (green); the rest ⬜. Use -1 so all are ⬜. */
 function formatHireAgentFullList(doneThroughIndex) {
@@ -174,6 +198,209 @@ async function getJobDetailsSubscribeGateN() {
   return Math.max(0, await getConfigInt(JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY, 0));
 }
 
+function getMonthBoundsUtc(now = new Date()) {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+  return { start, end };
+}
+
+function toPlanSummary(plan) {
+  if (!plan) return null;
+  const monthlyOpens = Number(plan.JobOpenMonthlyLimit || 0);
+  const durationDays = Number(plan.DurationDays || 30);
+  const includesAiTools = Boolean(plan.IncludesAiTools);
+  return {
+    id: Number(plan.Id || 0),
+    code: String(plan.Code || '').toLowerCase(),
+    name: String(plan.Name || ''),
+    priceInStars: Number(plan.PriceInStars || 0),
+    durationDays,
+    jobOpenMonthlyLimit: monthlyOpens,
+    includesAiTools,
+    description:
+      `${monthlyOpens} job opens per month for ${durationDays} days. ` +
+      `${includesAiTools ? 'Includes AI CV + Cover Letter.' : 'AI CV + Cover Letter are not included.'}`,
+    sortOrder: Number(plan.SortOrder || 0),
+  };
+}
+
+async function getActivePlans() {
+  if (!models.Plans) return FALLBACK_PLANS.map((plan) => ({ ...plan }));
+  try {
+    const rows = await models.Plans.findAll({
+      where: { IsActive: true },
+      order: [['SortOrder', 'ASC'], ['Id', 'ASC']],
+    });
+    if (!rows || rows.length === 0) return FALLBACK_PLANS.map((plan) => ({ ...plan }));
+    return rows.map((row) => row.get({ plain: true }));
+  } catch (err) {
+    console.warn('Failed to load Plans, using fallback:', err?.message || err);
+    return FALLBACK_PLANS.map((plan) => ({ ...plan }));
+  }
+}
+
+async function getPlanByCode(planCode) {
+  const normalized = String(planCode || '').trim().toLowerCase();
+  if (!normalized) return null;
+  const plans = await getActivePlans();
+  return plans.find((plan) => String(plan.Code || '').trim().toLowerCase() === normalized) || null;
+}
+
+async function getPlanById(planId) {
+  const id = Number.parseInt(String(planId), 10);
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
+  const plans = await getActivePlans();
+  return plans.find((plan) => Number(plan.Id) === id) || null;
+}
+
+async function getActiveSubscriptionForUser(userId, now = new Date()) {
+  if (!models.UserSubscriptions || !userId) return null;
+  try {
+    const row = await models.UserSubscriptions.findOne({
+      where: {
+        UserId: userId,
+        Status: 'active',
+        StartsAt: { [Sequelize.Op.lte]: now },
+        EndsAt: { [Sequelize.Op.gt]: now },
+      },
+      order: [['EndsAt', 'DESC'], ['Id', 'DESC']],
+    });
+    return row || null;
+  } catch (err) {
+    console.warn('Failed to load active UserSubscription:', err?.message || err);
+    return null;
+  }
+}
+
+async function getUserBonusOpensTotal(userId) {
+  if (!models.UserBonusOpens || !userId) return 0;
+  try {
+    const rows = await models.UserBonusOpens.findAll({
+      where: { UserId: userId },
+      attributes: ['OpensGranted'],
+    });
+    return rows.reduce((acc, row) => acc + Math.max(0, Number(row.OpensGranted || 0)), 0);
+  } catch (err) {
+    console.warn('Failed to load UserBonusOpens:', err?.message || err);
+    return 0;
+  }
+}
+
+async function ensureChannelSubscribeBonus(userId) {
+  if (!models.UserBonusOpens || !userId) return 0;
+  const bonusOpens = Math.max(0, await getConfigInt(CHANNEL_SUBSCRIBE_BONUS_OPENS_CONFIG_KEY, 20));
+  if (bonusOpens <= 0) return 0;
+  try {
+    const [row, created] = await models.UserBonusOpens.findOrCreate({
+      where: { UserId: userId, Source: 'required_channels_join', Note: 'auto-bonus-v1' },
+      defaults: {
+        UserId: userId,
+        Source: 'required_channels_join',
+        OpensGranted: bonusOpens,
+        Note: 'auto-bonus-v1',
+        CreatedAt: new Date(),
+      },
+    });
+    return created ? Number(row.OpensGranted || 0) : 0;
+  } catch (err) {
+    console.warn('Failed to grant channel subscribe bonus:', err?.message || err);
+    return 0;
+  }
+}
+
+async function getUserMonthlyOpenUsage(userId, now = new Date()) {
+  if (!models.JobDetailsOpens || !userId) return 0;
+  const { start, end } = getMonthBoundsUtc(now);
+  try {
+    const opens = await models.JobDetailsOpens.count({
+      where: {
+        UserId: userId,
+        CreatedAt: {
+          [Sequelize.Op.gte]: start,
+          [Sequelize.Op.lt]: end,
+        },
+      },
+    });
+    return Math.max(0, opens);
+  } catch (err) {
+    console.warn('Failed to count monthly JobDetailsOpens:', err?.message || err);
+    return 0;
+  }
+}
+
+async function getUserEntitlement(userId, now = new Date()) {
+  const [activeSubscription, freeLimitRaw, bonusTotal, plans] = await Promise.all([
+    getActiveSubscriptionForUser(userId, now),
+    getConfigInt(FREE_JOB_OPENS_MONTHLY_LIMIT_CONFIG_KEY, 100),
+    getUserBonusOpensTotal(userId),
+    getActivePlans(),
+  ]);
+  const freeMonthlyLimit = Math.max(0, freeLimitRaw);
+  const subscriptionPlan = activeSubscription
+    ? plans.find((plan) => Number(plan.Id) === Number(activeSubscription.PlanId)) || null
+    : null;
+  const monthlyLimit = subscriptionPlan
+    ? Math.max(0, Number(subscriptionPlan.JobOpenMonthlyLimit || 0))
+    : freeMonthlyLimit;
+  const usedThisMonth = await getUserMonthlyOpenUsage(userId, now);
+  const totalAllowance = monthlyLimit + Math.max(0, bonusTotal);
+  const remainingOpens = Math.max(0, totalAllowance - usedThisMonth);
+  return {
+    activeSubscription,
+    subscriptionPlan,
+    freeMonthlyLimit,
+    bonusOpensTotal: Math.max(0, bonusTotal),
+    usedThisMonth,
+    monthlyLimit,
+    totalAllowance,
+    remainingOpens,
+  };
+}
+
+async function canUseAiToolsForUser(userId, now = new Date()) {
+  const activeSub = await getActiveSubscriptionForUser(userId, now);
+  if (!activeSub) return false;
+  const plan = await getPlanById(activeSub.PlanId);
+  return Boolean(plan?.IncludesAiTools);
+}
+
+async function buildMonetizationStatus(userId, now = new Date()) {
+  const [entitlement, activePlans] = await Promise.all([getUserEntitlement(userId, now), getActivePlans()]);
+  const planSummary = toPlanSummary(entitlement.subscriptionPlan);
+  const plans = activePlans
+    .filter((plan) => Boolean(plan?.IsActive))
+    .sort((a, b) => Number(a.SortOrder || 0) - Number(b.SortOrder || 0))
+    .map((plan) => toPlanSummary(plan));
+  return {
+    activePlan: planSummary,
+    subscriptionEndsAt: entitlement.activeSubscription?.EndsAt || null,
+    usedThisMonth: entitlement.usedThisMonth,
+    monthlyLimit: entitlement.monthlyLimit,
+    bonusOpensTotal: entitlement.bonusOpensTotal,
+    totalAllowance: entitlement.totalAllowance,
+    remainingOpens: entitlement.remainingOpens,
+    canUseAiTools: Boolean(planSummary?.includesAiTools),
+    freeMonthlyLimit: entitlement.freeMonthlyLimit,
+    plans,
+  };
+}
+
+function parseStartPayload(ctx) {
+  const rawText = String(ctx.message?.text || '').trim();
+  const commandMatch = rawText.match(/^\/start(?:@\w+)?(?:\s+(.+))?$/i);
+  if (!commandMatch) return '';
+  return String(commandMatch[1] || '').trim();
+}
+
+function buildPlanInvoicePayload(plan) {
+  return JSON.stringify({
+    type: 'monthly_plan',
+    planId: Number(plan.Id),
+    code: String(plan.Code || '').toLowerCase(),
+    version: 1,
+  });
+}
+
 function normalizeChatId(raw) {
   const s = String(raw ?? '').trim();
   if (!s) return null;
@@ -227,6 +454,22 @@ async function getMissingRequiredChannelsForUser(telegram, telegramUserId) {
     }
   }
   return missing;
+}
+
+function serializeRequiredChannels(channels) {
+  const list = Array.isArray(channels) ? channels : [];
+  return list.map((ch) => ({
+    channelId: String(ch.ChannelId || ''),
+    joinUrl: String(ch.JoinUrl || ''),
+  }));
+}
+
+async function getRequiredChannelsState(telegramUserId) {
+  if (!runtimeBotTelegram) {
+    return { ok: false, reason: 'unavailable', channels: [] };
+  }
+  const missing = await getMissingRequiredChannelsForUser(runtimeBotTelegram, telegramUserId);
+  return { ok: missing.length === 0, reason: null, channels: missing };
 }
 
 async function ensureHireAgentSimulationVisibleConfig() {
@@ -904,6 +1147,7 @@ async function adminMiniAppAuth(req, res, next) {
 function registerHandlers(bot, appBaseUrl, options = {}) {
   const hireAgentSimulationVisible = Boolean(options.hireAgentSimulationVisible);
   const seekerJobsUrl = appBaseUrl ? `${appBaseUrl}/app/seeker-jobs` : '';
+  const pricingTmaUrl = appBaseUrl ? `${appBaseUrl}/app/pricing` : '';
   const applicationsUrl = appBaseUrl ? `${appBaseUrl}/app/applications` : '';
   const profileUrl = appBaseUrl ? `${appBaseUrl}/app/profile` : '';
   const companiesUrl = appBaseUrl ? `${appBaseUrl}/app/companies` : '';
@@ -913,13 +1157,17 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
   const canUseProfileWebApp = isValidTelegramWebAppUrl(profileUrl);
   const canUseCompaniesWebApp = isValidTelegramWebAppUrl(companiesUrl);
+  const canUsePricingWebApp = isValidTelegramWebAppUrl(pricingTmaUrl);
   const canUseAdminWebApp = isValidTelegramWebAppUrl(adminUrl);
   const canUseAdminCompaniesWebApp = isValidTelegramWebAppUrl(adminCompaniesUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const startKeyboard = {
     inline_keyboard: [
-      [{ text: 'Телеграм Канал с удалёнкой', url: 'https://t.me/digitalnomadsrelocation' }],
-      [{ text: 'Узнать больше про делегирование откликов', callback_data: 'start_hireagent_info' }],
+      [
+        canUseSeekerJobsWebApp
+          ? { text: 'Получить доступ', web_app: { url: seekerJobsUrl } }
+          : { text: 'Получить доступ', callback_data: 'start_open_jobsearch' },
+      ],
     ],
   };
 
@@ -949,6 +1197,82 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           error: err?.message || err,
         });
       });
+    }
+  };
+
+  const formatPlanButtonLabel = (plan) => {
+    const limit = Number(plan?.JobOpenMonthlyLimit || 0);
+    const stars = Number(plan?.PriceInStars || 0);
+    return `${plan?.Name || 'Plan'} · ${limit} opens/mo · ${stars} ⭐`;
+  };
+
+  const sendPlansIntro = async (ctx) => {
+    const pricingButton = canUsePricingWebApp
+      ? { text: 'Pricing', web_app: { url: pricingTmaUrl } }
+      : { text: 'Pricing', callback_data: 'plan_pricing' };
+    await ctx.reply(
+      'Выберите формат оплаты через Telegram Stars. Нажмите Pricing, чтобы посмотреть доступные тарифы и описание.',
+      {
+        reply_markup: {
+          inline_keyboard: [[pricingButton]],
+        },
+      }
+    );
+  };
+
+  const sendPlanMenu = async (ctx) => {
+    const plans = (await getActivePlans()).filter((plan) => Boolean(plan?.IsActive));
+    if (plans.length === 0) {
+      await ctx.reply('Платные тарифы временно недоступны.');
+      return;
+    }
+    const sortedPlans = plans.sort((a, b) => Number(a.SortOrder || 0) - Number(b.SortOrder || 0));
+    const detailsText = sortedPlans
+      .map((plan) => {
+        const monthlyOpens = Number(plan.JobOpenMonthlyLimit || 0);
+        const stars = Number(plan.PriceInStars || 0);
+        const durationDays = Number(plan.DurationDays || 30);
+        const aiText = plan.IncludesAiTools
+          ? 'AI CV + Cover Letter included'
+          : 'AI CV + Cover Letter not included';
+        return `• ${plan.Name}: ${monthlyOpens} opens/month, ${durationDays} days, ${stars} ⭐, ${aiText}`;
+      })
+      .join('\n');
+    const buttons = plans
+      .sort((a, b) => Number(a.SortOrder || 0) - Number(b.SortOrder || 0))
+      .map((plan) => [{ text: formatPlanButtonLabel(plan), callback_data: `plan_buy_${String(plan.Code || '').toLowerCase()}` }]);
+    await ctx.reply(`Pricing plans:\n${detailsText}\n\nВыберите подписку для оплаты в Telegram Stars:`, {
+      reply_markup: { inline_keyboard: buttons },
+    });
+  };
+
+  const sendPlanInvoice = async (ctx, planCode) => {
+    const plan = await getPlanByCode(planCode);
+    if (!plan || Number(plan.PriceInStars || 0) < 1) {
+      await ctx.reply('Этот тариф недоступен для оплаты.');
+      return;
+    }
+    const payload = buildPlanInvoicePayload(plan);
+    const monthlyOpens = Number(plan.JobOpenMonthlyLimit || 0);
+    const hasAiTools = Boolean(plan.IncludesAiTools);
+    const title = `${plan.Name} — ${monthlyOpens} opens/month`;
+    const description =
+      `${plan.Name}: ${monthlyOpens} job opens per month for ${Number(plan.DurationDays || 30)} days. ` +
+      `${hasAiTools ? 'Includes AI CV and Cover Letter tools. ' : 'AI CV and Cover Letter are not included. '}` +
+      'Payment via Telegram Stars.';
+    try {
+      await ctx.telegram.sendInvoice(ctx.chat.id, {
+        title,
+        description,
+        payload,
+        provider_token: '',
+        currency: 'XTR',
+        prices: [{ label: `${plan.Name} (${Number(plan.DurationDays || 30)} days)`, amount: Number(plan.PriceInStars || 0) }],
+      });
+    } catch (err) {
+      const msg = err?.response?.body?.description ?? err?.message ?? String(err);
+      console.error('sendInvoice plan error:', msg);
+      await ctx.reply(`Не удалось выставить счёт. Попробуйте позже.${msg ? ` (${msg})` : ''}`);
     }
   };
 
@@ -1025,6 +1349,14 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   });
 
   bot.start(async (ctx) => {
+    const payload = parseStartPayload(ctx);
+    if (payload.startsWith('buy_')) {
+      const requestedCode = payload.replace(/^buy_/, '').trim().toLowerCase();
+      if (requestedCode) {
+        await sendPlanInvoice(ctx, requestedCode);
+        return;
+      }
+    }
     if (existsSync(startAvatarPath)) {
       await ctx.replyWithPhoto(
         { source: startAvatarPath },
@@ -1038,7 +1370,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.reply(START_INTRO_MESSAGE, { reply_markup: startKeyboard });
   });
 
-  bot.command('jobsearch', async (ctx) => {
+  const openJobSearchFromBot = async (ctx) => {
     if (canUseSeekerJobsWebApp) {
       await ctx.reply(
         'Ищите удаленные вакансии, отмечайте релевантные роли и открывайте детали прямо в мини-приложении.',
@@ -1051,6 +1383,55 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     await ctx.reply('Job search page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  };
+
+  bot.command('jobsearch', async (ctx) => {
+    await openJobSearchFromBot(ctx);
+  });
+
+  bot.action('start_open_jobsearch', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    await openJobSearchFromBot(ctx);
+  });
+
+  bot.command('plans', async (ctx) => {
+    await sendPlansIntro(ctx);
+  });
+
+  bot.action('plan_menu', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    await sendPlanMenu(ctx);
+  });
+
+  bot.action('plan_pricing', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    await sendPlanMenu(ctx);
+  });
+
+  bot.action(/^plan_buy_(.+)$/i, async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    const code = String(ctx.match?.[1] || '').trim().toLowerCase();
+    if (!code) {
+      await ctx.reply('Не удалось определить тариф для оплаты.');
+      return;
+    }
+    await sendPlanInvoice(ctx, code);
   });
 
   bot.command('applications', async (ctx) => {
@@ -1266,6 +1647,18 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.reply('Страница компаний требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).');
   });
 
+  bot.command('news', async (ctx) => {
+    await ctx.reply(
+      'Получайте последние новости про удалённую жизнь, релокацию и общение с единомышленниками.\n\n' +
+      'Сообщество Digital nomads. Work from anywhere:',
+      {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Ознакомиться', url: DIGITAL_NOMADS_CHANNEL_URL }]],
+      },
+      }
+    );
+  });
+
   bot.command('admin', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
       await ctx.reply('Admin panel is available only in private chat.');
@@ -1393,6 +1786,98 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     return next();
   });
 
+  bot.on('pre_checkout_query', async (ctx) => {
+    await ctx.answerPreCheckoutQuery(true);
+  });
+
+  bot.on('successful_payment', async (ctx) => {
+    const payment = ctx.message?.successful_payment;
+    if (!payment) return;
+    const telegramPaymentChargeId = String(payment.telegram_payment_charge_id || '').trim();
+    if (!telegramPaymentChargeId) {
+      console.error('successful_payment without telegram_payment_charge_id');
+      return;
+    }
+    let payload = {};
+    try {
+      payload = JSON.parse(String(payment.invoice_payload || '{}'));
+    } catch {
+      console.error('successful_payment invalid invoice_payload:', payment.invoice_payload);
+      return;
+    }
+    if (String(payload.type || '') !== 'monthly_plan') {
+      console.warn('successful_payment unknown payload type:', payload);
+      return;
+    }
+    const planCode = String(payload.code || '').trim().toLowerCase();
+    const plan = await getPlanByCode(planCode);
+    if (!plan) {
+      await ctx.reply('Оплата получена, но тариф не найден. Напишите в поддержку.');
+      return;
+    }
+
+    try {
+      const existing = models.TelegramPayments
+        ? await models.TelegramPayments.findOne({ where: { TelegramPaymentChargeId: telegramPaymentChargeId } })
+        : null;
+      if (existing) {
+        await ctx.reply('Оплата уже была зачислена ранее. Подписка активна.');
+        return;
+      }
+
+      const { user } = await ensureUserByTelegramId(
+        ctx.chat?.id,
+        ctx.from?.username ?? null,
+        ctx.from?.first_name ?? null,
+        ctx.from?.last_name ?? null
+      );
+      if (!user) {
+        await ctx.reply('Не удалось определить пользователя для зачисления подписки.');
+        return;
+      }
+
+      const paidAt = new Date();
+      let telegramPaymentRow = null;
+      if (models.TelegramPayments) {
+        telegramPaymentRow = await models.TelegramPayments.create({
+          UserId: user.Id,
+          PlanId: Number(plan.Id),
+          TelegramPaymentChargeId: telegramPaymentChargeId,
+          ProviderPaymentChargeId: payment.provider_payment_charge_id || null,
+          InvoicePayload: String(payment.invoice_payload || ''),
+          StarsAmount: Number(payment.total_amount || 0),
+          Currency: String(payment.currency || 'XTR'),
+          Status: 'completed',
+          PaidAt: paidAt,
+        });
+      }
+
+      if (!models.UserSubscriptions) {
+        await ctx.reply('Оплата получена, но таблица подписок недоступна. Напишите в поддержку.');
+        return;
+      }
+
+      const currentActive = await getActiveSubscriptionForUser(user.Id, paidAt);
+      const startsAt = currentActive ? new Date(currentActive.EndsAt) : paidAt;
+      const endsAt = new Date(startsAt.getTime() + Math.max(1, Number(plan.DurationDays || 30)) * 24 * 60 * 60 * 1000);
+      await models.UserSubscriptions.create({
+        UserId: user.Id,
+        PlanId: Number(plan.Id),
+        TelegramPaymentId: telegramPaymentRow?.Id ?? null,
+        StartsAt: startsAt,
+        EndsAt: endsAt,
+        Status: 'active',
+        CreatedAt: paidAt,
+      });
+
+      const until = endsAt.toISOString().slice(0, 10);
+      await ctx.reply(`✅ Оплата получена. Подписка ${plan.Name} активна до ${until}.`);
+    } catch (err) {
+      console.error('successful_payment processing failed:', err);
+      await ctx.reply('Оплата получена, но автозачисление не завершилось. Напишите в поддержку.');
+    }
+  });
+
   bot.catch((err) => {
     console.error('Bot error:', err);
   });
@@ -1434,6 +1919,9 @@ async function main() {
   });
   app.get('/app/seeker-jobs', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'seeker-jobs.html'));
+  });
+  app.get('/app/pricing', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'pricing.html'));
   });
   app.get('/app/admin/companies', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'admin-companies.html'));
@@ -1586,7 +2074,7 @@ async function main() {
     }
   });
 
-  app.post('/api/tailored-resume/upload', async (req, res) => {
+  app.post('/api/tailored-resume/upload', miniAppAuth, async (req, res) => {
     try {
       const seekerId = Number.parseInt(String(req.body?.seekerId), 10);
       const screenlyJobId = Number.parseInt(String(req.body?.screenlyJobId), 10);
@@ -1602,6 +2090,23 @@ async function main() {
       if (!jobTitle || !jobDescription || !mainResumeText) {
         return res.status(400).json({
           error: 'jobTitle, jobDescription, and mainResumeText are required',
+        });
+      }
+      const { user } = await ensureUserByTelegramId(
+        req.miniAppUser.id,
+        req.miniAppUser.username ?? null,
+        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+      );
+      if (!user || Number(user.Id) !== seekerId) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      const canUseAiTools = await canUseAiToolsForUser(user.Id);
+      if (!canUseAiTools) {
+        return res.status(402).json({
+          error: 'gold_required',
+          message: 'Gold plan is required for AI CV generation.',
+          monetization: await buildMonetizationStatus(user.Id),
         });
       }
 
@@ -1622,14 +2127,35 @@ async function main() {
     }
   });
 
-  app.post('/api/cover-letter', async (req, res) => {
+  app.post('/api/cover-letter', miniAppAuth, async (req, res) => {
     try {
+      const seekerId = Number.parseInt(String(req.body?.seekerId), 10);
       const jobTitle = String(req.body?.jobTitle || '').trim();
       const jobDescription = String(req.body?.jobDescription || '').trim();
       const mainResumeText = String(req.body?.mainResumeText || '').trim();
+      if (!Number.isSafeInteger(seekerId) || seekerId <= 0) {
+        return res.status(400).json({ error: 'seekerId is required and must be a positive integer' });
+      }
       if (!jobTitle || !jobDescription || !mainResumeText) {
         return res.status(400).json({
-          error: 'jobTitle, jobDescription, and mainResumeText are required',
+          error: 'seekerId, jobTitle, jobDescription, and mainResumeText are required',
+        });
+      }
+      const { user } = await ensureUserByTelegramId(
+        req.miniAppUser.id,
+        req.miniAppUser.username ?? null,
+        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+      );
+      if (!user || Number(user.Id) !== seekerId) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      const canUseAiTools = await canUseAiToolsForUser(user.Id);
+      if (!canUseAiTools) {
+        return res.status(402).json({
+          error: 'gold_required',
+          message: 'Gold plan is required for AI cover letter generation.',
+          monetization: await buildMonetizationStatus(user.Id),
         });
       }
 
@@ -1653,12 +2179,14 @@ async function main() {
         req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
         req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
       );
+      const monetization = await buildMonetizationStatus(user.Id);
       res.json({
         id: user.Id,
         telegramChatId: String(user.TelegramChatId),
         telegramUserName: user.TelegramUserName,
         resumeUrl: user.ResumeURL,
         skills: user.skills,
+        monetization,
         settings: {
           hhEnabled: !!user.HhEnabled,
           linkedInEnabled: !!user.LinkedInEnabled,
@@ -1675,6 +2203,45 @@ async function main() {
     } catch (err) {
       console.error('GET /api/app/profile:', err);
       res.status(500).json({ error: 'Failed to load profile' });
+    }
+  });
+
+  app.get('/api/app/monetization/status', miniAppAuth, async (req, res) => {
+    try {
+      const { user } = await ensureUserByTelegramId(
+        req.miniAppUser.id,
+        req.miniAppUser.username ?? null,
+        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+      );
+      const channelsState = await getRequiredChannelsState(req.miniAppUser.id);
+      const monetization = await buildMonetizationStatus(user.Id);
+      return res.json({
+        ok: true,
+        requiredChannelsSatisfied: channelsState.ok,
+        requiredChannels: serializeRequiredChannels(channelsState.channels),
+        monetization,
+      });
+    } catch (err) {
+      console.error('GET /api/app/monetization/status:', err);
+      return res.status(500).json({ error: 'Failed to load monetization status' });
+    }
+  });
+
+  app.get('/api/app/monetization/pay-link', miniAppAuth, async (req, res) => {
+    try {
+      const requestedCode = String(req.query.plan || '').trim().toLowerCase();
+      const plan = requestedCode ? await getPlanByCode(requestedCode) : null;
+      const safeCode = String(plan?.Code || requestedCode || 'silver').toLowerCase();
+      const botUsername = String(runtimeBotUsername || '').trim();
+      if (!botUsername) {
+        return res.status(503).json({ error: 'Bot username is unavailable' });
+      }
+      const deepLink = `https://t.me/${botUsername}?start=${encodeURIComponent(`buy_${safeCode}`)}`;
+      return res.json({ ok: true, deepLink, planCode: safeCode });
+    } catch (err) {
+      console.error('GET /api/app/monetization/pay-link:', err);
+      return res.status(500).json({ error: 'Failed to build payment link' });
     }
   });
 
@@ -1711,29 +2278,39 @@ async function main() {
         req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
       );
       if (!user) return res.status(404).json({ error: 'User not found' });
-      const gateAt = await getJobDetailsSubscribeGateN();
-      const opens = await models.JobDetailsOpens.count({ where: { UserId: user.Id } });
-      // Gate starts when historical opens reach N: count < N is free, count >= N requires subscription.
-      if (gateAt > 0 && opens >= gateAt) {
-        if (!runtimeBotTelegram) {
-          return res.status(503).json({ error: 'Subscription check is temporarily unavailable' });
-        }
-        const missing = await getMissingRequiredChannelsForUser(runtimeBotTelegram, req.miniAppUser.id);
-        if (missing.length > 0) {
-          return res.status(403).json({
-            error: 'subscribe_required',
-            opens,
-            gateAt,
-            channels: missing.map((ch) => ({
-              channelId: String(ch.ChannelId || ''),
-              joinUrl: String(ch.JoinUrl || ''),
-            })),
-            configKey: JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY,
-          });
-        }
+
+      // Required channels are mandatory for all users (free/silver/gold).
+      const channelsState = await getRequiredChannelsState(req.miniAppUser.id);
+      if (channelsState.reason === 'unavailable') {
+        return res.status(503).json({ error: 'Subscription check is temporarily unavailable' });
       }
+      if (!channelsState.ok) {
+        return res.status(403).json({
+          error: 'subscribe_required',
+          channels: serializeRequiredChannels(channelsState.channels),
+          requiredForAllPlans: true,
+        });
+      }
+      await ensureChannelSubscribeBonus(user.Id);
+
+      const entitlement = await getUserEntitlement(user.Id);
+      if (entitlement.remainingOpens <= 0) {
+        return res.status(402).json({
+          error: 'payment_required',
+          requiredForAllPlans: true,
+          monetization: await buildMonetizationStatus(user.Id),
+        });
+      }
+
       await models.JobDetailsOpens.create({ UserId: user.Id, JobId: jobId });
-      return res.json({ ok: true, opens: opens + 1, gateAt, subscribeSatisfied: true });
+      const updatedEntitlement = await getUserEntitlement(user.Id);
+      return res.json({
+        ok: true,
+        subscribeSatisfied: true,
+        requiredForAllPlans: true,
+        usedThisMonth: updatedEntitlement.usedThisMonth,
+        remainingOpens: updatedEntitlement.remainingOpens,
+      });
     } catch (err) {
       console.error('POST /api/app/analytics/job-details-open:', err);
       return res.status(500).json({ error: 'Failed to record job details open' });
@@ -1742,17 +2319,30 @@ async function main() {
 
   app.post('/api/app/required-channels/verify', miniAppAuth, async (req, res) => {
     try {
-      if (!runtimeBotTelegram) {
+      const { user } = await ensureUserByTelegramId(
+        req.miniAppUser.id,
+        req.miniAppUser.username ?? null,
+        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+      );
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const channelsState = await getRequiredChannelsState(req.miniAppUser.id);
+      if (channelsState.reason === 'unavailable') {
         return res.status(503).json({ error: 'Subscription check is temporarily unavailable' });
       }
-      const missing = await getMissingRequiredChannelsForUser(runtimeBotTelegram, req.miniAppUser.id);
+
+      let grantedBonusOpens = 0;
+      if (channelsState.ok) {
+        grantedBonusOpens = await ensureChannelSubscribeBonus(user.Id);
+      }
+      const monetization = await buildMonetizationStatus(user.Id);
       return res.json({
-        ok: missing.length === 0,
-        channels: missing.map((ch) => ({
-          channelId: String(ch.ChannelId || ''),
-          joinUrl: String(ch.JoinUrl || ''),
-        })),
-        configKey: JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY,
+        ok: channelsState.ok,
+        channels: serializeRequiredChannels(channelsState.channels),
+        requiredForAllPlans: true,
+        grantedBonusOpens,
+        monetization,
       });
     } catch (err) {
       console.error('POST /api/app/required-channels/verify:', err);
@@ -2227,13 +2817,9 @@ async function main() {
 
   try {
     await bot.telegram.setMyCommands([
-      { command: 'start', description: 'Что умеет бот' },
-      { command: 'jobsearch', description: 'Поиск вакансий' },
-      { command: 'hireagent', description: 'Делегировать отклики' },
-      { command: 'applications', description: 'Мои отклики' },
+      { command: 'start', description: 'Вакансии на удалёнку' },
       { command: 'companies', description: 'Компании с удалёнкой' },
-      { command: 'profile', description: 'Настройки' },
-      { command: 'about', description: 'О боте' },
+      { command: 'news', description: 'Новости про релокацию, удалёнку и ИИ' },
     ]);
   } catch (err) {
     console.error('Failed to set menu commands:', err.message);

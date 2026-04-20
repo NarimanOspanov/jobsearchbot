@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pricing</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { max-width: 760px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+      h1, h2, h3 { margin: 0 0 10px; }
+      .muted { color: var(--muted); }
+      .bad { color: #ef4444; }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      button {
+        border-radius: 8px;
+        border: 1px solid var(--accent);
+        background: var(--accent);
+        color: var(--text);
+        padding: 10px 12px;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 600;
+      }
+      .ghost { background: #0f1730; border-color: var(--border); }
+      .meta { display: grid; gap: 6px; margin: 8px 0 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Pricing</h1>
+      <p id="statusMsg" class="muted">Loading pricing...</p>
+      <div id="plansList" class="row" style="display:grid;gap:10px"></div>
+    </div>
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+      const urlParams = new URLSearchParams(window.location.search);
+      const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
+
+      function getTgInitDataString() {
+        const fromSdk = String(tg?.initData || '').trim();
+        if (fromSdk) return fromSdk;
+        try {
+          const q = new URLSearchParams(window.location.search);
+          const raw = q.get('tgWebAppData');
+          if (raw) {
+            try {
+              return decodeURIComponent(String(raw).replace(/\+/g, '%20'));
+            } catch {
+              return String(raw);
+            }
+          }
+        } catch {
+          // ignore
+        }
+        return '';
+      }
+
+      async function api(path, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        const initData = getTgInitDataString();
+        if (initData) {
+          headers['x-init-data'] = initData;
+          headers.Authorization = `tma ${initData}`;
+        } else if (devTelegramId) {
+          headers['x-dev-telegram-id'] = devTelegramId;
+        }
+        const response = await fetch(path, { ...options, headers });
+        if (!response.ok) throw new Error(await response.text());
+        const ct = (response.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) return response.json();
+        return response.text();
+      }
+
+      function esc(value) {
+        return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      async function openPayment(planCode) {
+        const code = String(planCode || '').trim().toLowerCase();
+        const endpoint = code
+          ? `/api/app/monetization/pay-link?plan=${encodeURIComponent(code)}`
+          : '/api/app/monetization/pay-link';
+        const payload = await api(endpoint);
+        const url = String(payload?.deepLink || '').trim();
+        if (!url) throw new Error('Payment link is empty');
+        if (window.Telegram?.WebApp?.openTelegramLink) {
+          window.Telegram.WebApp.openTelegramLink(url);
+          return;
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+
+      function renderStatus(monetization, channelsOk) {
+        const activePlanName = monetization?.activePlan?.name || 'Free';
+        const remaining = Number(monetization?.remainingOpens || 0);
+        const total = Number(monetization?.totalAllowance || 0);
+        const ai = monetization?.canUseAiTools ? 'enabled' : 'locked (Gold required)';
+        const text = `Current plan: ${activePlanName}. Remaining opens this month: ${remaining}/${total}. AI tools: ${ai}. Required channels: ${channelsOk ? 'ok' : 'required'}.`;
+        const el = document.getElementById('statusMsg');
+        el.className = 'muted';
+        el.textContent = text;
+      }
+
+      function renderPlans(plans) {
+        const list = document.getElementById('plansList');
+        if (!Array.isArray(plans) || plans.length === 0) {
+          list.innerHTML = '<div class="card muted">No plans available right now.</div>';
+          return;
+        }
+        list.innerHTML = plans
+          .map((plan) => {
+            const code = String(plan?.code || '').toLowerCase();
+            const description = String(plan?.description || '').trim();
+            const title = `${esc(plan?.name || code || 'Plan')} · ${Number(plan?.priceInStars || 0)} ⭐`;
+            return `<section class="card">
+              <h3>${title}</h3>
+              <div class="meta">
+                <span class="muted">${Number(plan?.jobOpenMonthlyLimit || 0)} opens/month</span>
+                <span class="muted">${Number(plan?.durationDays || 30)} days</span>
+                ${description ? `<span class="muted">${esc(description)}</span>` : ''}
+              </div>
+              <button type="button" data-plan-code="${esc(code)}">Buy ${esc(plan?.name || code || 'plan')}</button>
+            </section>`;
+          })
+          .join('');
+        list.querySelectorAll('[data-plan-code]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const statusEl = document.getElementById('statusMsg');
+            try {
+              await openPayment(btn.getAttribute('data-plan-code'));
+            } catch (err) {
+              statusEl.className = 'bad';
+              statusEl.textContent = err?.message || 'Failed to open payment.';
+            }
+          });
+        });
+      }
+
+      async function boot() {
+        const payload = await api('/api/app/monetization/status');
+        renderStatus(payload?.monetization || {}, Boolean(payload?.requiredChannelsSatisfied));
+        renderPlans(payload?.monetization?.plans || []);
+      }
+
+      boot().catch((err) => {
+        const el = document.getElementById('statusMsg');
+        el.className = 'bad';
+        el.textContent = `Failed to load pricing: ${err.message}`;
+      });
+    </script>
+  </body>
+</html>

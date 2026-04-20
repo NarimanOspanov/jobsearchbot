@@ -248,6 +248,13 @@
   <body>
     <div class="wrap">
       <p id="globalMsg" class="muted"></p>
+      <section class="card">
+        <h3>Subscription status</h3>
+        <p id="monetizationSummary" class="muted">Loading subscription status...</p>
+        <div class="row" style="margin-top:8px">
+          <button id="openPricingBtn" type="button" class="ghost-btn">Pricing</button>
+        </div>
+      </section>
 
       <div class="layout">
         <section class="card layout-col">
@@ -389,6 +396,19 @@
         </div>
       </div>
     </div>
+    <div id="paymentRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Payment required</strong>
+          <button id="paymentRequiredClose" type="button" class="ghost-btn">Close</button>
+        </div>
+        <div class="modal-body">
+          <p class="muted">You reached your available opens. Choose a plan and pay with Telegram Stars.</p>
+          <div id="paymentPlansList" class="row" style="display:grid;gap:8px"></div>
+          <p id="paymentRequiredMsg" class="muted"></p>
+        </div>
+      </div>
+    </div>
 
     <script>
       const tg = window.Telegram?.WebApp;
@@ -502,9 +522,11 @@
       let isSourcePickerOpen = false;
       let isResumeRequiredModalOpen = false;
       let isSubscribeRequiredModalOpen = false;
+      let isPaymentRequiredModalOpen = false;
       let currentResumeUrl = '';
       let continueGenerateAfterResumeUpload = false;
       let pendingSubscribeJobId = null;
+      let monetizationStatus = null;
       const FIND_IN_OPTIONS = ['Linkedin', 'Indeed', 'Telegram channels', 'Company sites'];
 
       const SEEKER_FILTER_KEYS = [
@@ -625,6 +647,11 @@
           if (v == null || v === '') p.delete(k); else p.set(k, String(v));
         });
         history.replaceState(null, '', `?${p.toString()}`);
+      }
+      function shouldOpenPricingOnBoot() {
+        const p = new URLSearchParams(location.search);
+        const raw = String(p.get('pricing') || p.get('view') || '').trim().toLowerCase();
+        return raw === '1' || raw === 'true' || raw === 'pricing';
       }
       function setMsg(id, txt, isErr = false) {
         const el = document.getElementById(id);
@@ -822,6 +849,50 @@
         document.getElementById('subscribeRequiredModal').classList.remove('on');
         setMsg('subscribeGateMsg', '');
       }
+      function openPaymentRequiredModal(payload) {
+        isPaymentRequiredModalOpen = true;
+        if (payload?.monetization) {
+          monetizationStatus = {
+            ...(monetizationStatus || {}),
+            monetization: payload.monetization,
+            requiredChannelsSatisfied: true,
+          };
+          renderMonetizationSummary();
+        }
+        const plans = Array.isArray(payload?.monetization?.plans) ? payload.monetization.plans : [];
+        const list = document.getElementById('paymentPlansList');
+        if (!plans.length) {
+          list.innerHTML = '<div class="muted">No plans available right now.</div>';
+        } else {
+          list.innerHTML = plans
+            .map((plan) => {
+              const code = String(plan?.code || '').trim().toLowerCase();
+              const title = `${esc(plan?.name || code || 'Plan')} · ${Number(plan?.jobOpenMonthlyLimit || 0)} opens/month · ${Number(plan?.priceInStars || 0)} ⭐`;
+              const description = String(plan?.description || '').trim();
+              return `<div class="resume-upload-box" style="margin-top:0">
+                <div style="font-weight:600;margin-bottom:6px">${title}</div>
+                ${description ? `<div class="muted" style="margin-bottom:8px">${esc(description)}</div>` : ''}
+                <button type="button" data-plan-code="${attrEsc(code)}">Buy ${esc(plan?.name || code || 'plan')}</button>
+              </div>`;
+            })
+            .join('');
+          list.querySelectorAll('[data-plan-code]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const planCode = String(btn.getAttribute('data-plan-code') || '').trim();
+              openTelegramPaymentForPlan(planCode).catch((err) => {
+                setMsg('paymentRequiredMsg', err?.message || 'Failed to open payment link.', true);
+              });
+            });
+          });
+        }
+        document.getElementById('paymentRequiredModal').classList.add('on');
+        setMsg('paymentRequiredMsg', '');
+      }
+      function closePaymentRequiredModal() {
+        isPaymentRequiredModalOpen = false;
+        document.getElementById('paymentRequiredModal').classList.remove('on');
+        setMsg('paymentRequiredMsg', '');
+      }
       function parseErrorPayload(raw) {
         const txt = String(raw || '').trim();
         if (!txt) return {};
@@ -866,6 +937,12 @@
           err.payload = payload;
           throw err;
         }
+        if (res.status === 402 && String(payload?.error || '') === 'payment_required') {
+          const err = new Error('payment_required');
+          err.code = 'payment_required';
+          err.payload = payload;
+          throw err;
+        }
         throw new Error(String(payload?.error || raw || 'Failed to record job details open'));
       }
       async function verifyRequiredChannels() {
@@ -873,10 +950,56 @@
           method: 'POST',
           body: JSON.stringify({}),
         });
+        if (payload?.monetization) {
+          monetizationStatus = {
+            ...(monetizationStatus || {}),
+            requiredChannelsSatisfied: Boolean(payload?.ok),
+            monetization: payload.monetization,
+          };
+          renderMonetizationSummary();
+        }
         const channels = Array.isArray(payload?.channels) ? payload.channels : [];
         if (payload?.ok) return true;
         openSubscribeRequiredModal({ channels }, pendingSubscribeJobId);
         return false;
+      }
+
+      function renderMonetizationSummary() {
+        const el = document.getElementById('monetizationSummary');
+        if (!el) return;
+        const monetization = monetizationStatus?.monetization || {};
+        const activePlan = monetization.activePlan;
+        const planName = activePlan?.name ? activePlan.name : 'Free';
+        const remaining = Number(monetization.remainingOpens || 0);
+        const used = Number(monetization.usedThisMonth || 0);
+        const total = Number(monetization.totalAllowance || 0);
+        const ai = monetization.canUseAiTools ? 'enabled' : 'locked (Gold required)';
+        const channelsOk = monetizationStatus?.requiredChannelsSatisfied
+          ? 'yes'
+          : 'no (required for all plans)';
+        const endsAt = monetization.subscriptionEndsAt ? String(monetization.subscriptionEndsAt).slice(0, 10) : '—';
+        el.textContent = `Plan: ${planName}. Opens this month: ${used}/${total}. Remaining: ${remaining}. AI tools: ${ai}. Required channels ok: ${channelsOk}. Subscription ends: ${endsAt}.`;
+      }
+
+      async function loadMonetizationStatus() {
+        const payload = await api('/api/app/monetization/status');
+        monetizationStatus = payload || null;
+        renderMonetizationSummary();
+      }
+
+      async function openTelegramPaymentForPlan(planCode) {
+        const code = String(planCode || '').trim().toLowerCase();
+        const endpoint = code
+          ? `/api/app/monetization/pay-link?plan=${encodeURIComponent(code)}`
+          : '/api/app/monetization/pay-link';
+        const payload = await api(endpoint);
+        const url = String(payload?.deepLink || '').trim();
+        if (!url) throw new Error('Payment link is empty.');
+        if (window.Telegram?.WebApp?.openTelegramLink) {
+          window.Telegram.WebApp.openTelegramLink(url);
+          return;
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
       }
 
       async function loadProfile() {
@@ -1137,10 +1260,15 @@
             setQ({ jobId: id });
             try {
               await trackJobDetailsOpen(id);
+              await loadMonetizationStatus();
               openJobById(id);
             } catch (err) {
               if (err?.code === 'subscribe_required') {
                 openSubscribeRequiredModal(err.payload || {}, id);
+                return;
+              }
+              if (err?.code === 'payment_required') {
+                openPaymentRequiredModal(err.payload || {});
                 return;
               }
               setMsg('dashMsg', err?.message || 'Could not open job details.', true);
@@ -1275,6 +1403,7 @@
             api(`${API_BASE}/api/cover-letter`, {
               method: 'POST',
               body: JSON.stringify({
+                seekerId: Number(seekerId),
                 jobTitle: selectedJob.title || '',
                 jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
                 mainResumeText,
@@ -1292,9 +1421,19 @@
           });
           selectedApplication = updated;
           await loadApplicationsByUser();
+          await loadMonetizationStatus();
           renderJobs();
           renderArtifacts();
           setMsg('jobMsg', 'Tailored CV + cover letter generated and saved.');
+        } catch (err) {
+          const rawMessage = String(err?.message || '');
+          if (rawMessage.includes('gold_required')) {
+            const payload = parseErrorPayload(rawMessage);
+            openPaymentRequiredModal(payload || {});
+            setMsg('jobMsg', 'Gold plan is required for AI CV and cover letter.', true);
+            return;
+          }
+          throw err;
         } finally {
           setJobBusy(false);
         }
@@ -1341,12 +1480,15 @@
               : ' Open this screen only from Telegram (bot menu or in-chat button), not from an external browser or a raw HTTPS bookmark.';
           throw new Error(`Missing Telegram Web App credentials (no init data).${hint}`);
         }
-        await Promise.all([loadProfile(), loadSkills()]);
+        await Promise.all([loadProfile(), loadSkills(), loadMonetizationStatus()]);
         const s = q();
         if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
         else renderSkillPickerSummary();
         syncHighlyRelevantCheckboxFromQuery();
         updatePagerUi();
+        if (shouldOpenPricingOnBoot()) {
+          openPaymentRequiredModal({ monetization: monetizationStatus?.monetization || {} });
+        }
         if (isTruthyQueryParam(s.showOnlyHighlyRelevant)) {
           await syncJobs();
         }
@@ -1389,6 +1531,16 @@
         }
         setQ({ showOnlyHighlyRelevant: event.target.checked ? 'true' : '' });
       });
+      document.getElementById('openPricingBtn').addEventListener('click', async () => {
+        try {
+          if (!monetizationStatus) {
+            await loadMonetizationStatus();
+          }
+          openPaymentRequiredModal({ monetization: monetizationStatus?.monetization || {} });
+        } catch (err) {
+          setMsg('globalMsg', err?.message || 'Failed to load pricing.', true);
+        }
+      });
       document.getElementById('uploadResumeBtn').addEventListener('click', () => {
         uploadMainResumeFromUi()
           .then((ok) => {
@@ -1415,6 +1567,10 @@
       document.getElementById('subscribeRequiredModal').addEventListener('click', (event) => {
         if (event.target.id === 'subscribeRequiredModal') closeSubscribeRequiredModal();
       });
+      document.getElementById('paymentRequiredClose').addEventListener('click', closePaymentRequiredModal);
+      document.getElementById('paymentRequiredModal').addEventListener('click', (event) => {
+        if (event.target.id === 'paymentRequiredModal') closePaymentRequiredModal();
+      });
       document.getElementById('verifySubscriptionBtn').addEventListener('click', async () => {
         onLoading('verifySubscriptionLoader', true);
         try {
@@ -1431,10 +1587,16 @@
           await trackJobDetailsOpen(pendingJobId);
           closeSubscribeRequiredModal();
           openJobById(pendingJobId);
+          await loadMonetizationStatus();
         } catch (err) {
           if (err?.code === 'subscribe_required') {
             openSubscribeRequiredModal(err.payload || {}, pendingSubscribeJobId);
             setMsg('subscribeGateMsg', 'Still not subscribed to all required channels.', true);
+            return;
+          }
+          if (err?.code === 'payment_required') {
+            closeSubscribeRequiredModal();
+            openPaymentRequiredModal(err.payload || {});
             return;
           }
           setMsg('subscribeGateMsg', err?.message || 'Failed to verify subscription.', true);
@@ -1476,6 +1638,7 @@
             closeResumeRequiredModal();
           }
           if (isSubscribeRequiredModalOpen) closeSubscribeRequiredModal();
+          if (isPaymentRequiredModalOpen) closePaymentRequiredModal();
           if (isInsightModalOpen) hideInsight();
           if (isHighlyRelevantHintModalOpen) closeHighlyRelevantHintModal();
         }
