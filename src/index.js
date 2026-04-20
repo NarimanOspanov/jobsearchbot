@@ -1081,20 +1081,91 @@ async function ensureUser(ctx) {
   return ensureUserByTelegramId(chatId, username, firstName, lastName);
 }
 
-/** Deletes Applications rows then User for the given Telegram chat id. */
+/** Deletes user-related rows then User for the given Telegram chat id. */
 async function removeUserDataByTelegramChatId(telegramChatId) {
   return sequelize.transaction(async (transaction) => {
     const user = await models.Users.findOne({
       where: { TelegramChatId: telegramChatId },
       transaction,
     });
-    if (!user) return { ok: true, found: false, applicationsDeleted: 0 };
+    if (!user) {
+      return {
+        ok: true,
+        found: false,
+        applicationsDeleted: 0,
+        referralsDeleted: 0,
+        telegramPaymentsDeleted: 0,
+        userSubscriptionsDeleted: 0,
+        userBonusOpensDeleted: 0,
+        requiredChannelUsersDeleted: 0,
+        searchClicksDeleted: 0,
+        jobDetailsOpensDeleted: 0,
+      };
+    }
     const applicationsDeleted = await models.Applications.destroy({
       where: { UserId: user.Id },
       transaction,
     });
+    const referralsDeleted = models.Referrals
+      ? await models.Referrals.destroy({
+        where: {
+          [Sequelize.Op.or]: [
+            { ReferrerUserId: user.Id },
+            { ReferredUserId: user.Id },
+          ],
+        },
+        transaction,
+      })
+      : 0;
+    const userSubscriptionsDeleted = models.UserSubscriptions
+      ? await models.UserSubscriptions.destroy({
+        where: { UserId: user.Id },
+        transaction,
+      })
+      : 0;
+    const telegramPaymentsDeleted = models.TelegramPayments
+      ? await models.TelegramPayments.destroy({
+        where: { UserId: user.Id },
+        transaction,
+      })
+      : 0;
+    const userBonusOpensDeleted = models.UserBonusOpens
+      ? await models.UserBonusOpens.destroy({
+        where: { UserId: user.Id },
+        transaction,
+      })
+      : 0;
+    const requiredChannelUsersDeleted = models.RequiredChannelUsers
+      ? await models.RequiredChannelUsers.destroy({
+        where: { UserId: user.TelegramChatId },
+        transaction,
+      })
+      : 0;
+    const searchClicksDeleted = models.SearchClicks
+      ? await models.SearchClicks.destroy({
+        where: { UserId: user.Id },
+        transaction,
+      })
+      : 0;
+    const jobDetailsOpensDeleted = models.JobDetailsOpens
+      ? await models.JobDetailsOpens.destroy({
+        where: { UserId: user.Id },
+        transaction,
+      })
+      : 0;
     await user.destroy({ transaction });
-    return { ok: true, found: true, applicationsDeleted };
+    return {
+      ok: true,
+      found: true,
+      applicationsDeleted,
+      referralsDeleted,
+      telegramPaymentsDeleted,
+      userSubscriptionsDeleted,
+      userBonusOpensDeleted,
+      requiredChannelUsersDeleted,
+      searchClicksDeleted,
+      jobDetailsOpensDeleted,
+    };
   });
 }
 
