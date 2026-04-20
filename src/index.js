@@ -81,6 +81,7 @@ const HIRE_AGENT_SIMULATION_CONFIG_KEY = 'hireAgentSimulationVisible';
 const JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY = 'JobDetailsOpensBeforeSubscribeGate';
 const FREE_JOB_OPENS_MONTHLY_LIMIT_CONFIG_KEY = 'FreeJobOpensMonthlyLimit';
 const CHANNEL_SUBSCRIBE_BONUS_OPENS_CONFIG_KEY = 'ChannelSubscribeBonusOpens';
+const REFERRAL_BONUS_OPENS_CONFIG_KEY = 'ReferralBonusOpens';
 const SCREENLY_SKILLS_URL = 'https://screenly.work/api/all-skills';
 const DIGITAL_NOMADS_CHANNEL_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
 const screenlySkillsCache = {
@@ -308,6 +309,33 @@ async function ensureChannelSubscribeBonus(userId) {
   }
 }
 
+async function grantReferralBonusToReferrer(referrerUserId, referredUserId) {
+  if (!models.UserBonusOpens || !referrerUserId || !referredUserId) return 0;
+  const bonusOpens = Math.max(0, await getConfigInt(REFERRAL_BONUS_OPENS_CONFIG_KEY, 10));
+  if (bonusOpens <= 0) return 0;
+  try {
+    const note = `referred-user-${referredUserId}`;
+    const [row, created] = await models.UserBonusOpens.findOrCreate({
+      where: {
+        UserId: referrerUserId,
+        Source: 'referral_invite',
+        Note: note,
+      },
+      defaults: {
+        UserId: referrerUserId,
+        Source: 'referral_invite',
+        OpensGranted: bonusOpens,
+        Note: note,
+        CreatedAt: new Date(),
+      },
+    });
+    return created ? Number(row.OpensGranted || 0) : 0;
+  } catch (err) {
+    console.warn('Failed to grant referral bonus:', err?.message || err);
+    return 0;
+  }
+}
+
 async function getUserMonthlyOpenUsage(userId, now = new Date()) {
   if (!models.JobDetailsOpens || !userId) return 0;
   const { start, end } = getMonthBoundsUtc(now);
@@ -390,6 +418,13 @@ function parseStartPayload(ctx) {
   const commandMatch = rawText.match(/^\/start(?:@\w+)?(?:\s+(.+))?$/i);
   if (!commandMatch) return '';
   return String(commandMatch[1] || '').trim();
+}
+
+function parseStartReferralChatId(startPayload) {
+  const payload = String(startPayload || '').trim();
+  if (!/^\d+$/.test(payload)) return null;
+  const chatId = Number.parseInt(payload, 10);
+  return Number.isSafeInteger(chatId) && chatId > 0 ? chatId : null;
 }
 
 function buildPlanInvoicePayload(plan) {
@@ -1246,6 +1281,51 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     });
   };
 
+  const resolveBotUsername = async (ctx) => {
+    const fromCtx = String(ctx?.botInfo?.username || '').trim();
+    if (fromCtx) return fromCtx;
+    try {
+      const me = await ctx.telegram.getMe();
+      return String(me?.username || '').trim();
+    } catch {
+      return '';
+    }
+  };
+
+  const processReferralOnStart = async (ctx, invitedUser, startPayload) => {
+    if (!invitedUser || !models.Referrals) return;
+    const referrerTelegramChatId = parseStartReferralChatId(startPayload);
+    if (!referrerTelegramChatId) return;
+    if (Number(invitedUser.TelegramChatId) === Number(referrerTelegramChatId)) return;
+    try {
+      const referrer = await models.Users.findOne({ where: { TelegramChatId: referrerTelegramChatId } });
+      if (!referrer || Number(referrer.Id) === Number(invitedUser.Id)) return;
+
+      const [row, created] = await models.Referrals.findOrCreate({
+        where: {
+          ReferrerUserId: referrer.Id,
+          ReferredUserId: invitedUser.Id,
+        },
+        defaults: {
+          ReferrerUserId: referrer.Id,
+          ReferredUserId: invitedUser.Id,
+          ReferredAt: new Date(),
+        },
+      });
+      if (!created || !row) return;
+
+      const granted = await grantReferralBonusToReferrer(referrer.Id, invitedUser.Id);
+      if (granted > 0) {
+        await ctx.telegram.sendMessage(
+          Number(referrer.TelegramChatId),
+          `🎉 Ваш друг запустил бота по вашей ссылке. Начислено +${granted} открытий вакансий.`
+        ).catch(() => { });
+      }
+    } catch (err) {
+      console.warn('processReferralOnStart failed:', err?.message || err);
+    }
+  };
+
   const sendPlanInvoice = async (ctx, planCode) => {
     const plan = await getPlanByCode(planCode);
     if (!plan || Number(plan.PriceInStars || 0) < 1) {
@@ -1357,6 +1437,13 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         return;
       }
     }
+    const { user: invitedUser } = await ensureUserByTelegramId(
+      ctx.chat?.id ?? ctx.from?.id,
+      ctx.from?.username ?? null,
+      ctx.from?.first_name ?? null,
+      ctx.from?.last_name ?? null
+    );
+    await processReferralOnStart(ctx, invitedUser, payload);
     if (existsSync(startAvatarPath)) {
       await ctx.replyWithPhoto(
         { source: startAvatarPath },
@@ -1657,6 +1744,47 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       },
       }
     );
+  });
+
+  bot.command('referrals', async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Команда доступна только в личном чате с ботом.');
+      return;
+    }
+    const { user } = await ensureUserByTelegramId(
+      ctx.chat?.id ?? ctx.from?.id,
+      ctx.from?.username ?? null,
+      ctx.from?.first_name ?? null,
+      ctx.from?.last_name ?? null
+    );
+    if (!user) {
+      await ctx.reply('Не удалось определить пользователя.');
+      return;
+    }
+    const bonusOpens = Math.max(0, await getConfigInt(REFERRAL_BONUS_OPENS_CONFIG_KEY, 10));
+    const invitedCount = models.Referrals
+      ? await models.Referrals.count({ where: { ReferrerUserId: user.Id } })
+      : 0;
+    const botUsername = await resolveBotUsername(ctx);
+    const referralLink = botUsername
+      ? `https://t.me/${botUsername}?start=${encodeURIComponent(String(user.TelegramChatId || ''))}`
+      : '';
+    const shareUrl = referralLink
+      ? `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Привет! Попробуй бот для поиска удаленной работы:')}`
+      : '';
+    const lines = [
+      `Пригласите друга и получите +${bonusOpens} открытий вакансий.`,
+      `Уже приглашено: ${invitedCount}`,
+      '',
+      referralLink || 'Реферальная ссылка временно недоступна.',
+    ];
+    const inlineKeyboard = shareUrl
+      ? [[{ text: 'Поделиться ссылкой', url: shareUrl }]]
+      : [];
+    await ctx.reply(lines.join('\n'), {
+      disable_web_page_preview: true,
+      ...(inlineKeyboard.length > 0 ? { reply_markup: { inline_keyboard: inlineKeyboard } } : {}),
+    });
   });
 
   bot.command('admin', async (ctx) => {
@@ -2819,6 +2947,7 @@ async function main() {
     await bot.telegram.setMyCommands([
       { command: 'start', description: 'Вакансии на удалёнку' },
       { command: 'companies', description: 'Компании с удалёнкой' },
+      { command: 'referrals', description: 'Бонусы за приглашения' },
       { command: 'news', description: 'Новости про релокацию, удалёнку и ИИ' },
     ]);
   } catch (err) {
