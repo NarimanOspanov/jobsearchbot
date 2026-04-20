@@ -1188,6 +1188,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const companiesUrl = appBaseUrl ? `${appBaseUrl}/app/companies` : '';
   const adminUrl = appBaseUrl ? `${appBaseUrl}/app/admin` : '';
   const adminCompaniesUrl = appBaseUrl ? `${appBaseUrl}/app/admin/companies` : '';
+  const stat2Url = appBaseUrl ? `${appBaseUrl}/app/stat2` : '';
   const canUseSeekerJobsWebApp = isValidTelegramWebAppUrl(seekerJobsUrl);
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
   const canUseProfileWebApp = isValidTelegramWebAppUrl(profileUrl);
@@ -1195,6 +1196,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUsePricingWebApp = isValidTelegramWebAppUrl(pricingTmaUrl);
   const canUseAdminWebApp = isValidTelegramWebAppUrl(adminUrl);
   const canUseAdminCompaniesWebApp = isValidTelegramWebAppUrl(adminCompaniesUrl);
+  const canUseStat2WebApp = isValidTelegramWebAppUrl(stat2Url);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const startKeyboard = {
     inline_keyboard: [
@@ -1891,90 +1893,30 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     return Math.min(365, parsed);
   };
 
-  const getPeriodStartUtc = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-
-  const buildStat2Keyboard = (selectedDays) => ({
-    inline_keyboard: [
-      [
-        { text: selectedDays === 1 ? '• 1d' : '1d', callback_data: 'stat2_period_1' },
-        { text: selectedDays === 7 ? '• 7d' : '7d', callback_data: 'stat2_period_7' },
-        { text: selectedDays === 30 ? '• 30d' : '30d', callback_data: 'stat2_period_30' },
-      ],
-    ],
-  });
-
-  const loadStat2Metrics = async (periodDays) => {
-    const since = getPeriodStartUtc(periodDays);
-    const usersJoinedPromise = models.Users
-      ? models.Users.count({ where: { DateJoined: { [Sequelize.Op.gte]: since } } })
-      : Promise.resolve(0);
-    const usersJoinedByInvitePromise = models.Referrals
-      ? models.Referrals.count({ where: { ReferredAt: { [Sequelize.Op.gte]: since } } })
-      : Promise.resolve(0);
-    const paymentsPromise = models.TelegramPayments
-      ? models.TelegramPayments.count({ where: { PaidAt: { [Sequelize.Op.gte]: since } } })
-      : Promise.resolve(0);
-    const requiredChannelUsersPromise = models.RequiredChannelUsers
-      ? models.RequiredChannelUsers.count({ where: { DateTime: { [Sequelize.Op.gte]: since } } })
-      : Promise.resolve(0);
-    const [usersJoined, usersJoinedByInvite, payments, requiredChannelUsers] = await Promise.all([
-      usersJoinedPromise,
-      usersJoinedByInvitePromise,
-      paymentsPromise,
-      requiredChannelUsersPromise,
-    ]);
-    return { usersJoined, usersJoinedByInvite, payments, requiredChannelUsers };
-  };
-
-  const renderStat2Text = (periodDays, metrics) => {
-    return [
-      `📊 Stat2 for last ${periodDays} day(s)`,
-      '',
-      `Users joined: ${metrics.usersJoined}`,
-      `Users joined by invite: ${metrics.usersJoinedByInvite}`,
-      `Payments: ${metrics.payments}`,
-      `Required channel users: ${metrics.requiredChannelUsers}`,
-    ].join('\n');
-  };
-
   bot.command('stat2', async (ctx) => {
     const ok = await ensurePrivateAdminForHiddenCommand(ctx, 'This command');
     if (!ok) return;
     const text = String(ctx.message?.text || '').trim();
     const parts = text.split(/\s+/).filter(Boolean);
     const periodDays = parsePeriodDays(parts[1], 7);
-    try {
-      const metrics = await loadStat2Metrics(periodDays);
-      await ctx.reply(renderStat2Text(periodDays, metrics), {
-        reply_markup: buildStat2Keyboard(periodDays),
+    const stat2PageUrl = stat2Url ? `${stat2Url}?period=${encodeURIComponent(periodDays)}` : '';
+    if (!stat2PageUrl) {
+      await ctx.reply('Stat2 page URL is not configured.');
+      return;
+    }
+    if (canUseStat2WebApp) {
+      await ctx.reply('Open Stat2 dashboard:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Open Stat2', web_app: { url: stat2PageUrl } }]],
+        },
       });
-    } catch (err) {
-      console.error('stat2 failed:', err);
-      await ctx.reply('Failed to build stat2. Check server logs.');
+      return;
     }
-  });
-
-  bot.action(/^stat2_period_(\d+)$/, async (ctx) => {
-    try {
-      await ctx.answerCbQuery();
-    } catch {
-      /* ignore */
-    }
-    const ok = await ensurePrivateAdminForHiddenCommand(ctx, 'This command');
-    if (!ok) return;
-    const periodDays = parsePeriodDays(ctx.match?.[1], 7);
-    try {
-      const metrics = await loadStat2Metrics(periodDays);
-      const text = renderStat2Text(periodDays, metrics);
-      await ctx.editMessageText(text, {
-        reply_markup: buildStat2Keyboard(periodDays),
-      }).catch(async () => {
-        await ctx.reply(text, { reply_markup: buildStat2Keyboard(periodDays) });
-      });
-    } catch (err) {
-      console.error('stat2 period action failed:', err);
-      await ctx.reply('Failed to build stat2 for selected period.');
-    }
+    await ctx.reply('Open Stat2 dashboard:', {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Open Stat2', url: stat2PageUrl }]],
+      },
+    });
   });
 
   bot.command('removeuser', async (ctx) => {
@@ -2178,6 +2120,9 @@ async function main() {
   app.get('/app/stat', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'stats.html'));
   });
+  app.get('/app/stat2', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'stat2.html'));
+  });
 
   let runtimeBotUsername = '';
   app.get('/api/app/bot-info', (_req, res) => res.json({ botUsername: runtimeBotUsername }));
@@ -2200,6 +2145,106 @@ async function main() {
     } catch (err) {
       console.error('GET /api/admin/job-import-stats:', err);
       return res.status(500).json({ error: 'Failed to load job import stats' });
+    }
+  });
+
+  app.get('/api/app/admin/stat2', adminMiniAppAuth, async (req, res) => {
+    try {
+      const periodRaw = String(req.query.period || '7').trim();
+      const period = /^\d+$/.test(periodRaw)
+        ? Math.min(365, Math.max(1, Number.parseInt(periodRaw, 10)))
+        : 7;
+      const now = Date.now();
+      const since = new Date(now - period * 24 * 60 * 60 * 1000);
+      const toUtcDateKey = (value) => {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toISOString().slice(0, 10);
+      };
+      const byDay = new Map();
+      for (let i = period - 1; i >= 0; i -= 1) {
+        const day = new Date(now - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        byDay.set(day, {
+          date: day,
+          usersJoined: 0,
+          usersJoinedByInvite: 0,
+          payments: 0,
+          requiredChannelUsers: 0,
+        });
+      }
+      const usersJoinedRowsPromise = models.Users
+        ? models.Users.findAll({
+          attributes: ['DateJoined'],
+          where: { DateJoined: { [Sequelize.Op.gte]: since } },
+          raw: true,
+        })
+        : Promise.resolve([]);
+      const invitedRowsPromise = models.Referrals
+        ? models.Referrals.findAll({
+          attributes: ['ReferredAt', 'ReferredUserId'],
+          where: { ReferredAt: { [Sequelize.Op.gte]: since } },
+          raw: true,
+        })
+        : Promise.resolve([]);
+      const paymentsRowsPromise = models.TelegramPayments
+        ? models.TelegramPayments.findAll({
+          attributes: ['PaidAt'],
+          where: { PaidAt: { [Sequelize.Op.gte]: since } },
+          raw: true,
+        })
+        : Promise.resolve([]);
+      const requiredRowsPromise = models.RequiredChannelUsers
+        ? models.RequiredChannelUsers.findAll({
+          attributes: ['DateTime', 'UserId'],
+          where: { DateTime: { [Sequelize.Op.gte]: since } },
+          raw: true,
+        })
+        : Promise.resolve([]);
+      const [usersJoinedRows, invitedRows, paymentsRows, requiredRows] = await Promise.all([
+        usersJoinedRowsPromise,
+        invitedRowsPromise,
+        paymentsRowsPromise,
+        requiredRowsPromise,
+      ]);
+      for (const row of usersJoinedRows) {
+        const key = toUtcDateKey(row?.DateJoined);
+        if (key && byDay.has(key)) byDay.get(key).usersJoined += 1;
+      }
+      for (const row of invitedRows) {
+        const key = toUtcDateKey(row?.ReferredAt);
+        if (key && byDay.has(key)) byDay.get(key).usersJoinedByInvite += 1;
+      }
+      for (const row of paymentsRows) {
+        const key = toUtcDateKey(row?.PaidAt);
+        if (key && byDay.has(key)) byDay.get(key).payments += 1;
+      }
+      const requiredUserPerDaySet = new Set();
+      for (const row of requiredRows) {
+        const key = toUtcDateKey(row?.DateTime);
+        const userId = Number.parseInt(String(row?.UserId || ''), 10);
+        if (!key || !byDay.has(key) || !Number.isSafeInteger(userId)) continue;
+        const dedupeKey = `${key}:${userId}`;
+        if (requiredUserPerDaySet.has(dedupeKey)) continue;
+        requiredUserPerDaySet.add(dedupeKey);
+        byDay.get(key).requiredChannelUsers += 1;
+      }
+      const series = Array.from(byDay.values());
+      const totals = series.reduce((acc, row) => {
+        acc.usersJoined += row.usersJoined;
+        acc.usersJoinedByInvite += row.usersJoinedByInvite;
+        acc.payments += row.payments;
+        acc.requiredChannelUsers += row.requiredChannelUsers;
+        return acc;
+      }, {
+        usersJoined: 0,
+        usersJoinedByInvite: 0,
+        payments: 0,
+        requiredChannelUsers: 0,
+      });
+      return res.json({ success: true, period, since: since.toISOString(), totals, series });
+    } catch (err) {
+      console.error('GET /api/app/admin/stat2:', err);
+      return res.status(500).json({ error: 'Failed to load stat2 data' });
     }
   });
 

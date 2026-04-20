@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stat2 Dashboard</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+        --bad: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      h1, h2, h3 { margin: 0; }
+      .muted { color: var(--muted); }
+      .bad { color: var(--bad); }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      select, button {
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #0f1730;
+        color: var(--text);
+        padding: 8px 10px;
+        font: inherit;
+      }
+      button {
+        border-color: var(--accent);
+        background: var(--accent);
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .metrics {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      }
+      .metric-title {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 6px;
+      }
+      .metric-value {
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1;
+      }
+      #chartWrap {
+        min-height: 320px;
+      }
+      canvas {
+        width: 100%;
+        max-height: 420px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="card">
+        <h1>Stat2</h1>
+        <p class="muted" style="margin:8px 0 0;">Users, invites, payments and required channel users by period.</p>
+      </section>
+
+      <section class="card">
+        <div class="toolbar">
+          <label class="muted">
+            Period (days):
+            <select id="periodSel">
+              <option value="1">1</option>
+              <option value="7">7</option>
+              <option value="30">30</option>
+              <option value="90">90</option>
+            </select>
+          </label>
+          <button id="reloadBtn" type="button">Reload</button>
+          <span id="msg" class="muted"></span>
+        </div>
+      </section>
+
+      <section class="metrics">
+        <article class="card">
+          <div class="metric-title">Users joined</div>
+          <div id="usersJoined" class="metric-value">-</div>
+        </article>
+        <article class="card">
+          <div class="metric-title">Users joined by invite</div>
+          <div id="usersJoinedByInvite" class="metric-value">-</div>
+        </article>
+        <article class="card">
+          <div class="metric-title">Payments</div>
+          <div id="payments" class="metric-value">-</div>
+        </article>
+        <article class="card">
+          <div class="metric-title">Required channel users</div>
+          <div id="requiredChannelUsers" class="metric-value">-</div>
+        </article>
+      </section>
+
+      <section id="chartWrap" class="card">
+        <canvas id="trendChart"></canvas>
+      </section>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const periodFromUrl = String(urlParams.get('period') || '').trim();
+      const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
+      const chartCanvas = document.getElementById('trendChart');
+      let trendChart = null;
+
+      function toInt(value, fallback) {
+        const parsed = Number.parseInt(String(value || ''), 10);
+        if (!Number.isSafeInteger(parsed) || parsed <= 0) return fallback;
+        return parsed;
+      }
+
+      function getInitDataString() {
+        const fromSdk = String(tg?.initData || '').trim();
+        if (fromSdk) return fromSdk;
+        try {
+          const q = new URLSearchParams(window.location.search);
+          const raw = q.get('tgWebAppData');
+          if (!raw) return '';
+          try {
+            return decodeURIComponent(String(raw).replace(/\+/g, '%20'));
+          } catch {
+            return String(raw);
+          }
+        } catch {
+          return '';
+        }
+      }
+
+      async function api(path) {
+        const headers = { 'Content-Type': 'application/json' };
+        const initData = getInitDataString();
+        if (initData) {
+          headers['x-init-data'] = initData;
+          headers.Authorization = `tma ${initData}`;
+        } else if (devTelegramId) {
+          headers['x-dev-telegram-id'] = devTelegramId;
+        }
+        const response = await fetch(path, { headers });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload?.error || response.statusText || 'Request failed');
+        }
+        return payload;
+      }
+
+      function setMetric(id, value) {
+        const el = document.getElementById(id);
+        el.textContent = Number(value || 0).toLocaleString('en-US');
+      }
+
+      function renderTotals(totals) {
+        setMetric('usersJoined', totals?.usersJoined || 0);
+        setMetric('usersJoinedByInvite', totals?.usersJoinedByInvite || 0);
+        setMetric('payments', totals?.payments || 0);
+        setMetric('requiredChannelUsers', totals?.requiredChannelUsers || 0);
+      }
+
+      function renderChart(series) {
+        const labels = Array.isArray(series) ? series.map((row) => String(row?.date || '').slice(5)) : [];
+        const usersJoined = series.map((row) => Number(row?.usersJoined || 0));
+        const usersJoinedByInvite = series.map((row) => Number(row?.usersJoinedByInvite || 0));
+        const payments = series.map((row) => Number(row?.payments || 0));
+        const requiredChannelUsers = series.map((row) => Number(row?.requiredChannelUsers || 0));
+        if (trendChart) trendChart.destroy();
+        trendChart = new Chart(chartCanvas, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Users joined', data: usersJoined, borderColor: '#4f7cff', backgroundColor: 'rgba(79,124,255,0.2)', tension: 0.2 },
+              { label: 'Users joined by invite', data: usersJoinedByInvite, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.2)', tension: 0.2 },
+              { label: 'Payments', data: payments, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2 },
+              { label: 'Required channel users', data: requiredChannelUsers, borderColor: '#e879f9', backgroundColor: 'rgba(232,121,249,0.2)', tension: 0.2 },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: '#eaf0ff' } },
+              tooltip: { mode: 'index', intersect: false },
+            },
+            interaction: { mode: 'nearest', axis: 'x', intersect: false },
+            scales: {
+              x: { ticks: { color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' } },
+              y: { beginAtZero: true, ticks: { precision: 0, color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' } },
+            },
+          },
+        });
+      }
+
+      async function load() {
+        const msg = document.getElementById('msg');
+        msg.className = 'muted';
+        msg.textContent = 'Loading...';
+        const period = toInt(document.getElementById('periodSel').value, 7);
+        try {
+          const payload = await api(`/api/app/admin/stat2?period=${encodeURIComponent(period)}`);
+          renderTotals(payload?.totals || {});
+          renderChart(Array.isArray(payload?.series) ? payload.series : []);
+          msg.textContent = `Updated for ${period} day(s)`;
+          const current = new URL(window.location.href);
+          current.searchParams.set('period', String(period));
+          window.history.replaceState(null, '', current.toString());
+        } catch (err) {
+          msg.className = 'bad';
+          msg.textContent = `Failed to load: ${err?.message || 'Unknown error'}`;
+        }
+      }
+
+      const periodSel = document.getElementById('periodSel');
+      periodSel.value = String(toInt(periodFromUrl, 7));
+      document.getElementById('reloadBtn').addEventListener('click', load);
+      periodSel.addEventListener('change', load);
+      load();
+    </script>
+  </body>
+</html>
