@@ -248,13 +248,6 @@
   <body>
     <div class="wrap">
       <p id="globalMsg" class="muted"></p>
-      <section class="card">
-        <h3>Subscription status</h3>
-        <p id="monetizationSummary" class="muted">Loading subscription status...</p>
-        <div class="row" style="margin-top:8px">
-          <button id="openPricingBtn" type="button" class="ghost-btn">Pricing</button>
-        </div>
-      </section>
 
       <div class="layout">
         <section class="card layout-col">
@@ -403,8 +396,11 @@
           <button id="paymentRequiredClose" type="button" class="ghost-btn">Close</button>
         </div>
         <div class="modal-body">
-          <p class="muted">You reached your available opens. Choose a plan and pay with Telegram Stars.</p>
+          <p class="muted">Вы достигли лимита. Выберите: перейти на платный план или пригласить друга и получить бонусные открытия.</p>
           <div id="paymentPlansList" class="row" style="display:grid;gap:8px"></div>
+          <div class="row" style="margin-top:10px">
+            <button id="inviteFriendBtn" type="button" class="ghost-btn">Пригласить друга (+бонус)</button>
+          </div>
           <p id="paymentRequiredMsg" class="muted"></p>
         </div>
       </div>
@@ -527,6 +523,7 @@
       let continueGenerateAfterResumeUpload = false;
       let pendingSubscribeJobId = null;
       let monetizationStatus = null;
+      let botUsername = '';
       const FIND_IN_OPTIONS = ['Linkedin', 'Indeed', 'Telegram channels', 'Company sites'];
 
       const SEEKER_FILTER_KEYS = [
@@ -857,7 +854,6 @@
             monetization: payload.monetization,
             requiredChannelsSatisfied: true,
           };
-          renderMonetizationSummary();
         }
         const plans = Array.isArray(payload?.monetization?.plans) ? payload.monetization.plans : [];
         const list = document.getElementById('paymentPlansList');
@@ -956,7 +952,6 @@
             requiredChannelsSatisfied: Boolean(payload?.ok),
             monetization: payload.monetization,
           };
-          renderMonetizationSummary();
         }
         const channels = Array.isArray(payload?.channels) ? payload.channels : [];
         if (payload?.ok) return true;
@@ -964,27 +959,17 @@
         return false;
       }
 
-      function renderMonetizationSummary() {
-        const el = document.getElementById('monetizationSummary');
-        if (!el) return;
-        const monetization = monetizationStatus?.monetization || {};
-        const activePlan = monetization.activePlan;
-        const planName = activePlan?.name ? activePlan.name : 'Free';
-        const remaining = Number(monetization.remainingOpens || 0);
-        const used = Number(monetization.usedThisMonth || 0);
-        const total = Number(monetization.totalAllowance || 0);
-        const ai = monetization.canUseAiTools ? 'enabled' : 'locked (Gold required)';
-        const channelsOk = monetizationStatus?.requiredChannelsSatisfied
-          ? 'yes'
-          : 'no (required for all plans)';
-        const endsAt = monetization.subscriptionEndsAt ? String(monetization.subscriptionEndsAt).slice(0, 10) : '—';
-        el.textContent = `Plan: ${planName}. Opens this month: ${used}/${total}. Remaining: ${remaining}. AI tools: ${ai}. Required channels ok: ${channelsOk}. Subscription ends: ${endsAt}.`;
-      }
-
       async function loadMonetizationStatus() {
         const payload = await api('/api/app/monetization/status');
         monetizationStatus = payload || null;
-        renderMonetizationSummary();
+        return monetizationStatus;
+      }
+
+      async function loadBotUsername() {
+        if (botUsername) return botUsername;
+        const payload = await api('/api/app/bot-info');
+        botUsername = String(payload?.botUsername || '').trim();
+        return botUsername;
       }
 
       async function openTelegramPaymentForPlan(planCode) {
@@ -995,6 +980,17 @@
         const payload = await api(endpoint);
         const url = String(payload?.deepLink || '').trim();
         if (!url) throw new Error('Payment link is empty.');
+        if (window.Telegram?.WebApp?.openTelegramLink) {
+          window.Telegram.WebApp.openTelegramLink(url);
+          return;
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+
+      async function openReferralBonusFlow() {
+        const username = await loadBotUsername();
+        if (!username) throw new Error('Bot username is unavailable.');
+        const url = `https://t.me/${username}?start=referrals`;
         if (window.Telegram?.WebApp?.openTelegramLink) {
           window.Telegram.WebApp.openTelegramLink(url);
           return;
@@ -1260,7 +1256,6 @@
             setQ({ jobId: id });
             try {
               await trackJobDetailsOpen(id);
-              await loadMonetizationStatus();
               openJobById(id);
             } catch (err) {
               if (err?.code === 'subscribe_required') {
@@ -1421,7 +1416,6 @@
           });
           selectedApplication = updated;
           await loadApplicationsByUser();
-          await loadMonetizationStatus();
           renderJobs();
           renderArtifacts();
           setMsg('jobMsg', 'Tailored CV + cover letter generated and saved.');
@@ -1480,13 +1474,16 @@
               : ' Open this screen only from Telegram (bot menu or in-chat button), not from an external browser or a raw HTTPS bookmark.';
           throw new Error(`Missing Telegram Web App credentials (no init data).${hint}`);
         }
-        await Promise.all([loadProfile(), loadSkills(), loadMonetizationStatus()]);
+        await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
         if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
         else renderSkillPickerSummary();
         syncHighlyRelevantCheckboxFromQuery();
         updatePagerUi();
         if (shouldOpenPricingOnBoot()) {
+          if (!monetizationStatus) {
+            await loadMonetizationStatus();
+          }
           openPaymentRequiredModal({ monetization: monetizationStatus?.monetization || {} });
         }
         if (isTruthyQueryParam(s.showOnlyHighlyRelevant)) {
@@ -1531,14 +1528,11 @@
         }
         setQ({ showOnlyHighlyRelevant: event.target.checked ? 'true' : '' });
       });
-      document.getElementById('openPricingBtn').addEventListener('click', async () => {
+      document.getElementById('inviteFriendBtn').addEventListener('click', async () => {
         try {
-          if (!monetizationStatus) {
-            await loadMonetizationStatus();
-          }
-          openPaymentRequiredModal({ monetization: monetizationStatus?.monetization || {} });
+          await openReferralBonusFlow();
         } catch (err) {
-          setMsg('globalMsg', err?.message || 'Failed to load pricing.', true);
+          setMsg('paymentRequiredMsg', err?.message || 'Failed to open referral flow.', true);
         }
       });
       document.getElementById('uploadResumeBtn').addEventListener('click', () => {
@@ -1587,7 +1581,6 @@
           await trackJobDetailsOpen(pendingJobId);
           closeSubscribeRequiredModal();
           openJobById(pendingJobId);
-          await loadMonetizationStatus();
         } catch (err) {
           if (err?.code === 'subscribe_required') {
             openSubscribeRequiredModal(err.payload || {}, pendingSubscribeJobId);

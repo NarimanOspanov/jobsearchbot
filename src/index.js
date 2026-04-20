@@ -1292,6 +1292,47 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
   };
 
+  const sendReferralScreen = async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Команда доступна только в личном чате с ботом.');
+      return;
+    }
+    const { user } = await ensureUserByTelegramId(
+      ctx.chat?.id ?? ctx.from?.id,
+      ctx.from?.username ?? null,
+      ctx.from?.first_name ?? null,
+      ctx.from?.last_name ?? null
+    );
+    if (!user) {
+      await ctx.reply('Не удалось определить пользователя.');
+      return;
+    }
+    const bonusOpens = Math.max(0, await getConfigInt(REFERRAL_BONUS_OPENS_CONFIG_KEY, 10));
+    const invitedCount = models.Referrals
+      ? await models.Referrals.count({ where: { ReferrerUserId: user.Id } })
+      : 0;
+    const botUsername = await resolveBotUsername(ctx);
+    const referralLink = botUsername
+      ? `https://t.me/${botUsername}?start=${encodeURIComponent(String(user.TelegramChatId || ''))}`
+      : '';
+    const shareUrl = referralLink
+      ? `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Привет! Попробуй бот для поиска удаленной работы:')}`
+      : '';
+    const lines = [
+      `Пригласите друга и получите +${bonusOpens} открытий вакансий.`,
+      `Уже приглашено: ${invitedCount}`,
+      '',
+      referralLink || 'Реферальная ссылка временно недоступна.',
+    ];
+    const inlineKeyboard = shareUrl
+      ? [[{ text: 'Поделиться ссылкой', url: shareUrl }]]
+      : [];
+    await ctx.reply(lines.join('\n'), {
+      disable_web_page_preview: true,
+      ...(inlineKeyboard.length > 0 ? { reply_markup: { inline_keyboard: inlineKeyboard } } : {}),
+    });
+  };
+
   const processReferralOnStart = async (ctx, invitedUser, startPayload) => {
     if (!invitedUser || !models.Referrals) return;
     const referrerTelegramChatId = parseStartReferralChatId(startPayload);
@@ -1436,6 +1477,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         await sendPlanInvoice(ctx, requestedCode);
         return;
       }
+    }
+    if (payload === 'referrals') {
+      await sendReferralScreen(ctx);
+      return;
     }
     const { user: invitedUser } = await ensureUserByTelegramId(
       ctx.chat?.id ?? ctx.from?.id,
@@ -1747,44 +1792,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   });
 
   bot.command('referrals', async (ctx) => {
-    if (ctx.chat?.type !== 'private') {
-      await ctx.reply('Команда доступна только в личном чате с ботом.');
-      return;
-    }
-    const { user } = await ensureUserByTelegramId(
-      ctx.chat?.id ?? ctx.from?.id,
-      ctx.from?.username ?? null,
-      ctx.from?.first_name ?? null,
-      ctx.from?.last_name ?? null
-    );
-    if (!user) {
-      await ctx.reply('Не удалось определить пользователя.');
-      return;
-    }
-    const bonusOpens = Math.max(0, await getConfigInt(REFERRAL_BONUS_OPENS_CONFIG_KEY, 10));
-    const invitedCount = models.Referrals
-      ? await models.Referrals.count({ where: { ReferrerUserId: user.Id } })
-      : 0;
-    const botUsername = await resolveBotUsername(ctx);
-    const referralLink = botUsername
-      ? `https://t.me/${botUsername}?start=${encodeURIComponent(String(user.TelegramChatId || ''))}`
-      : '';
-    const shareUrl = referralLink
-      ? `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Привет! Попробуй бот для поиска удаленной работы:')}`
-      : '';
-    const lines = [
-      `Пригласите друга и получите +${bonusOpens} открытий вакансий.`,
-      `Уже приглашено: ${invitedCount}`,
-      '',
-      referralLink || 'Реферальная ссылка временно недоступна.',
-    ];
-    const inlineKeyboard = shareUrl
-      ? [[{ text: 'Поделиться ссылкой', url: shareUrl }]]
-      : [];
-    await ctx.reply(lines.join('\n'), {
-      disable_web_page_preview: true,
-      ...(inlineKeyboard.length > 0 ? { reply_markup: { inline_keyboard: inlineKeyboard } } : {}),
-    });
+    await sendReferralScreen(ctx);
   });
 
   bot.command('admin', async (ctx) => {
