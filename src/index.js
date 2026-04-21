@@ -2376,8 +2376,9 @@ async function main() {
       const parseApplyTypes = (...inputs) => {
         const unique = new Set();
         for (const input of inputs) {
-          const chunks = String(input || '')
-            .split(',')
+          const rawValues = Array.isArray(input) ? input : [input];
+          const chunks = rawValues
+            .flatMap((value) => String(value || '').split(','))
             .map((item) => mapApplyTypeToken(item))
             .filter(Boolean);
           for (const chunk of chunks) unique.add(chunk);
@@ -2397,12 +2398,18 @@ async function main() {
         ? Math.min(200, pageSizeRaw)
         : 100;
       if (!from || !to) return res.status(400).json({ error: 'from and to are required' });
-      const url =
-        `https://screenly.work/api/global-remote-positions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
-        (skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : '') +
-        (showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : '') +
-        (applyTypes.length > 0 ? `&applyType=${encodeURIComponent(applyTypes.join(','))}` : '') +
-        `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+      const upstreamParams = new URLSearchParams();
+      upstreamParams.set('from', from);
+      upstreamParams.set('to', to);
+      if (skillIds) upstreamParams.set('skillIds', skillIds);
+      if (showOnlyHighlyRelevant) upstreamParams.set('showOnlyHighlyRelevant', 'true');
+      for (const applyType of applyTypes) {
+        // Upstream supports repeated applyType params and CSV; prefer repeated params.
+        upstreamParams.append('applyType', applyType);
+      }
+      upstreamParams.set('page', String(page));
+      upstreamParams.set('pageSize', String(pageSize));
+      const url = `https://screenly.work/api/global-remote-positions?${upstreamParams.toString()}`;
       const response = await fetch(url);
       if (!response.ok) {
         const txt = await response.text();
