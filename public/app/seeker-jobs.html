@@ -570,6 +570,7 @@
         'jobId',
         'skillId',
       ];
+      const SEEKER_FILTER_KEY_SET = new Set(SEEKER_FILTER_KEYS);
 
       function decodeBase64UrlToUtf8(b64) {
         let s = String(b64).trim().replace(/-/g, '+').replace(/_/g, '/');
@@ -604,9 +605,61 @@
         }
         return new URLSearchParams();
       }
+      function extractStartappPayloadFromRawQuery(rawQuery) {
+        const query = String(rawQuery || '').replace(/^\?/, '');
+        if (!query) return '';
+        const match = query.match(/(?:^|&)(startapp|startApp)=/i);
+        if (!match || typeof match.index !== 'number') return '';
+        let payload = query.slice(match.index + match[0].length);
+        if (!payload) return '';
+        try {
+          payload = decodeURIComponent(payload);
+        } catch {
+          // keep payload as-is
+        }
+        return payload;
+      }
+      function extractMalformedSeekerParams() {
+        const sources = [];
+        sources.push(window.location.search || '');
+        sources.push(window.location.hash || '');
+        sources.push(document.referrer || '');
+        for (const source of sources) {
+          const raw = String(source || '').trim();
+          if (!raw) continue;
+          let rawQuery = raw;
+          if (/^https?:\/\//i.test(raw)) {
+            try {
+              rawQuery = new URL(raw).search || '';
+            } catch {
+              rawQuery = '';
+            }
+          }
+          const startPayload = extractStartappPayloadFromRawQuery(rawQuery);
+          if (!startPayload.startsWith('seekerjobs__')) continue;
+          const rawInner = startPayload.slice('seekerjobs__'.length);
+          const tokens = String(rawInner || '')
+            .split('&')
+            .map((token) => token.trim())
+            .filter(Boolean);
+          if (!tokens.length) continue;
+          const filtered = [];
+          for (const token of tokens) {
+            const eqIdx = token.indexOf('=');
+            if (eqIdx <= 0) continue;
+            const key = token.slice(0, eqIdx).trim();
+            if (SEEKER_FILTER_KEY_SET.has(key)) filtered.push(token);
+          }
+          if (!filtered.length) continue;
+          const params = new URLSearchParams(filtered.join('&'));
+          if ([...params.keys()].length) return params;
+        }
+        return new URLSearchParams();
+      }
 
       function q() {
         const p = new URLSearchParams(location.search);
+        const malformedFallback = extractMalformedSeekerParams();
         const paramStart = String(p.get('startapp') || p.get('startApp') || '').trim();
         const initStart = String(tg?.initDataUnsafe?.start_param || '').trim();
         let rawStart = paramStart;
@@ -621,8 +674,9 @@
           const inner = innerParamsFromSeekerPayload(rawQuery);
           const pick = (key) => {
             const a = String(inner.get(key) || '').trim();
+            const m = String(malformedFallback.get(key) || '').trim();
             const b = String(p.get(key) || '').trim();
-            return a || b || '';
+            return a || m || b || '';
           };
           return {
             from: pick('from'),
@@ -641,8 +695,9 @@
           const inner = innerParamsFromSeekerPayload(qParam);
           const pick = (key) => {
             const a = String(inner.get(key) || '').trim();
+            const m = String(malformedFallback.get(key) || '').trim();
             const b = String(p.get(key) || '').trim();
-            return a || b || '';
+            return a || m || b || '';
           };
           return {
             from: pick('from'),
@@ -657,14 +712,16 @@
         }
 
         return {
-          from: p.get('from') || '',
-          to: p.get('to') || '',
-          skillIds: p.get('skillIds') || p.get('skillId') || '',
-          applyTypes: normalizeApplyTypesCsv(p.get('applyTypes') || p.get('sourceIds') || ''),
-          showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || '',
-          jobId: p.get('jobId') || '',
-          page: p.get('page') || '1',
-          pageSize: p.get('pageSize') || '100',
+          from: p.get('from') || malformedFallback.get('from') || '',
+          to: p.get('to') || malformedFallback.get('to') || '',
+          skillIds: p.get('skillIds') || p.get('skillId') || malformedFallback.get('skillIds') || malformedFallback.get('skillId') || '',
+          applyTypes: normalizeApplyTypesCsv(
+            p.get('applyTypes') || p.get('sourceIds') || malformedFallback.get('applyTypes') || malformedFallback.get('sourceIds') || ''
+          ),
+          showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || malformedFallback.get('showOnlyHighlyRelevant') || '',
+          jobId: p.get('jobId') || malformedFallback.get('jobId') || '',
+          page: p.get('page') || malformedFallback.get('page') || '1',
+          pageSize: p.get('pageSize') || malformedFallback.get('pageSize') || '100',
         };
       }
       function isTruthyQueryParam(value) {
