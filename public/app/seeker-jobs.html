@@ -429,6 +429,7 @@
       if (tg) tg.ready();
       const urlParams = new URLSearchParams(window.location.search);
       const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
+      const initialLocationSearch = String(window.location.search || '');
 
       /**
        * Signed init payload for miniAppAuth.
@@ -668,6 +669,27 @@
       function isTruthyQueryParam(value) {
         const v = String(value || '').trim().toLowerCase();
         return v === 'true' || v === '1' || v === 'yes';
+      }
+      function shouldAutoSearchOnBoot(state) {
+        const initialParams = new URLSearchParams(initialLocationSearch);
+        const startapp = String(initialParams.get('startapp') || initialParams.get('startApp') || '').trim();
+        const qParam = String(initialParams.get('q') || '').trim();
+        const initStart = String(tg?.initDataUnsafe?.start_param || '').trim();
+        const hasDeepLinkPayload =
+          startapp.startsWith('seekerjobs__') || initStart.startsWith('seekerjobs__') || Boolean(qParam);
+        const hasFilterOverrides =
+          initialParams.has('from') ||
+          initialParams.has('to') ||
+          initialParams.has('skillIds') ||
+          initialParams.has('skillId') ||
+          initialParams.has('applyTypes') ||
+          initialParams.has('sourceIds') ||
+          isTruthyQueryParam(initialParams.get('showOnlyHighlyRelevant'));
+        const hasResolvedStateFilters =
+          Boolean(String(state?.skillIds || '').trim()) ||
+          Boolean(String(state?.applyTypes || '').trim()) ||
+          isTruthyQueryParam(state?.showOnlyHighlyRelevant);
+        return hasDeepLinkPayload || hasFilterOverrides || hasResolvedStateFilters;
       }
       function mapLegacyApplyTypeToken(value) {
         const v = String(value || '').trim().toLowerCase();
@@ -1584,7 +1606,7 @@
           }
           openPaymentRequiredModal({ monetization: monetizationStatus?.monetization || {} });
         }
-        if (isTruthyQueryParam(s.showOnlyHighlyRelevant)) {
+        if (shouldAutoSearchOnBoot(s)) {
           await syncJobs();
         }
       }
