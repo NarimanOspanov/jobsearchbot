@@ -543,18 +543,24 @@
       let monetizationStatus = null;
       let botUsername = '';
       const CHANNEL_ALTERNATIVE_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
-      const FIND_IN_OPTIONS = ['Linkedin', 'Indeed', 'Telegram channels', 'Company sites'];
-      const FIND_IN_LABELS = {
-        Linkedin: 'LinkedIn',
-        Indeed: 'Indeed',
-        'Telegram channels': 'Telegram-каналы',
-        'Company sites': 'Сайты компаний',
+      const APPLY_TYPE_OPTIONS = [
+        { value: 'linkedin', label: 'LinkedIn' },
+        { value: 'indeed', label: 'Indeed' },
+        { value: 'telegram', label: 'Telegram-каналы' },
+        { value: 'external', label: 'Сайты компаний' },
+      ];
+      const APPLY_TYPE_LABELS = {
+        linkedin: 'LinkedIn',
+        indeed: 'Indeed',
+        telegram: 'Telegram-каналы',
+        external: 'Сайты компаний',
       };
 
       const SEEKER_FILTER_KEYS = [
         'from',
         'to',
         'skillIds',
+        'applyTypes',
         'sourceIds',
         'page',
         'pageSize',
@@ -620,7 +626,7 @@
             from: pick('from'),
             to: pick('to'),
             skillIds: pick('skillIds') || pick('skillId'),
-            sourceIds: pick('sourceIds'),
+            applyTypes: normalizeApplyTypesCsv(pick('applyTypes') || pick('sourceIds')),
             showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
             jobId: pick('jobId'),
             page: pick('page') || '1',
@@ -640,7 +646,7 @@
             from: pick('from'),
             to: pick('to'),
             skillIds: pick('skillIds') || pick('skillId'),
-            sourceIds: pick('sourceIds'),
+            applyTypes: normalizeApplyTypesCsv(pick('applyTypes') || pick('sourceIds')),
             showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
             jobId: pick('jobId'),
             page: pick('page') || '1',
@@ -652,7 +658,7 @@
           from: p.get('from') || '',
           to: p.get('to') || '',
           skillIds: p.get('skillIds') || p.get('skillId') || '',
-          sourceIds: p.get('sourceIds') || '',
+          applyTypes: normalizeApplyTypesCsv(p.get('applyTypes') || p.get('sourceIds') || ''),
           showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || '',
           jobId: p.get('jobId') || '',
           page: p.get('page') || '1',
@@ -662,6 +668,24 @@
       function isTruthyQueryParam(value) {
         const v = String(value || '').trim().toLowerCase();
         return v === 'true' || v === '1' || v === 'yes';
+      }
+      function mapLegacyApplyTypeToken(value) {
+        const v = String(value || '').trim().toLowerCase();
+        if (!v) return '';
+        if (v === 'telegram' || v === 'telegram channels') return 'telegram';
+        if (v === 'external' || v === 'company sites') return 'external';
+        if (v === 'linkedin') return 'linkedin';
+        if (v === 'indeed') return 'indeed';
+        return '';
+      }
+      function normalizeApplyTypesCsv(csv) {
+        const unique = new Set(
+          String(csv || '')
+            .split(',')
+            .map((item) => mapLegacyApplyTypeToken(item))
+            .filter(Boolean)
+        );
+        return [...unique].join(',');
       }
       function setQ(next) {
         const p = new URLSearchParams(location.search);
@@ -1138,10 +1162,10 @@
 
       function renderSourcePickerOptions() {
         const menu = document.getElementById('sourcePickerMenu');
-        menu.innerHTML = FIND_IN_OPTIONS
+        menu.innerHTML = APPLY_TYPE_OPTIONS
           .map(
-            (name) =>
-              `<label class="skill-check"><input type="checkbox" value="${attrEsc(name)}" />${esc(FIND_IN_LABELS[name] || name)}</label>`
+            (item) =>
+              `<label class="skill-check"><input type="checkbox" value="${attrEsc(item.value)}" />${esc(item.label)}</label>`
           )
           .join('');
       }
@@ -1151,6 +1175,20 @@
         return [...checked]
           .map((opt) => String(opt.value || '').trim())
           .filter(Boolean);
+      }
+
+      function applySelectedApplyTypesCsv(csv) {
+        const selected = new Set(
+          String(csv || '')
+            .split(',')
+            .map((v) => mapLegacyApplyTypeToken(v))
+            .filter(Boolean)
+        );
+        const checkboxes = document.querySelectorAll('#sourcePickerMenu input[type="checkbox"]');
+        [...checkboxes].forEach((opt) => {
+          opt.checked = selected.has(String(opt.value || '').trim().toLowerCase());
+        });
+        renderSourcePickerSummary();
       }
 
       function renderSourcePickerSummary() {
@@ -1239,14 +1277,14 @@
         const query = q();
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = 100;
-        const sourceIds = String(query.sourceIds || '').trim();
+        const applyTypes = getSelectedSources().join(',');
         if (!from || !to) throw new Error('Укажите даты "С" и "По".');
 
         setQ({
           from,
           to,
           skillIds,
-          sourceIds,
+          applyTypes,
           showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '',
           page,
           pageSize,
@@ -1261,7 +1299,7 @@
           const posUrl =
             `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
             `${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}` +
-            `${sourceIds ? `&sourceIds=${encodeURIComponent(sourceIds)}` : ''}` +
+            `${applyTypes ? `&applyTypes=${encodeURIComponent(applyTypes)}` : ''}` +
             `${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}` +
             `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
           const data = await api(posUrl);
@@ -1306,7 +1344,7 @@
             <div class="job-card-meta">
               <span>#${esc(p.id)}</span>
               <span>Опубликовано: ${esc(formatPostedDate(p.publishedAt) || '—')}</span>
-              <span>Отклик: ${esc(p.applyType || '—')}</span>
+              <span>Отклик: ${esc(APPLY_TYPE_LABELS[String(p.applyType || '').toLowerCase()] || p.applyType || '—')}</span>
             </div>
           </div>`;
         }).join('');
@@ -1524,7 +1562,7 @@
       async function boot() {
         hydrateStateToInputs();
         renderSourcePickerOptions();
-        renderSourcePickerSummary();
+        applySelectedApplyTypesCsv(q().applyTypes || '');
         await waitForTelegramInitData();
         if (!String(getTgInitDataString()).trim() && !devTelegramId) {
           const hrefLen = String(window.location.href || '').length;
@@ -1580,6 +1618,7 @@
       });
       document.getElementById('sourcePickerMenu').addEventListener('change', () => {
         renderSourcePickerSummary();
+        setQ({ applyTypes: getSelectedSources().join(','), page: '1' });
       });
       document.getElementById('showOnlyHighlyRelevant').addEventListener('change', (event) => {
         if (!hasSelectedSkills()) {

@@ -2364,9 +2364,32 @@ async function main() {
         showOnlyHighlyRelevantRaw === 'true' ||
         showOnlyHighlyRelevantRaw === '1' ||
         showOnlyHighlyRelevantRaw === 'yes';
-      const sourceRaw = String(req.query.source || '').trim();
-      const source = sourceRaw && sourceRaw.toLowerCase() !== 'all' ? sourceRaw : '';
-      const sourceIds = String(req.query.sourceIds || '').trim();
+      const mapApplyTypeToken = (rawToken) => {
+        const value = String(rawToken || '').trim().toLowerCase();
+        if (!value) return '';
+        if (value === 'linkedin') return 'linkedin';
+        if (value === 'indeed') return 'indeed';
+        if (value === 'telegram' || value === 'telegram channels') return 'telegram';
+        if (value === 'external' || value === 'company sites') return 'external';
+        return '';
+      };
+      const parseApplyTypes = (...inputs) => {
+        const unique = new Set();
+        for (const input of inputs) {
+          const chunks = String(input || '')
+            .split(',')
+            .map((item) => mapApplyTypeToken(item))
+            .filter(Boolean);
+          for (const chunk of chunks) unique.add(chunk);
+        }
+        return [...unique];
+      };
+      const applyTypes = parseApplyTypes(
+        req.query.applyType,
+        req.query.applyTypes,
+        req.query.source,
+        req.query.sourceIds
+      );
       const pageRaw = Number.parseInt(String(req.query.page || '1'), 10);
       const pageSizeRaw = Number.parseInt(String(req.query.pageSize || '100'), 10);
       const page = Number.isSafeInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
@@ -2378,8 +2401,7 @@ async function main() {
         `https://screenly.work/api/global-remote-positions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
         (skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : '') +
         (showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : '') +
-        (source ? `&source=${encodeURIComponent(source)}` : '') +
-        (sourceIds ? `&sourceIds=${encodeURIComponent(sourceIds)}` : '') +
+        (applyTypes.length > 0 ? `&applyType=${encodeURIComponent(applyTypes.join(','))}` : '') +
         `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
       const response = await fetch(url);
       if (!response.ok) {
