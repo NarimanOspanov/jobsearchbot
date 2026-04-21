@@ -116,6 +116,16 @@
       .date-range-row { margin-top: 8px; }
       .pager { display: inline-flex; align-items: center; gap: 8px; }
       .ghost-btn { background: #0f1730; border: 1px solid var(--border); }
+      .secondary-cta-box {
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(39, 51, 87, 0.8);
+      }
+      .secondary-cta-title {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
       .skills-picker {
         position: relative;
         min-width: 280px;
@@ -396,10 +406,18 @@
           <button id="paymentRequiredClose" type="button" class="ghost-btn">Close</button>
         </div>
         <div class="modal-body">
-          <p class="muted">Вы достигли лимита. Выберите: перейти на платный план или пригласить друга и получить бонусные открытия.</p>
+          <p class="muted">
+            Основные варианты:
+            <br />1) Купить Premium
+            <br />2) Пригласить друга (+бонус)
+          </p>
           <div id="paymentPlansList" class="row" style="display:grid;gap:8px"></div>
           <div class="row" style="margin-top:10px">
             <button id="inviteFriendBtn" type="button" class="ghost-btn">Пригласить друга (+бонус)</button>
+          </div>
+          <div class="secondary-cta-box">
+            <div class="secondary-cta-title">Альтернатива: следить за вакансиями в канале</div>
+            <button id="openChannelAlternativeBtn" type="button" class="ghost-btn">Открыть канал с вакансиями</button>
           </div>
           <p id="paymentRequiredMsg" class="muted"></p>
         </div>
@@ -524,6 +542,7 @@
       let pendingSubscribeJobId = null;
       let monetizationStatus = null;
       let botUsername = '';
+      const CHANNEL_ALTERNATIVE_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
       const FIND_IN_OPTIONS = ['Linkedin', 'Indeed', 'Telegram channels', 'Company sites'];
 
       const SEEKER_FILTER_KEYS = [
@@ -1012,6 +1031,12 @@
         const username = await loadBotUsername();
         if (!username) throw new Error('Bot username is unavailable.');
         const url = `https://t.me/${username}?start=referrals`;
+        if (openTelegramLinkAndCloseMiniApp(url)) return;
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+
+      async function openChannelAlternativeFlow() {
+        const url = CHANNEL_ALTERNATIVE_URL;
         if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
       }
@@ -1562,6 +1587,13 @@
           await openReferralBonusFlow();
         } catch (err) {
           setMsg('paymentRequiredMsg', err?.message || 'Failed to open referral flow.', true);
+        }
+      });
+      document.getElementById('openChannelAlternativeBtn').addEventListener('click', async () => {
+        try {
+          await openChannelAlternativeFlow();
+        } catch (err) {
+          setMsg('paymentRequiredMsg', err?.message || 'Failed to open channel link.', true);
         }
       });
       document.getElementById('uploadResumeBtn').addEventListener('click', () => {
