@@ -543,6 +543,7 @@
       let pendingSubscribeJobId = null;
       let monetizationStatus = null;
       let botUsername = '';
+      let bootDeepLinkSkillIdsCsv = '';
       const CHANNEL_ALTERNATIVE_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
       const APPLY_TYPE_OPTIONS = [
         { value: 'linkedin', label: 'LinkedIn' },
@@ -1162,11 +1163,12 @@
 
       function renderSkillPickerSummary() {
         const csv = getSelectedSkillIdsCsv();
+        const effectiveCsv = csv || bootDeepLinkSkillIdsCsv;
         const btn = document.getElementById('skillPickerBtn');
-        if (!csv) {
+        if (!effectiveCsv) {
           btn.textContent = 'Все роли';
         } else {
-          const ids = csv.split(',').filter(Boolean);
+          const ids = [...new Set(effectiveCsv.split(',').map((id) => id.trim()).filter(Boolean))];
           btn.textContent = `Выбрано ролей: ${ids.length}`;
         }
         updateHighlyRelevantFilterState();
@@ -1293,7 +1295,9 @@
         if (from > to) from = to;
         document.getElementById('fromDate').value = from;
         document.getElementById('toDate').value = to;
-        const skillIds = getSelectedSkillIdsCsv();
+        const selectedSkillIds = getSelectedSkillIdsCsv();
+        const fallbackSkillIds = String(q().skillIds || '').trim();
+        const skillIds = selectedSkillIds || bootDeepLinkSkillIdsCsv || fallbackSkillIds;
         const showOnlyHighlyRelevant =
           Boolean(skillIds.trim()) && document.getElementById('showOnlyHighlyRelevant').checked;
         const query = q();
@@ -1596,6 +1600,7 @@
         }
         await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
+        bootDeepLinkSkillIdsCsv = String(s.skillIds || '').trim();
         if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
         else renderSkillPickerSummary();
         syncHighlyRelevantCheckboxFromQuery();
@@ -1633,6 +1638,7 @@
         if (isSkillPickerOpen) closeSkillPicker(); else openSkillPicker();
       });
       document.getElementById('skillPickerMenu').addEventListener('change', () => {
+        bootDeepLinkSkillIdsCsv = '';
         renderSkillPickerSummary();
       });
       document.getElementById('sourcePickerBtn').addEventListener('click', () => {
