@@ -658,6 +658,11 @@
       function esc(v) {
         return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       }
+      function toUsdText(value) {
+        const n = Number.parseFloat(String(value || '').trim());
+        if (!Number.isFinite(n) || n <= 0) return '';
+        return `$${n.toFixed(2)}`;
+      }
       function attrEsc(v) {
         return String(v || '')
           .replace(/\r\n|\r|\n/g, ' ')
@@ -863,7 +868,11 @@
           list.innerHTML = plans
             .map((plan) => {
               const code = String(plan?.code || '').trim().toLowerCase();
-              const title = `${esc(plan?.name || code || 'Plan')} · ${Number(plan?.jobOpenMonthlyLimit || 0)} opens/month · ${Number(plan?.priceInStars || 0)} ⭐`;
+              const usdText = toUsdText(plan?.priceUsd);
+              const priceLabel = usdText
+                ? `${Number(plan?.priceInStars || 0)} ⭐ (~${usdText})`
+                : `${Number(plan?.priceInStars || 0)} ⭐`;
+              const title = `${esc(plan?.name || code || 'Plan')} · ${Number(plan?.jobOpenMonthlyLimit || 0)} opens/month · ${priceLabel}`;
               const description = String(plan?.description || '').trim();
               return `<div class="resume-upload-box" style="margin-top:0">
                 <div style="font-weight:600;margin-bottom:6px">${title}</div>

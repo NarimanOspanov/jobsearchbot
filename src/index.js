@@ -96,6 +96,7 @@ const FALLBACK_PLANS = [
     Code: 'silver',
     Name: 'Silver',
     PriceInStars: 500,
+    PriceUsd: 10,
     DurationDays: 30,
     JobOpenMonthlyLimit: 300,
     IncludesAiTools: false,
@@ -107,6 +108,7 @@ const FALLBACK_PLANS = [
     Code: 'gold',
     Name: 'Gold',
     PriceInStars: 1000,
+    PriceUsd: 20,
     DurationDays: 30,
     JobOpenMonthlyLimit: 1000,
     IncludesAiTools: true,
@@ -205,21 +207,42 @@ function getMonthBoundsUtc(now = new Date()) {
   return { start, end };
 }
 
+function normalizePriceUsd(value) {
+  const n = Number.parseFloat(String(value ?? '').trim());
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function formatUsd(amount) {
+  const normalized = normalizePriceUsd(amount);
+  if (!normalized) return '';
+  return `$${normalized.toFixed(2)}`;
+}
+
+function formatPlanPrice(stars, usd) {
+  const starsAmount = Number(stars || 0);
+  const usdText = formatUsd(usd);
+  return usdText ? `${starsAmount} ⭐ (~${usdText})` : `${starsAmount} ⭐`;
+}
+
 function toPlanSummary(plan) {
   if (!plan) return null;
   const monthlyOpens = Number(plan.JobOpenMonthlyLimit || 0);
   const durationDays = Number(plan.DurationDays || 30);
   const includesAiTools = Boolean(plan.IncludesAiTools);
+  const priceUsd = normalizePriceUsd(plan.PriceUsd);
   return {
     id: Number(plan.Id || 0),
     code: String(plan.Code || '').toLowerCase(),
     name: String(plan.Name || ''),
     priceInStars: Number(plan.PriceInStars || 0),
+    priceUsd,
     durationDays,
     jobOpenMonthlyLimit: monthlyOpens,
     includesAiTools,
     description:
       `${monthlyOpens} job opens per month for ${durationDays} days. ` +
+      `${formatPlanPrice(plan.PriceInStars, priceUsd)}. ` +
       `${includesAiTools ? 'Includes AI CV + Cover Letter.' : 'AI CV + Cover Letter are not included.'}`,
     sortOrder: Number(plan.SortOrder || 0),
   };
@@ -1312,8 +1335,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   const formatPlanButtonLabel = (plan) => {
     const limit = Number(plan?.JobOpenMonthlyLimit || 0);
-    const stars = Number(plan?.PriceInStars || 0);
-    return `${plan?.Name || 'Plan'} · ${limit} opens/mo · ${stars} ⭐`;
+    const priceLabel = formatPlanPrice(plan?.PriceInStars, plan?.PriceUsd);
+    return `${plan?.Name || 'Plan'} · ${limit} opens/mo · ${priceLabel}`;
   };
 
   const sendPlansIntro = async (ctx) => {
@@ -1340,12 +1363,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const detailsText = sortedPlans
       .map((plan) => {
         const monthlyOpens = Number(plan.JobOpenMonthlyLimit || 0);
-        const stars = Number(plan.PriceInStars || 0);
         const durationDays = Number(plan.DurationDays || 30);
         const aiText = plan.IncludesAiTools
           ? 'AI CV + Cover Letter included'
           : 'AI CV + Cover Letter not included';
-        return `• ${plan.Name}: ${monthlyOpens} opens/month, ${durationDays} days, ${stars} ⭐, ${aiText}`;
+        return `• ${plan.Name}: ${monthlyOpens} opens/month, ${durationDays} days, ${formatPlanPrice(plan.PriceInStars, plan.PriceUsd)}, ${aiText}`;
       })
       .join('\n');
     const buttons = plans
@@ -1451,11 +1473,12 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const payload = buildPlanInvoicePayload(plan);
     const monthlyOpens = Number(plan.JobOpenMonthlyLimit || 0);
     const hasAiTools = Boolean(plan.IncludesAiTools);
-    const title = `${plan.Name} — ${monthlyOpens} opens/month`;
+    const priceLabel = formatPlanPrice(plan.PriceInStars, plan.PriceUsd);
+    const title = `${plan.Name} — ${monthlyOpens} opens/month — ${priceLabel}`;
     const description =
       `${plan.Name}: ${monthlyOpens} job opens per month for ${Number(plan.DurationDays || 30)} days. ` +
       `${hasAiTools ? 'Includes AI CV and Cover Letter tools. ' : 'AI CV and Cover Letter are not included. '}` +
-      'Payment via Telegram Stars.';
+      `Price: ${priceLabel}. Payment via Telegram Stars.`;
     try {
       await ctx.telegram.sendInvoice(ctx.chat.id, {
         title,

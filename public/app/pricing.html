@@ -87,6 +87,12 @@
         return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       }
 
+      function toUsdText(value) {
+        const n = Number.parseFloat(String(value || '').trim());
+        if (!Number.isFinite(n) || n <= 0) return '';
+        return `$${n.toFixed(2)}`;
+      }
+
       function openTelegramLinkAndCloseMiniApp(url) {
         const tgApp = window.Telegram?.WebApp;
         if (!tgApp?.openTelegramLink) return false;
@@ -135,7 +141,11 @@
           .map((plan) => {
             const code = String(plan?.code || '').toLowerCase();
             const description = String(plan?.description || '').trim();
-            const title = `${esc(plan?.name || code || 'Plan')} · ${Number(plan?.priceInStars || 0)} ⭐`;
+            const usdText = toUsdText(plan?.priceUsd);
+            const priceLabel = usdText
+              ? `${Number(plan?.priceInStars || 0)} ⭐ (~${usdText})`
+              : `${Number(plan?.priceInStars || 0)} ⭐`;
+            const title = `${esc(plan?.name || code || 'Plan')} · ${priceLabel}`;
             return `<section class="card">
               <h3>${title}</h3>
               <div class="meta">

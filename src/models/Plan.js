@@ -23,6 +23,10 @@ export default function definePlan(sequelize) {
         type: DataTypes.INTEGER,
         allowNull: false,
       },
+      PriceUsd: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+      },
       DurationDays: {
         type: DataTypes.INTEGER,
         allowNull: false,
