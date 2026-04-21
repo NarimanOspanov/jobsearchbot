@@ -241,9 +241,9 @@ function toPlanSummary(plan) {
     jobOpenMonthlyLimit: monthlyOpens,
     includesAiTools,
     description:
-      `${monthlyOpens} job opens per month for ${durationDays} days. ` +
+      `${monthlyOpens} открытий вакансий в месяц на ${durationDays} дней. ` +
       `${formatPlanPrice(plan.PriceInStars, priceUsd)}. ` +
-      `${includesAiTools ? 'Includes AI CV + Cover Letter.' : 'AI CV + Cover Letter are not included.'}`,
+      `${includesAiTools ? 'Включает AI CV + Cover Letter.' : 'AI CV + Cover Letter не включены.'}`,
     sortOrder: Number(plan.SortOrder || 0),
   };
 }
@@ -1336,7 +1336,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const formatPlanButtonLabel = (plan) => {
     const limit = Number(plan?.JobOpenMonthlyLimit || 0);
     const priceLabel = formatPlanPrice(plan?.PriceInStars, plan?.PriceUsd);
-    return `${plan?.Name || 'Plan'} · ${limit} opens/mo · ${priceLabel}`;
+    return `${plan?.Name || 'Тариф'} · ${limit} открытий/мес · ${priceLabel}`;
   };
 
   const sendPlansIntro = async (ctx) => {
@@ -1365,9 +1365,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         const monthlyOpens = Number(plan.JobOpenMonthlyLimit || 0);
         const durationDays = Number(plan.DurationDays || 30);
         const aiText = plan.IncludesAiTools
-          ? 'AI CV + Cover Letter included'
-          : 'AI CV + Cover Letter not included';
-        return `• ${plan.Name}: ${monthlyOpens} opens/month, ${durationDays} days, ${formatPlanPrice(plan.PriceInStars, plan.PriceUsd)}, ${aiText}`;
+          ? 'AI CV + Cover Letter включены'
+          : 'AI CV + Cover Letter не включены';
+        return `• ${plan.Name}: ${monthlyOpens} открытий/мес, ${durationDays} дней, ${formatPlanPrice(plan.PriceInStars, plan.PriceUsd)}, ${aiText}`;
       })
       .join('\n');
     const buttons = plans
@@ -1474,11 +1474,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const monthlyOpens = Number(plan.JobOpenMonthlyLimit || 0);
     const hasAiTools = Boolean(plan.IncludesAiTools);
     const priceLabel = formatPlanPrice(plan.PriceInStars, plan.PriceUsd);
-    const title = `${plan.Name} — ${monthlyOpens} opens/month — ${priceLabel}`;
+    const title = `${plan.Name} — ${monthlyOpens} открытий/мес — ${priceLabel}`;
     const description =
-      `${plan.Name}: ${monthlyOpens} job opens per month for ${Number(plan.DurationDays || 30)} days. ` +
-      `${hasAiTools ? 'Includes AI CV and Cover Letter tools. ' : 'AI CV and Cover Letter are not included. '}` +
-      `Price: ${priceLabel}. Payment via Telegram Stars.`;
+      `${plan.Name}: ${monthlyOpens} открытий вакансий в месяц на ${Number(plan.DurationDays || 30)} дней. ` +
+      `${hasAiTools ? 'Включает инструменты AI CV и Cover Letter. ' : 'Инструменты AI CV и Cover Letter не включены. '}` +
+      `Цена: ${priceLabel}. Оплата через Telegram Stars.`;
     try {
       await ctx.telegram.sendInvoice(ctx.chat.id, {
         title,
@@ -1486,7 +1486,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         payload,
         provider_token: '',
         currency: 'XTR',
-        prices: [{ label: `${plan.Name} (${Number(plan.DurationDays || 30)} days)`, amount: Number(plan.PriceInStars || 0) }],
+        prices: [{ label: `${plan.Name} (${Number(plan.DurationDays || 30)} дней)`, amount: Number(plan.PriceInStars || 0) }],
       });
     } catch (err) {
       const msg = err?.response?.body?.description ?? err?.message ?? String(err);
@@ -2492,7 +2492,7 @@ async function main() {
       if (!canUseAiTools) {
         return res.status(402).json({
           error: 'gold_required',
-          message: 'AI tools are available with Premium plan or available openings.',
+          message: 'AI-инструменты доступны в Premium или при наличии открытий.',
           monetization: await buildMonetizationStatus(user.Id),
         });
       }
@@ -2541,7 +2541,7 @@ async function main() {
       if (!canUseAiTools) {
         return res.status(402).json({
           error: 'gold_required',
-          message: 'AI tools are available with Premium plan or available openings.',
+          message: 'AI-инструменты доступны в Premium или при наличии открытий.',
           monetization: await buildMonetizationStatus(user.Id),
         });
       }

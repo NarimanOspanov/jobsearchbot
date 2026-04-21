@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Profile</title>
+    <title>Профиль</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root {
@@ -55,40 +55,40 @@
   </head>
   <body>
     <div class="wrap">
-      <h1>Profile</h1>
+      <h1>Профиль</h1>
 
       <section class="card">
-        <h2>User</h2>
-        <div class="row"><span>Telegram</span><span id="profileUser" class="muted">loading...</span></div>
-        <div class="row"><span>Chat ID</span><span id="profileChatId" class="muted">loading...</span></div>
+        <h2>Пользователь</h2>
+        <div class="row"><span>Telegram</span><span id="profileUser" class="muted">загрузка...</span></div>
+        <div class="row"><span>Chat ID</span><span id="profileChatId" class="muted">загрузка...</span></div>
       </section>
 
       <section class="card">
-        <h2>Settings</h2>
+        <h2>Настройки</h2>
         <div class="row"><span>HeadHunter</span><input id="hhEnabled" class="switch" type="checkbox" /></div>
         <div class="row"><span>LinkedIn</span><input id="linkedInEnabled" class="switch" type="checkbox" /></div>
         <div class="row"><span>Indeed</span><input id="indeedEnabled" class="switch" type="checkbox" /></div>
         <div class="row"><span>Telegram</span><input id="telegramEnabled" class="switch" type="checkbox" /></div>
-        <div class="row"><span>Company sites</span><input id="companySitesEnabled" class="switch" type="checkbox" /></div>
-        <div class="row"><span>Email founders</span><input id="emailFoundersEnabled" class="switch" type="checkbox" /></div>
-        <div class="row"><span>Email recruiters</span><input id="emailRecruitersEnabled" class="switch" type="checkbox" /></div>
+        <div class="row"><span>Сайты компаний</span><input id="companySitesEnabled" class="switch" type="checkbox" /></div>
+        <div class="row"><span>Email фаундеров</span><input id="emailFoundersEnabled" class="switch" type="checkbox" /></div>
+        <div class="row"><span>Email рекрутеров</span><input id="emailRecruitersEnabled" class="switch" type="checkbox" /></div>
 
         <div class="field">
-          <label for="searchMode">Search mode</label>
+          <label for="searchMode">Режим поиска</label>
           <select id="searchMode">
-            <option value="not_urgent">not urgently</option>
-            <option value="urgent">urgently</option>
+            <option value="not_urgent">не срочно</option>
+            <option value="urgent">срочно</option>
           </select>
         </div>
         <div class="field">
-          <label for="minimumSalary">Minimum salary</label>
+          <label for="minimumSalary">Минимальная зарплата</label>
           <div class="money-input">
             <span class="prefix">$</span>
-            <input id="minimumSalary" type="number" min="0" step="1" placeholder="e.g. 3000" />
+            <input id="minimumSalary" type="number" min="0" step="1" placeholder="например, 3000" />
           </div>
         </div>
-        <div class="row"><span>Remote only</span><input id="remoteOnly" class="switch" type="checkbox" /></div>
-        <button id="saveSettingsBtn">Save settings</button>
+        <div class="row"><span>Только удаленка</span><input id="remoteOnly" class="switch" type="checkbox" /></div>
+        <button id="saveSettingsBtn">Сохранить настройки</button>
         <p id="saveStatus" class="muted"></p>
       </section>
     </div>
@@ -121,7 +121,7 @@
       }
 
       function applyProfile(profile) {
-        document.getElementById('profileUser').textContent = profile.telegramUserName ? `@${profile.telegramUserName}` : '(no username)';
+        document.getElementById('profileUser').textContent = profile.telegramUserName ? `@${profile.telegramUserName}` : '(без username)';
         document.getElementById('profileChatId').textContent = profile.telegramChatId;
         const s = profile.settings || {};
         document.getElementById('hhEnabled').checked = !!s.hhEnabled;
@@ -143,16 +143,16 @@
 
       document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
         const statusEl = document.getElementById('saveStatus');
-        statusEl.textContent = 'Saving...';
+        statusEl.textContent = 'Сохраняем...';
         try {
           await api('/api/app/profile/settings', { method: 'PATCH', body: JSON.stringify(readSettings()) });
-          statusEl.textContent = 'Saved';
+          statusEl.textContent = 'Сохранено';
         } catch (err) {
-          statusEl.textContent = `Failed: ${err.message}`;
+          statusEl.textContent = `Ошибка: ${err.message}`;
         }
       });
 
-      loadProfile().catch((err) => alert(`Failed to load profile: ${err.message}`));
+      loadProfile().catch((err) => alert(`Не удалось загрузить профиль: ${err.message}`));
     </script>
   </body>
 </html>

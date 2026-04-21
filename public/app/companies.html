@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Remote Companies</title>
+    <title>Компании с удаленкой</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root {
@@ -25,8 +25,8 @@
   </head>
   <body>
     <div class="wrap">
-      <h1 class="title">Remote Companies</h1>
-      <p class="muted">Companies that hire for full remote roles.</p>
+      <h1 class="title">Компании с удаленкой</h1>
+      <p class="muted">Компании, которые нанимают на полностью удаленные роли.</p>
       <div id="companiesList"></div>
     </div>
     <script>
@@ -48,7 +48,7 @@
       function render(rows) {
         const list = document.getElementById('companiesList');
         if (!rows.length) {
-          list.innerHTML = '<div class="card"><p class="muted">No companies yet.</p></div>';
+          list.innerHTML = '<div class="card"><p class="muted">Пока нет компаний.</p></div>';
           return;
         }
         list.innerHTML = rows.map((row) => `
@@ -62,7 +62,7 @@
 
       api('/api/app/companies')
         .then(render)
-        .catch((err) => alert(`Failed to load companies: ${err.message}`));
+        .catch((err) => alert(`Не удалось загрузить компании: ${err.message}`));
     </script>
   </body>
 </html>

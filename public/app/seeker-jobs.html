@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Job Search</title>
+    <title>Поиск вакансий</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root {
@@ -261,38 +261,38 @@
 
       <div class="layout">
         <section class="card layout-col">
-          <h2>100% remote job finder</h2>
+          <h2>Поиск вакансий на 100% удаленку</h2>
           <div class="row date-range-row">
             <span class="date-range">
-              <label>From <input id="fromDate" type="date" /></label>
-              <label>To <input id="toDate" type="date" /></label>
+              <label>С <input id="fromDate" type="date" /></label>
+              <label>По <input id="toDate" type="date" /></label>
             </span>
           </div>
           <div class="row date-range-row">
-            <label>Roles</label>
+            <label>Роли</label>
             <div class="skills-picker">
-              <button id="skillPickerBtn" type="button" class="skills-picker-btn">All roles</button>
+              <button id="skillPickerBtn" type="button" class="skills-picker-btn">Все роли</button>
               <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
             </div>
             <span id="highlyRelevantFilterWrap" class="highly-relevant-filter" aria-hidden="true">
-              <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
-              <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="What does this mean?" aria-label="What does Top matches mean?">?</button>
+              <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Топ-совпадения</label>
+              <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="Что это значит?" aria-label="Что значит Топ-совпадения?">?</button>
             </span>
           </div>
           <div class="row date-range-row">
-            <label>Find in</label>
+            <label>Искать в</label>
             <div class="skills-picker">
-              <button id="sourcePickerBtn" type="button" class="skills-picker-btn">All sources</button>
+              <button id="sourcePickerBtn" type="button" class="skills-picker-btn">Все источники</button>
               <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
             </div>
           </div>
           <div class="row date-range-row">
-            <button id="syncBtn">Search</button>
+            <button id="syncBtn">Поиск</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
             <span class="pager">
-              <button id="prevPageBtn" type="button" class="ghost-btn">Prev</button>
-              <span id="pageInfo" class="muted">Page 1</span>
-              <button id="nextPageBtn" type="button" class="ghost-btn">Next</button>
+              <button id="prevPageBtn" type="button" class="ghost-btn">Назад</button>
+              <span id="pageInfo" class="muted">Страница 1</span>
+              <button id="nextPageBtn" type="button" class="ghost-btn">Далее</button>
             </span>
           </div>
           <p id="dashMsg" class="muted"></p>
@@ -305,32 +305,32 @@
     <div id="jobModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-head">
-          <strong>Job details</strong>
-          <button id="jobModalClose" type="button" class="ghost-btn">Close</button>
+          <strong>Детали вакансии</strong>
+          <button id="jobModalClose" type="button" class="ghost-btn">Закрыть</button>
         </div>
         <div class="modal-body">
-          <div id="jobInfo" class="muted">Select a job to continue.</div>
+          <div id="jobInfo" class="muted">Выберите вакансию, чтобы продолжить.</div>
           <div id="jobActions" style="display:none">
             <div class="row">
-              <label>Status
+              <label>Статус
                 <select id="statusSel">
-                  <option value="new">new</option>
-                  <option value="applied">applied</option>
-                  <option value="skipped">skipped</option>
+                  <option value="new">новая</option>
+                  <option value="applied">откликнулся</option>
+                  <option value="skipped">пропущена</option>
                 </select>
               </label>
-              <button id="genBtn">Generate Tailored CV + Cover Letter</button>
+              <button id="genBtn">Сгенерировать адаптированные CV + Cover Letter</button>
               <span id="jobLoader" class="loader" aria-hidden="true"></span>
             </div>
             <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
-            <label>Cover Letter</label>
+            <label>Сопроводительное письмо</label>
             <textarea id="coverPreview" readonly></textarea>
             <p id="jobMsg" class="muted"></p>
           </div>
           <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
             <div class="skills-block">
-              <h4>My notes</h4>
-              <textarea id="notesText" aria-label="My notes"></textarea>
+              <h4>Мои заметки</h4>
+              <textarea id="notesText" aria-label="Мои заметки"></textarea>
             </div>
           </div>
         </div>
@@ -339,8 +339,8 @@
     <div id="insightModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-head">
-          <strong id="insightModalTitle">AI insight</strong>
-          <button id="insightModalClose" type="button" class="ghost-btn">Close</button>
+          <strong id="insightModalTitle">AI-пояснение</strong>
+          <button id="insightModalClose" type="button" class="ghost-btn">Закрыть</button>
         </div>
         <div class="modal-body">
           <p id="insightModalText" class="job-summary" style="margin:0"></p>
@@ -350,15 +350,15 @@
     <div id="highlyRelevantHintModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="highlyRelevantHintTitle">
       <div class="modal-card">
         <div class="modal-head">
-          <strong id="highlyRelevantHintTitle">Top matches</strong>
-          <button id="highlyRelevantHintClose" type="button" class="ghost-btn">Close</button>
+          <strong id="highlyRelevantHintTitle">Топ-совпадения</strong>
+          <button id="highlyRelevantHintClose" type="button" class="ghost-btn">Закрыть</button>
         </div>
         <div class="modal-body">
           <p class="job-summary" style="margin:0 0 12px">
-            If <strong>Top matches</strong> is <strong>checked</strong>, you only see jobs that are <strong>especially highly relevant</strong> to the roles you selected.
+            Если включен фильтр <strong>Топ-совпадения</strong>, показываются только вакансии с <strong>наиболее высокой релевантностью</strong> к выбранным ролям.
           </p>
           <p class="job-summary" style="margin:0">
-            If it is <strong>unchecked</strong>, you also get <strong>other jobs</strong> that can still be interesting because they match your selection, but are not in that top “super relevant” tier.
+            Если фильтр выключен, вы увидите и другие подходящие вакансии, которые могут быть полезны, но не входят в топ по релевантности.
           </p>
         </div>
       </div>
@@ -366,15 +366,15 @@
     <div id="resumeRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-head">
-          <strong>Main resume required</strong>
-          <button id="resumeRequiredClose" type="button" class="ghost-btn">Close</button>
+          <strong>Нужно основное резюме</strong>
+          <button id="resumeRequiredClose" type="button" class="ghost-btn">Закрыть</button>
         </div>
         <div class="modal-body">
-          <p class="muted">To generate tailored CV and cover letter, upload your main resume first.</p>
+          <p class="muted">Чтобы сгенерировать адаптированные CV и cover letter, сначала загрузите основное резюме.</p>
           <div class="resume-upload-box">
             <input id="resumeFileInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
             <div class="row" style="margin-top:8px">
-              <button id="uploadResumeBtn" type="button">Upload resume</button>
+              <button id="uploadResumeBtn" type="button">Загрузить резюме</button>
               <span id="uploadResumeLoader" class="loader" aria-hidden="true"></span>
             </div>
             <p id="resumeUploadMsg" class="muted"></p>
@@ -385,14 +385,14 @@
     <div id="subscribeRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-head">
-          <strong>Subscription required</strong>
-          <button id="subscribeRequiredClose" type="button" class="ghost-btn">Close</button>
+          <strong>Требуется подписка</strong>
+          <button id="subscribeRequiredClose" type="button" class="ghost-btn">Закрыть</button>
         </div>
         <div class="modal-body">
-          <p class="muted">You reached the free job-details limit. Subscribe to required channel(s) to continue.</p>
+          <p class="muted">Вы достигли бесплатного лимита просмотров деталей вакансий. Подпишитесь на обязательные каналы, чтобы продолжить.</p>
           <div id="subscribeChannelsList" class="row" style="display:grid;gap:8px"></div>
           <div class="row" style="margin-top:10px">
-            <button id="verifySubscriptionBtn" type="button">I subscribed - check again</button>
+            <button id="verifySubscriptionBtn" type="button">Я подписался - проверить снова</button>
             <span id="verifySubscriptionLoader" class="loader" aria-hidden="true"></span>
           </div>
           <p id="subscribeGateMsg" class="muted"></p>
@@ -402,8 +402,8 @@
     <div id="paymentRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-head">
-          <strong>Payment required</strong>
-          <button id="paymentRequiredClose" type="button" class="ghost-btn">Close</button>
+          <strong>Требуется оплата</strong>
+          <button id="paymentRequiredClose" type="button" class="ghost-btn">Закрыть</button>
         </div>
         <div class="modal-body">
           <p class="muted">
@@ -544,6 +544,12 @@
       let botUsername = '';
       const CHANNEL_ALTERNATIVE_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
       const FIND_IN_OPTIONS = ['Linkedin', 'Indeed', 'Telegram channels', 'Company sites'];
+      const FIND_IN_LABELS = {
+        Linkedin: 'LinkedIn',
+        Indeed: 'Indeed',
+        'Telegram channels': 'Telegram-каналы',
+        'Company sites': 'Сайты компаний',
+      };
 
       const SEEKER_FILTER_KEYS = [
         'from',
@@ -692,7 +698,7 @@
       function skillDisplayLine(s) {
         const roleName = String(s.roleName || '').trim() || '—';
         const name = String(s.name || '').trim() || '—';
-        return `${roleName} : ${name}`;
+        return `${roleName}: ${name}`;
       }
       function renderJobSkillsHtml(skillsValue) {
         const list = Array.isArray(skillsValue) ? skillsValue : [];
@@ -707,8 +713,8 @@
             })
             .join('');
         let out = '<div class="skills-block">';
-        out += `<h4>Primary skills</h4><div>${chips(primary, 'primary') || '<span class="muted">None</span>'}</div>`;
-        out += `<h4>Secondary skills</h4><div>${chips(secondary, '') || '<span class="muted">None</span>'}</div>`;
+        out += `<h4>Ключевые навыки</h4><div>${chips(primary, 'primary') || '<span class="muted">Нет</span>'}</div>`;
+        out += `<h4>Дополнительные навыки</h4><div>${chips(secondary, '') || '<span class="muted">Нет</span>'}</div>`;
         out += '</div>';
         return out;
       }
@@ -783,7 +789,7 @@
         const info = document.getElementById('pageInfo');
         const prev = document.getElementById('prevPageBtn');
         const next = document.getElementById('nextPageBtn');
-        if (info) info.textContent = `Page ${pageInfo.page} · ${pageInfo.count} on page · Total ${pageInfo.totalRows}`;
+        if (info) info.textContent = `Страница ${pageInfo.page} · ${pageInfo.count} на странице · Всего ${pageInfo.totalRows}`;
         if (prev) prev.disabled = isSyncing || pageInfo.page <= 1;
         if (next) next.disabled = isSyncing || !pageInfo.hasMore;
       }
@@ -796,8 +802,8 @@
         });
       }
       function showInsight(title, text) {
-        document.getElementById('insightModalTitle').textContent = String(title || '').trim() || 'AI insight';
-        document.getElementById('insightModalText').textContent = String(text || '').trim() || 'No data.';
+        document.getElementById('insightModalTitle').textContent = String(title || '').trim() || 'AI-пояснение';
+        document.getElementById('insightModalText').textContent = String(text || '').trim() || 'Нет данных.';
         isInsightModalOpen = true;
         document.getElementById('insightModal').classList.add('on');
       }
@@ -819,13 +825,13 @@
         document.querySelectorAll('.skill-tag[data-justification]').forEach((el) => {
           el.addEventListener('click', () => {
             const justification = el.getAttribute('data-justification') || '';
-            showInsight('Why AI highlighted this skill?', justification);
+            showInsight('Почему AI выделил этот навык?', justification);
           });
         });
         const remoteBtn = document.getElementById('showRemoteReasonBtn');
         if (remoteBtn) {
           remoteBtn.addEventListener('click', () => {
-            showInsight('Why AI thinks this job is remote?', job.remoteReasoning || 'No data.');
+            showInsight('Почему AI считает вакансию удаленной?', job.remoteReasoning || 'Нет данных.');
           });
         }
       }
@@ -851,12 +857,12 @@
         const channels = Array.isArray(payload?.channels) ? payload.channels : [];
         const list = document.getElementById('subscribeChannelsList');
         if (channels.length === 0) {
-          list.innerHTML = '<div class="muted">No channels configured. Ask admin to populate RequiredChannels.</div>';
+          list.innerHTML = '<div class="muted">Обязательные каналы не настроены. Обратитесь к администратору.</div>';
         } else {
           list.innerHTML = channels
             .map((ch, i) => {
               const url = String(ch?.joinUrl || '').trim();
-              const label = url ? `Open channel ${i + 1}` : `Channel ${i + 1} has no link`;
+              const label = url ? `Открыть канал ${i + 1}` : `У канала ${i + 1} нет ссылки`;
               if (!url) return `<span class="muted">${esc(label)}</span>`;
               return `<a href="${attrEsc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
             })
@@ -882,7 +888,7 @@
         const plans = Array.isArray(payload?.monetization?.plans) ? payload.monetization.plans : [];
         const list = document.getElementById('paymentPlansList');
         if (!plans.length) {
-          list.innerHTML = '<div class="muted">No plans available right now.</div>';
+          list.innerHTML = '<div class="muted">Сейчас нет доступных тарифов.</div>';
         } else {
           list.innerHTML = plans
             .map((plan) => {
@@ -891,12 +897,12 @@
               const priceLabel = usdText
                 ? `${Number(plan?.priceInStars || 0)} ⭐ (~${usdText})`
                 : `${Number(plan?.priceInStars || 0)} ⭐`;
-              const title = `${esc(plan?.name || code || 'Plan')} · ${Number(plan?.jobOpenMonthlyLimit || 0)} opens/month · ${priceLabel}`;
+              const title = `${esc(plan?.name || code || 'Тариф')} · ${Number(plan?.jobOpenMonthlyLimit || 0)} открытий/мес · ${priceLabel}`;
               const description = String(plan?.description || '').trim();
               return `<div class="resume-upload-box" style="margin-top:0">
                 <div style="font-weight:600;margin-bottom:6px">${title}</div>
                 ${description ? `<div class="muted" style="margin-bottom:8px">${esc(description)}</div>` : ''}
-                <button type="button" data-plan-code="${attrEsc(code)}">Buy ${esc(plan?.name || code || 'plan')}</button>
+                <button type="button" data-plan-code="${attrEsc(code)}">Купить ${esc(plan?.name || code || 'тариф')}</button>
               </div>`;
             })
             .join('');
@@ -904,7 +910,7 @@
             btn.addEventListener('click', () => {
               const planCode = String(btn.getAttribute('data-plan-code') || '').trim();
               openTelegramPaymentForPlan(planCode).catch((err) => {
-                setMsg('paymentRequiredMsg', err?.message || 'Failed to open payment link.', true);
+                setMsg('paymentRequiredMsg', err?.message || 'Не удалось открыть ссылку на оплату.', true);
               });
             });
           });
@@ -967,7 +973,7 @@
           err.payload = payload;
           throw err;
         }
-        throw new Error(String(payload?.error || raw || 'Failed to record job details open'));
+        throw new Error(String(payload?.error || raw || 'Не удалось зафиксировать открытие деталей вакансии'));
       }
       async function verifyRequiredChannels() {
         const payload = await api('/api/app/required-channels/verify', {
@@ -1022,14 +1028,14 @@
           : '/api/app/monetization/pay-link';
         const payload = await api(endpoint);
         const url = String(payload?.deepLink || '').trim();
-        if (!url) throw new Error('Payment link is empty.');
+        if (!url) throw new Error('Ссылка на оплату пустая.');
         if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
       }
 
       async function openReferralBonusFlow() {
         const username = await loadBotUsername();
-        if (!username) throw new Error('Bot username is unavailable.');
+        if (!username) throw new Error('Не удалось получить username бота.');
         const url = `https://t.me/${username}?start=referrals`;
         if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
@@ -1050,7 +1056,7 @@
           try {
             const profile = await api('/api/app/profile');
             apply(profile);
-            if (!seekerId) throw new Error('Could not resolve current user.');
+            if (!seekerId) throw new Error('Не удалось определить текущего пользователя.');
             return;
           } catch (err) {
             const msg = String(err?.message || '');
@@ -1068,7 +1074,7 @@
         const menu = document.getElementById('skillPickerMenu');
         const grouped = new Map();
         for (const s of skills) {
-          const roleName = String(s.roleName || s.RoleName || '').trim() || 'Other';
+          const roleName = String(s.roleName || s.RoleName || '').trim() || 'Другое';
           const skillName = String(s.name || s.Name || `${s.id}`).trim() || String(s.id);
           if (!grouped.has(roleName)) grouped.set(roleName, []);
           grouped.get(roleName).push({ id: s.id, name: skillName });
@@ -1112,10 +1118,10 @@
         const csv = getSelectedSkillIdsCsv();
         const btn = document.getElementById('skillPickerBtn');
         if (!csv) {
-          btn.textContent = 'All roles';
+          btn.textContent = 'Все роли';
         } else {
           const ids = csv.split(',').filter(Boolean);
-          btn.textContent = `${ids.length} role(s) selected`;
+          btn.textContent = `Выбрано ролей: ${ids.length}`;
         }
         updateHighlyRelevantFilterState();
       }
@@ -1135,7 +1141,7 @@
         menu.innerHTML = FIND_IN_OPTIONS
           .map(
             (name) =>
-              `<label class="skill-check"><input type="checkbox" value="${attrEsc(name)}" />${esc(name)}</label>`
+              `<label class="skill-check"><input type="checkbox" value="${attrEsc(name)}" />${esc(FIND_IN_LABELS[name] || name)}</label>`
           )
           .join('');
       }
@@ -1150,7 +1156,7 @@
       function renderSourcePickerSummary() {
         const selected = getSelectedSources();
         const btn = document.getElementById('sourcePickerBtn');
-        btn.textContent = selected.length ? `${selected.length} source(s) selected` : 'All sources';
+        btn.textContent = selected.length ? `Выбрано источников: ${selected.length}` : 'Все источники';
       }
 
       function openSourcePicker() {
@@ -1168,11 +1174,11 @@
         const uploadBtn = document.getElementById('uploadResumeBtn');
         const loaderId = 'uploadResumeLoader';
         const file = fileInput.files?.[0];
-        if (!file) throw new Error('Choose a file first.');
-        if (file.size > 15 * 1024 * 1024) throw new Error('File is too large. Max 15MB.');
+        if (!file) throw new Error('Сначала выберите файл.');
+        if (file.size > 15 * 1024 * 1024) throw new Error('Файл слишком большой. Максимум 15MB.');
         const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
         if (!allowedTypes.includes(file.type)) {
-          throw new Error('Unsupported file type. Use PDF or image (JPG/PNG/WEBP).');
+          throw new Error('Неподдерживаемый тип файла. Используйте PDF или изображение (JPG/PNG/WEBP).');
         }
         uploadBtn.disabled = true;
         onLoading(loaderId, true);
@@ -1202,11 +1208,11 @@
           });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) {
-            throw new Error(typeof payload?.error === 'string' ? payload.error : 'Failed to upload resume');
+            throw new Error(typeof payload?.error === 'string' ? payload.error : 'Не удалось загрузить резюме');
           }
           currentResumeUrl = String(payload?.resumeUrl || '').trim();
-          if (!currentResumeUrl) throw new Error('Resume uploaded but URL is missing.');
-          setMsg('resumeUploadMsg', 'Resume uploaded successfully.');
+          if (!currentResumeUrl) throw new Error('Резюме загружено, но ссылка отсутствует.');
+          setMsg('resumeUploadMsg', 'Резюме успешно загружено.');
           return true;
         } finally {
           onLoading(loaderId, false);
@@ -1234,7 +1240,7 @@
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = 100;
         const sourceIds = String(query.sourceIds || '').trim();
-        if (!from || !to) throw new Error('Set from and to dates.');
+        if (!from || !to) throw new Error('Укажите даты "С" и "По".');
 
         setQ({
           from,
@@ -1270,7 +1276,7 @@
           await loadApplicationsByUser();
           renderJobs();
           updatePagerUi();
-          setMsg('dashMsg', `Loaded page ${pageInfo.page}: ${pageInfo.count} jobs. Total available: ${pageInfo.totalRows}.`);
+          setMsg('dashMsg', `Загружена страница ${pageInfo.page}: ${pageInfo.count} вакансий. Всего доступно: ${pageInfo.totalRows}.`);
         } finally {
           setSyncBusy(false);
           updatePagerUi();
@@ -1284,7 +1290,7 @@
       function renderJobs() {
         const body = document.getElementById('jobsList');
         if (!positions.length) {
-          body.innerHTML = '<div class="muted">No jobs loaded.</div>';
+          body.innerHTML = '<div class="muted">Вакансии не найдены.</div>';
           return;
         }
         body.innerHTML = positions.map((p) => {
@@ -1299,8 +1305,8 @@
             </div>
             <div class="job-card-meta">
               <span>#${esc(p.id)}</span>
-              <span>Posted: ${esc(formatPostedDate(p.publishedAt) || '—')}</span>
-              <span>Apply: ${esc(p.applyType || '—')}</span>
+              <span>Опубликовано: ${esc(formatPostedDate(p.publishedAt) || '—')}</span>
+              <span>Отклик: ${esc(p.applyType || '—')}</span>
             </div>
           </div>`;
         }).join('');
@@ -1320,7 +1326,7 @@
                 openPaymentRequiredModal(err.payload || {});
                 return;
               }
-              setMsg('dashMsg', err?.message || 'Could not open job details.', true);
+              setMsg('dashMsg', err?.message || 'Не удалось открыть детали вакансии.', true);
             }
           });
         });
@@ -1364,16 +1370,16 @@
         document.getElementById('jobActions').style.display = 'block';
         hideInsight();
         const sumHtml = String(job.shortSummary || '').trim()
-          ? `<div class="skills-block" style="margin-top:10px"><h4>Summary</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
+          ? `<div class="skills-block" style="margin-top:10px"><h4>Кратко</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
           : '';
         const remoteHtml = String(job.remoteReasoning || '').trim()
-          ? `<div class="skills-block"><h4>Remote</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Why AI thinks this job is remote?</button></div>`
+          ? `<div class="skills-block"><h4>Удаленка</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Почему AI считает эту вакансию удаленной?</button></div>`
           : '';
         document.getElementById('jobInfo').innerHTML =
           `<div class="job-detail">` +
           `<div><strong>${esc(job.title)}</strong></div>` +
           `<div class="sub">${esc(job.company)} · ${esc(job.location)}</div>` +
-          `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Open source job link</a></div>` +
+          `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Открыть вакансию в источнике</a></div>` +
           remoteHtml +
           sumHtml +
           renderJobSkillsHtml(job.skills) +
@@ -1394,14 +1400,14 @@
           return;
         }
         links.innerHTML = selectedApplication.TailoredCVURL
-          ? `<a href="${esc(selectedApplication.TailoredCVURL)}" download target="_blank" rel="noopener noreferrer">Download Tailored CV</a>`
+          ? `<a href="${esc(selectedApplication.TailoredCVURL)}" download target="_blank" rel="noopener noreferrer">Скачать адаптированное CV</a>`
           : '';
         cover.value = selectedApplication.CoverLetter || '';
       }
 
       async function saveStatus() {
         if (isJobBusy) return;
-        if (!selectedJob) throw new Error('Open a job first.');
+        if (!selectedJob) throw new Error('Сначала откройте вакансию.');
         setJobBusy(true);
         try {
           const app = await ensureApplication(selectedJob);
@@ -1416,7 +1422,7 @@
           await loadApplicationsByUser();
           renderJobs();
           renderArtifacts();
-          setMsg('jobMsg', 'Status saved.');
+          setMsg('jobMsg', 'Статус сохранен.');
         } finally {
           setJobBusy(false);
         }
@@ -1424,10 +1430,10 @@
 
       async function generateMaterials() {
         if (isJobBusy) return;
-        if (!selectedJob) throw new Error('Open a job first.');
+        if (!selectedJob) throw new Error('Сначала откройте вакансию.');
         if (!currentResumeUrl) {
           continueGenerateAfterResumeUpload = true;
-          setMsg('resumeUploadMsg', 'Upload your main resume to continue.');
+          setMsg('resumeUploadMsg', 'Чтобы продолжить, загрузите основное резюме.');
           openResumeRequiredModal();
           return;
         }
@@ -1436,7 +1442,7 @@
           const app = await ensureApplication(selectedJob);
           const resumePayload = await api(`${API_BASE}/api/app/admin/users/${encodeURIComponent(seekerId)}/resume-text`);
           const mainResumeText = String(resumePayload.resumeText || '').trim();
-          if (!mainResumeText) throw new Error('Resume text is empty for current user.');
+          if (!mainResumeText) throw new Error('Текст резюме не найден у текущего пользователя.');
 
           const [tailored, cover] = await Promise.all([
             api(`${API_BASE}/api/tailored-resume/upload`, {
@@ -1472,13 +1478,13 @@
           await loadApplicationsByUser();
           renderJobs();
           renderArtifacts();
-          setMsg('jobMsg', 'Tailored CV + cover letter generated and saved.');
+          setMsg('jobMsg', 'Адаптированные CV и cover letter сгенерированы и сохранены.');
         } catch (err) {
           const rawMessage = String(err?.message || '');
           if (rawMessage.includes('gold_required')) {
             const payload = parseErrorPayload(rawMessage);
             openPaymentRequiredModal(payload || {});
-            setMsg('jobMsg', 'AI tools require Premium plan or available openings.', true);
+            setMsg('jobMsg', 'AI-инструменты доступны в Premium или при наличии открытий.', true);
             return;
           }
           throw err;
@@ -1524,9 +1530,9 @@
           const hrefLen = String(window.location.href || '').length;
           const hint =
             hrefLen > 6000
-              ? ' This link may be too long for Telegram on iOS (the signed part can be dropped). Open job search from the bot menu, or shorten filters in the shared link.'
-              : ' Open this screen only from Telegram (bot menu or in-chat button), not from an external browser or a raw HTTPS bookmark.';
-          throw new Error(`Missing Telegram Web App credentials (no init data).${hint}`);
+              ? ' Ссылка может быть слишком длинной для Telegram на iOS. Откройте поиск из меню бота или сократите фильтры в ссылке.'
+              : ' Открывайте этот экран только из Telegram (меню бота или кнопка в чате), а не во внешнем браузере.';
+          throw new Error(`Нет данных Telegram Web App (init data).${hint}`);
         }
         await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
@@ -1586,14 +1592,14 @@
         try {
           await openReferralBonusFlow();
         } catch (err) {
-          setMsg('paymentRequiredMsg', err?.message || 'Failed to open referral flow.', true);
+          setMsg('paymentRequiredMsg', err?.message || 'Не удалось открыть реферальный экран.', true);
         }
       });
       document.getElementById('openChannelAlternativeBtn').addEventListener('click', async () => {
         try {
           await openChannelAlternativeFlow();
         } catch (err) {
-          setMsg('paymentRequiredMsg', err?.message || 'Failed to open channel link.', true);
+          setMsg('paymentRequiredMsg', err?.message || 'Не удалось открыть ссылку на канал.', true);
         }
       });
       document.getElementById('uploadResumeBtn').addEventListener('click', () => {
@@ -1631,7 +1637,7 @@
         try {
           const ok = await verifyRequiredChannels();
           if (!ok) {
-            setMsg('subscribeGateMsg', 'Still not subscribed to all required channels.', true);
+            setMsg('subscribeGateMsg', 'Вы все еще подписаны не на все обязательные каналы.', true);
             return;
           }
           const pendingJobId = Number(pendingSubscribeJobId || 0);
@@ -1645,7 +1651,7 @@
         } catch (err) {
           if (err?.code === 'subscribe_required') {
             openSubscribeRequiredModal(err.payload || {}, pendingSubscribeJobId);
-            setMsg('subscribeGateMsg', 'Still not subscribed to all required channels.', true);
+            setMsg('subscribeGateMsg', 'Вы все еще подписаны не на все обязательные каналы.', true);
             return;
           }
           if (err?.code === 'payment_required') {
@@ -1653,7 +1659,7 @@
             openPaymentRequiredModal(err.payload || {});
             return;
           }
-          setMsg('subscribeGateMsg', err?.message || 'Failed to verify subscription.', true);
+          setMsg('subscribeGateMsg', err?.message || 'Не удалось проверить подписку.', true);
         } finally {
           onLoading('verifySubscriptionLoader', false);
         }
@@ -1699,7 +1705,7 @@
       });
 
       boot().catch((err) => {
-        setMsg('globalMsg', `Failed to initialize seeker jobs page: ${err.message}`, true);
+        setMsg('globalMsg', `Не удалось инициализировать страницу поиска вакансий: ${err.message}`, true);
       });
     </script>
   </body>

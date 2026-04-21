@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pricing</title>
+    <title>Тарифы</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root {
@@ -38,8 +38,8 @@
   </head>
   <body>
     <div class="wrap">
-      <h1>Pricing</h1>
-      <p id="statusMsg" class="muted">Loading pricing...</p>
+      <h1>Тарифы</h1>
+      <p id="statusMsg" class="muted">Загружаем тарифы...</p>
       <div id="plansList" class="row" style="display:grid;gap:10px"></div>
     </div>
     <script>
@@ -115,17 +115,17 @@
           : '/api/app/monetization/pay-link';
         const payload = await api(endpoint);
         const url = String(payload?.deepLink || '').trim();
-        if (!url) throw new Error('Payment link is empty');
+        if (!url) throw new Error('Ссылка на оплату не найдена');
         if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
       }
 
       function renderStatus(monetization, channelsOk) {
-        const activePlanName = monetization?.activePlan?.name || 'Free';
+        const activePlanName = monetization?.activePlan?.name || 'Базовый';
         const remaining = Number(monetization?.remainingOpens || 0);
         const total = Number(monetization?.totalAllowance || 0);
-        const ai = monetization?.canUseAiTools ? 'enabled' : 'locked (Gold required)';
-        const text = `Current plan: ${activePlanName}. Remaining opens this month: ${remaining}/${total}. AI tools: ${ai}. Required channels: ${channelsOk ? 'ok' : 'required'}.`;
+        const ai = monetization?.canUseAiTools ? 'доступны' : 'недоступны';
+        const text = `Текущий тариф: ${activePlanName}. Осталось открытий в этом месяце: ${remaining}/${total}. AI-инструменты: ${ai}. Обязательные каналы: ${channelsOk ? 'подписка подтверждена' : 'требуется подписка'}.`;
         const el = document.getElementById('statusMsg');
         el.className = 'muted';
         el.textContent = text;
@@ -134,7 +134,7 @@
       function renderPlans(plans) {
         const list = document.getElementById('plansList');
         if (!Array.isArray(plans) || plans.length === 0) {
-          list.innerHTML = '<div class="card muted">No plans available right now.</div>';
+          list.innerHTML = '<div class="card muted">Сейчас нет доступных тарифов.</div>';
           return;
         }
         list.innerHTML = plans
@@ -149,11 +149,11 @@
             return `<section class="card">
               <h3>${title}</h3>
               <div class="meta">
-                <span class="muted">${Number(plan?.jobOpenMonthlyLimit || 0)} opens/month</span>
-                <span class="muted">${Number(plan?.durationDays || 30)} days</span>
+                <span class="muted">${Number(plan?.jobOpenMonthlyLimit || 0)} открытий/мес</span>
+                <span class="muted">${Number(plan?.durationDays || 30)} дней</span>
                 ${description ? `<span class="muted">${esc(description)}</span>` : ''}
               </div>
-              <button type="button" data-plan-code="${esc(code)}">Buy ${esc(plan?.name || code || 'plan')}</button>
+              <button type="button" data-plan-code="${esc(code)}">Купить ${esc(plan?.name || code || 'тариф')}</button>
             </section>`;
           })
           .join('');
@@ -164,7 +164,7 @@
               await openPayment(btn.getAttribute('data-plan-code'));
             } catch (err) {
               statusEl.className = 'bad';
-              statusEl.textContent = err?.message || 'Failed to open payment.';
+              statusEl.textContent = err?.message || 'Не удалось открыть оплату.';
             }
           });
         });
@@ -179,7 +179,7 @@
       boot().catch((err) => {
         const el = document.getElementById('statusMsg');
         el.className = 'bad';
-        el.textContent = `Failed to load pricing: ${err.message}`;
+        el.textContent = `Не удалось загрузить тарифы: ${err.message}`;
       });
     </script>
   </body>

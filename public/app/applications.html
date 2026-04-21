@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Applications</title>
+    <title>Отклики</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root {
@@ -89,10 +89,10 @@
   </head>
   <body>
     <div class="wrap">
-      <h1>Applications</h1>
+      <h1>Отклики</h1>
 
       <section class="card">
-        <h2>Applications</h2>
+        <h2>Список откликов</h2>
         <div id="appsList" class="apps"></div>
       </section>
     </div>
@@ -100,11 +100,11 @@
     <div id="resumeModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="resumeModalTitle">
       <div class="modal-card">
         <div class="modal-head">
-          <strong id="resumeModalTitle">Tailored Resume</strong>
-          <button class="btn" id="resumeModalClose" type="button">Close</button>
+          <strong id="resumeModalTitle">Адаптированное резюме</strong>
+          <button class="btn" id="resumeModalClose" type="button">Закрыть</button>
         </div>
         <div class="modal-body">
-          <iframe id="resumeFrame" title="Tailored Resume"></iframe>
+          <iframe id="resumeFrame" title="Адаптированное резюме"></iframe>
         </div>
       </div>
     </div>
@@ -112,8 +112,8 @@
     <div id="coverLetterModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="coverLetterModalTitle">
       <div class="modal-card">
         <div class="modal-head">
-          <strong id="coverLetterModalTitle">Cover Letter</strong>
-          <button class="btn" id="coverLetterModalClose" type="button">Close</button>
+          <strong id="coverLetterModalTitle">Сопроводительное письмо</strong>
+          <button class="btn" id="coverLetterModalClose" type="button">Закрыть</button>
         </div>
         <div class="modal-body">
           <pre id="coverLetterContent"></pre>
@@ -124,8 +124,8 @@
     <div id="summaryModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="summaryModalTitle">
       <div class="modal-card">
         <div class="modal-head">
-          <strong id="summaryModalTitle">Job Summary</strong>
-          <button class="btn" id="summaryModalClose" type="button">Close</button>
+          <strong id="summaryModalTitle">Кратко о вакансии</strong>
+          <button class="btn" id="summaryModalClose" type="button">Закрыть</button>
         </div>
         <div class="modal-body">
           <pre id="summaryContent"></pre>
@@ -214,26 +214,32 @@
         const list = document.getElementById('appsList');
         applicationsById = new Map(rows.map((row) => [String(row.Id), row]));
         if (!rows.length) {
-          list.innerHTML = '<p class="muted">No applications yet.</p>';
+          list.innerHTML = '<p class="muted">Откликов пока нет.</p>';
           return;
         }
+        const statusLabels = {
+          new: 'новый',
+          applied: 'откликнулся',
+          skipped: 'пропущен',
+        };
         list.innerHTML = rows.map((row) => {
           const meta = parseMetaJson(row.MetaJson);
           const shortSummary = typeof meta?.shortSummary === 'string' ? meta.shortSummary.trim() : '';
           const appliedAt = formatDateOnly(row.AppliedAt);
           const title = escapeHtml(row.VacancyTitle || '');
-          const status = escapeHtml(row.Status || 'applied');
-          const company = escapeHtml(row.CompanyName || 'Unknown company');
+          const statusRaw = String(row.Status || 'applied').toLowerCase();
+          const status = escapeHtml(statusLabels[statusRaw] || statusRaw);
+          const company = escapeHtml(row.CompanyName || 'Компания не указана');
           const notes = row.Notes ? `<div style="margin-top:8px;">${escapeHtml(row.Notes)}</div>` : '';
           const tailoredBtn = row.TailoredCVURL
-            ? `<button class="btn js-open-resume" type="button" data-id="${row.Id}">View tailored resume</button>`
-            : '<button class="btn" type="button" disabled>No tailored resume</button>';
+            ? `<button class="btn js-open-resume" type="button" data-id="${row.Id}">Открыть адаптированное резюме</button>`
+            : '<button class="btn" type="button" disabled>Нет адаптированного резюме</button>';
           const coverBtn = row.CoverLetter
-            ? `<button class="btn js-open-cover" type="button" data-id="${row.Id}">View cover letter</button>`
-            : '<button class="btn" type="button" disabled>No cover letter</button>';
+            ? `<button class="btn js-open-cover" type="button" data-id="${row.Id}">Открыть сопроводительное письмо</button>`
+            : '<button class="btn" type="button" disabled>Нет сопроводительного письма</button>';
           const summaryBtn = shortSummary
-            ? `<button class="btn js-open-summary" type="button" data-id="${row.Id}">View job summary</button>`
-            : '<button class="btn" type="button" disabled>No job summary</button>';
+            ? `<button class="btn js-open-summary" type="button" data-id="${row.Id}">Открыть краткое описание вакансии</button>`
+            : '<button class="btn" type="button" disabled>Нет краткого описания вакансии</button>';
           return `
             <article class="app-item">
               <div style="display:flex;justify-content:space-between;gap:10px;">
@@ -241,7 +247,7 @@
                 <span class="pill">${status}</span>
               </div>
               <div class="muted" style="margin-top:6px;">${company}</div>
-              <div class="muted" style="margin-top:4px;">Applied: ${appliedAt}</div>
+              <div class="muted" style="margin-top:4px;">Дата отклика: ${appliedAt}</div>
               ${notes}
               <div class="actions">
                 ${tailoredBtn}
@@ -300,7 +306,7 @@
         closeSummaryModal();
       });
 
-      loadApplications().catch((err) => alert(`Failed to load applications: ${err.message}`));
+      loadApplications().catch((err) => alert(`Не удалось загрузить отклики: ${err.message}`));
     </script>
   </body>
 </html>
