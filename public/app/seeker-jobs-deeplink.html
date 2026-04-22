@@ -1689,7 +1689,7 @@
           openPaymentRequiredModal({ monetization: monetizationStatus?.monetization || {} });
         }
         if (shouldAutoSearchOnBoot(s)) {
-          await syncJobs();
+          await syncJobs({ trackSearchClick: true });
         }
       }
 
