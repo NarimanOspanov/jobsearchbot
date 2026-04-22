@@ -94,7 +94,7 @@
           const hasStructured = keysCheck.some((k) => String(inner.get(k) || '').trim());
 
           if (!hasStructured) {
-            const targetUrl = '/app/seeker-jobs?q=' + encodeURIComponent(rawQuery);
+            const targetUrl = '/app/seeker-jobs-deeplink?q=' + encodeURIComponent(rawQuery);
             window.location.replace(targetUrl + hashFrag);
             return;
           }
@@ -115,7 +115,7 @@
           allowedKeys.forEach((key) => {
             if (merged.has(key)) nextParts.push(`${encodeURIComponent(key)}=${encodeURIComponent(merged.get(key))}`);
           });
-          const targetUrl = nextParts.length ? `/app/seeker-jobs?${nextParts.join('&')}` : '/app/seeker-jobs';
+          const targetUrl = nextParts.length ? `/app/seeker-jobs-deeplink?${nextParts.join('&')}` : '/app/seeker-jobs-deeplink';
           window.location.replace(targetUrl + hashFrag);
           return;
         }

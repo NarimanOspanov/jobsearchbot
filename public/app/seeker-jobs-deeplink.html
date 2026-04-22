@@ -1,0 +1,1890 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Поиск вакансий (deeplink)</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { width: 100%; max-width: 100%; margin: 0 auto; padding: 14px; display: grid; gap: 12px; box-sizing: border-box; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+      h1, h2, h3 { margin: 0 0 10px; }
+      .muted { color: var(--muted); }
+      .bad { color: #ef4444; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      input, select, button, textarea {
+        border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 8px; font: inherit;
+      }
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        filter: invert(1) brightness(1.4);
+        opacity: 1;
+      }
+      button { cursor: pointer; background: var(--accent); border-color: var(--accent); }
+      .layout { display: grid; gap: 12px; grid-template-columns: 1fr; align-items: stretch; }
+      .layout .card.layout-col {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .layout .layout-col-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+      @media (min-width: 1024px) {
+        .layout .card.layout-col {
+          max-height: calc(100vh - 100px);
+        }
+      }
+      .jobs-list {
+        display: grid;
+        gap: 10px;
+      }
+      .job-card {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #10182d;
+        padding: 10px;
+        cursor: pointer;
+      }
+      .job-card:active { transform: scale(0.998); }
+      .job-card:hover { border-color: var(--accent); }
+      .job-card-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: flex-start;
+      }
+      .job-card-title { font-weight: 600; line-height: 1.35; }
+      .job-card-sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
+      .job-card-meta { margin-top: 8px; color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 10px; }
+      .job-status-pill {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .artifacts a { color: #8ab4ff; display: inline-block; margin-right: 10px; text-decoration: underline; font-weight: 600; }
+      a { color: #9ec5ff; text-decoration: underline; font-weight: 600; }
+      a:hover { color: #c7ddff; }
+      .loader {
+        display: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(158, 176, 209, 0.45);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
+      }
+      .loader.on { display: inline-block; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+      textarea { width: 100%; min-height: 130px; }
+      .job-detail { color: var(--text); }
+      .job-detail .sub { color: var(--muted); font-size: 13px; }
+      .job-summary { margin: 10px 0; line-height: 1.45; color: var(--text); }
+      .skills-block { margin-top: 12px; }
+      .skills-block h4 { margin: 8px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+      .skill-tag {
+        display: inline-block;
+        margin: 2px 6px 2px 0;
+        padding: 3px 8px;
+        border-radius: 6px;
+        background: #1a2540;
+        border: 1px solid var(--border);
+        font-size: 12px;
+        cursor: help;
+        line-height: 1.35;
+      }
+      .skill-tag[data-justification] { cursor: pointer; }
+      .skill-tag.primary { border-color: #3b82f6; background: #152038; }
+      .remote-reason-btn { margin-top: 6px; }
+      .date-range { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+      .date-range-row { margin-top: 8px; }
+      .pager { display: inline-flex; align-items: center; gap: 8px; }
+      .ghost-btn { background: #0f1730; border: 1px solid var(--border); }
+      .secondary-cta-box {
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(39, 51, 87, 0.8);
+      }
+      .secondary-cta-title {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+      .skills-picker {
+        position: relative;
+        min-width: 280px;
+      }
+      .skills-picker-btn {
+        width: 100%;
+        text-align: left;
+        background: #0f1730;
+        border: 1px solid var(--border);
+      }
+      .skills-picker-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        max-height: 260px;
+        overflow: auto;
+        z-index: 30;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #10182d;
+        padding: 8px;
+        display: none;
+      }
+      .skills-picker-menu.open { display: block; }
+      .skills-group {
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(39, 51, 87, 0.45);
+      }
+      .skills-group:last-child {
+        margin-bottom: 0;
+        border-bottom: 0;
+      }
+      .skills-group-title {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
+      .skill-check {
+        display: block;
+        font-size: 13px;
+        padding: 2px 0;
+      }
+      .skill-check input { margin-right: 6px; }
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.75);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        padding: 10px;
+      }
+      .modal-backdrop.on { display: flex; }
+      .modal-card {
+        width: min(980px, 100%);
+        max-height: calc(100vh - 20px);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+      .modal-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .modal-body {
+        padding: 12px;
+        overflow: auto;
+      }
+      .insight-box {
+        margin-top: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        background: #10182d;
+      }
+      .insight-box h4 {
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .resume-upload-box {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        margin-top: 12px;
+        background: #10182d;
+      }
+      .resume-upload-box input[type="file"] {
+        width: 100%;
+      }
+      .highly-relevant-filter {
+        display: none;
+        align-items: center;
+        gap: 6px;
+      }
+      .highly-relevant-filter.is-visible {
+        display: inline-flex;
+      }
+      .hint-btn {
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border-radius: 50%;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        flex-shrink: 0;
+        background: #0f1730;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .hint-btn:hover {
+        color: var(--text);
+        border-color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <p id="globalMsg" class="muted"></p>
+
+      <div class="layout">
+        <section class="card layout-col">
+          <h2>Поиск вакансий (deeplink)</h2>
+          <div class="row date-range-row">
+            <span class="date-range">
+              <label>С <input id="fromDate" type="date" /></label>
+              <label>По <input id="toDate" type="date" /></label>
+            </span>
+          </div>
+          <div class="row date-range-row">
+            <label>Роли</label>
+            <div class="skills-picker">
+              <button id="skillPickerBtn" type="button" class="skills-picker-btn">Все роли</button>
+              <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            </div>
+            <span id="highlyRelevantFilterWrap" class="highly-relevant-filter" aria-hidden="true">
+              <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Топ-совпадения</label>
+              <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="Что это значит?" aria-label="Что значит Топ-совпадения?">?</button>
+            </span>
+          </div>
+          <div class="row date-range-row">
+            <label>Искать в</label>
+            <div class="skills-picker">
+              <button id="sourcePickerBtn" type="button" class="skills-picker-btn">Все источники</button>
+              <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            </div>
+          </div>
+          <div class="row date-range-row">
+            <button id="syncBtn">Поиск</button>
+            <span id="syncLoader" class="loader" aria-hidden="true"></span>
+            <span class="pager">
+              <button id="prevPageBtn" type="button" class="ghost-btn">Назад</button>
+              <span id="pageInfo" class="muted">Страница 1</span>
+              <button id="nextPageBtn" type="button" class="ghost-btn">Далее</button>
+            </span>
+          </div>
+          <p id="dashMsg" class="muted"></p>
+          <div class="layout-col-body">
+            <div id="jobsList" class="jobs-list"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div id="jobModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Детали вакансии</strong>
+          <button id="jobModalClose" type="button" class="ghost-btn">Закрыть</button>
+        </div>
+        <div class="modal-body">
+          <div id="jobInfo" class="muted">Выберите вакансию, чтобы продолжить.</div>
+          <div id="jobActions" style="display:none">
+            <div class="row">
+              <label>Статус
+                <select id="statusSel">
+                  <option value="new">новая</option>
+                  <option value="applied">откликнулся</option>
+                  <option value="skipped">пропущена</option>
+                </select>
+              </label>
+              <button id="genBtn">Сгенерировать адаптированные CV + Cover Letter</button>
+              <span id="jobLoader" class="loader" aria-hidden="true"></span>
+            </div>
+            <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
+            <label>Сопроводительное письмо</label>
+            <textarea id="coverPreview" readonly></textarea>
+            <p id="jobMsg" class="muted"></p>
+          </div>
+          <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
+            <div class="skills-block">
+              <h4>Мои заметки</h4>
+              <textarea id="notesText" aria-label="Мои заметки"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="insightModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="insightModalTitle">AI-пояснение</strong>
+          <button id="insightModalClose" type="button" class="ghost-btn">Закрыть</button>
+        </div>
+        <div class="modal-body">
+          <p id="insightModalText" class="job-summary" style="margin:0"></p>
+        </div>
+      </div>
+    </div>
+    <div id="highlyRelevantHintModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="highlyRelevantHintTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="highlyRelevantHintTitle">Топ-совпадения</strong>
+          <button id="highlyRelevantHintClose" type="button" class="ghost-btn">Закрыть</button>
+        </div>
+        <div class="modal-body">
+          <p class="job-summary" style="margin:0 0 12px">
+            Если включен фильтр <strong>Топ-совпадения</strong>, показываются только вакансии с <strong>наиболее высокой релевантностью</strong> к выбранным ролям.
+          </p>
+          <p class="job-summary" style="margin:0">
+            Если фильтр выключен, вы увидите и другие подходящие вакансии, которые могут быть полезны, но не входят в топ по релевантности.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div id="resumeRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Нужно основное резюме</strong>
+          <button id="resumeRequiredClose" type="button" class="ghost-btn">Закрыть</button>
+        </div>
+        <div class="modal-body">
+          <p class="muted">Чтобы сгенерировать адаптированные CV и cover letter, сначала загрузите основное резюме.</p>
+          <div class="resume-upload-box">
+            <input id="resumeFileInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
+            <div class="row" style="margin-top:8px">
+              <button id="uploadResumeBtn" type="button">Загрузить резюме</button>
+              <span id="uploadResumeLoader" class="loader" aria-hidden="true"></span>
+            </div>
+            <p id="resumeUploadMsg" class="muted"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="subscribeRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Требуется подписка</strong>
+          <button id="subscribeRequiredClose" type="button" class="ghost-btn">Закрыть</button>
+        </div>
+        <div class="modal-body">
+          <p class="muted">Вы достигли бесплатного лимита просмотров деталей вакансий. Подпишитесь на обязательные каналы, чтобы продолжить.</p>
+          <div id="subscribeChannelsList" class="row" style="display:grid;gap:8px"></div>
+          <div class="row" style="margin-top:10px">
+            <button id="verifySubscriptionBtn" type="button">Я подписался - проверить снова</button>
+            <span id="verifySubscriptionLoader" class="loader" aria-hidden="true"></span>
+          </div>
+          <p id="subscribeGateMsg" class="muted"></p>
+        </div>
+      </div>
+    </div>
+    <div id="paymentRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>Требуется оплата</strong>
+          <button id="paymentRequiredClose" type="button" class="ghost-btn">Закрыть</button>
+        </div>
+        <div class="modal-body">
+          <p class="muted">
+            Основные варианты:
+            <br />1) Купить Premium
+            <br />2) Пригласить друга (+бонус)
+          </p>
+          <div id="paymentPlansList" class="row" style="display:grid;gap:8px"></div>
+          <div class="row" style="margin-top:10px">
+            <button id="inviteFriendBtn" type="button" class="ghost-btn">Пригласить друга (+бонус)</button>
+          </div>
+          <div class="secondary-cta-box">
+            <div class="secondary-cta-title">Альтернатива: следить за вакансиями в канале</div>
+            <button id="openChannelAlternativeBtn" type="button" class="ghost-btn">Открыть канал с вакансиями</button>
+          </div>
+          <p id="paymentRequiredMsg" class="muted"></p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+      const urlParams = new URLSearchParams(window.location.search);
+      const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
+      const initialLocationSearch = String(window.location.search || '');
+
+      /**
+       * Signed init payload for miniAppAuth.
+       * - Telegram sets WebApp.initData once from location.hash; if the hash appears later, initData
+       *   stays empty forever, so we always re-parse the current hash the same way telegram-web-app.js does.
+       * - Use Telegram.Utils.urlParseHashParams when present (handles non-trivial hash shapes).
+       */
+      function getTgInitDataString() {
+        try {
+          const utils = window.Telegram?.Utils;
+          const hash = window.location.hash || '';
+          if (utils?.urlParseHashParams) {
+            const p = utils.urlParseHashParams(hash);
+            const v = String(p?.tgWebAppData || '').trim();
+            if (v) return v;
+          } else {
+            const rawHash = hash.replace(/^#/, '');
+            if (rawHash) {
+              const frag = new URLSearchParams(rawHash);
+              const raw = frag.get('tgWebAppData');
+              if (raw) {
+                try {
+                  return decodeURIComponent(String(raw).replace(/\+/g, '%20'));
+                } catch {
+                  return String(raw);
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+        const fromSdk = String(tg?.initData || '').trim();
+        if (fromSdk) return fromSdk;
+        try {
+          const q = new URLSearchParams(window.location.search);
+          const raw = q.get('tgWebAppData');
+          if (raw) {
+            try {
+              return decodeURIComponent(String(raw).replace(/\+/g, '%20'));
+            } catch {
+              return String(raw);
+            }
+          }
+        } catch {
+          // ignore
+        }
+        return String(window.Telegram?.WebView?.initParams?.tgWebAppData || '').trim();
+      }
+
+      function attachMiniAppAuthHeaders(headers) {
+        const data = getTgInitDataString();
+        if (data) {
+          headers['x-init-data'] = data;
+          // Some proxies strip custom headers; server also accepts `Authorization: tma <initData>`.
+          headers.Authorization = `tma ${data}`;
+        } else if (devTelegramId) headers['x-dev-telegram-id'] = devTelegramId;
+      }
+
+      async function waitForTelegramInitData(maxMs = 20000) {
+        if (devTelegramId) return;
+        if (tg?.expand) {
+          try {
+            tg.expand();
+          } catch {
+            // ignore
+          }
+        }
+        const start = Date.now();
+        while (Date.now() - start < maxMs) {
+          if (String(getTgInitDataString()).trim()) return;
+          await new Promise((resolve) => {
+            const t = setTimeout(() => {
+              window.removeEventListener('hashchange', onHash);
+              resolve();
+            }, 50);
+            function onHash() {
+              clearTimeout(t);
+              window.removeEventListener('hashchange', onHash);
+              resolve();
+            }
+            window.addEventListener('hashchange', onHash);
+          });
+        }
+      }
+
+      const API_BASE = '';
+      const SKILLS_URL = '/api/admin/skills';
+      const POSITIONS_URL = '/api/admin/positions';
+
+      let seekerId = null;
+      let skills = [];
+      let positions = [];
+      let applications = [];
+      let selectedJob = null;
+      let selectedApplication = null;
+      let isSyncing = false;
+      let isJobBusy = false;
+      let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
+      let isJobModalOpen = false;
+      let isInsightModalOpen = false;
+      let isHighlyRelevantHintModalOpen = false;
+      let dateBounds = { min: '', max: '' };
+      let isSkillPickerOpen = false;
+      let isSourcePickerOpen = false;
+      let isResumeRequiredModalOpen = false;
+      let isSubscribeRequiredModalOpen = false;
+      let isPaymentRequiredModalOpen = false;
+      let currentResumeUrl = '';
+      let continueGenerateAfterResumeUpload = false;
+      let pendingSubscribeJobId = null;
+      let monetizationStatus = null;
+      let botUsername = '';
+      let bootDeepLinkSkillIdsCsv = '';
+      const CHANNEL_ALTERNATIVE_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
+      const APPLY_TYPE_OPTIONS = [
+        { value: 'linkedin', label: 'LinkedIn' },
+        { value: 'indeed', label: 'Indeed' },
+        { value: 'telegram', label: 'Telegram' },
+        { value: 'external', label: 'Сайты компаний' },
+      ];
+      const APPLY_TYPE_LABELS = {
+        linkedin: 'LinkedIn',
+        indeed: 'Indeed',
+        telegram: 'Telegram',
+        external: 'Сайты компаний',
+      };
+
+      const SEEKER_FILTER_KEYS = [
+        'from',
+        'to',
+        'skillIds',
+        'applyTypes',
+        'sourceIds',
+        'page',
+        'pageSize',
+        'showOnlyHighlyRelevant',
+        'jobId',
+        'skillId',
+      ];
+      const SEEKER_FILTER_KEY_SET = new Set(SEEKER_FILTER_KEYS);
+
+      function decodeBase64UrlToUtf8(b64) {
+        let s = String(b64).trim().replace(/-/g, '+').replace(/_/g, '/');
+        const padLen = (4 - (s.length % 4)) % 4;
+        s += '='.repeat(padLen);
+        const bin = atob(s);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      }
+
+      /** `seekerjobs__` payload: either `from=...&to=...` or opaque token (base64url of that string, or pass-through like search__). */
+      function innerParamsFromSeekerPayload(rawQuery) {
+        let raw = String(rawQuery || '').trim().replace(/^_+/, '');
+        if (!raw) return new URLSearchParams();
+        try {
+          raw = decodeURIComponent(raw);
+        } catch {
+          // keep as-is
+        }
+        const tryParse = (s) => new URLSearchParams(String(s).startsWith('?') ? String(s).slice(1) : String(s));
+        const hasAny = (sp) =>
+          SEEKER_FILTER_KEYS.some((k) => String(sp.get(k) || '').trim());
+        const direct = tryParse(raw);
+        if (hasAny(direct)) return direct;
+        try {
+          const decoded = decodeBase64UrlToUtf8(raw);
+          const inner = tryParse(decoded);
+          if (hasAny(inner)) return inner;
+        } catch {
+          // not base64utf8 query
+        }
+        return new URLSearchParams();
+      }
+      function extractStartappPayloadFromRawQuery(rawQuery) {
+        const query = String(rawQuery || '').replace(/^\?/, '');
+        if (!query) return '';
+        const match = query.match(/(?:^|&)(startapp|startApp)=/i);
+        if (!match || typeof match.index !== 'number') return '';
+        let payload = query.slice(match.index + match[0].length);
+        if (!payload) return '';
+        try {
+          payload = decodeURIComponent(payload);
+        } catch {
+          // keep payload as-is
+        }
+        return payload;
+      }
+      function extractMalformedSeekerParams() {
+        const sources = [];
+        sources.push(window.location.search || '');
+        sources.push(window.location.hash || '');
+        sources.push(document.referrer || '');
+        for (const source of sources) {
+          const raw = String(source || '').trim();
+          if (!raw) continue;
+          let rawQuery = raw;
+          if (/^https?:\/\//i.test(raw)) {
+            try {
+              rawQuery = new URL(raw).search || '';
+            } catch {
+              rawQuery = '';
+            }
+          }
+          const startPayload = extractStartappPayloadFromRawQuery(rawQuery);
+          if (!startPayload.startsWith('seekerjobs__')) continue;
+          const rawInner = startPayload.slice('seekerjobs__'.length);
+          const tokens = String(rawInner || '')
+            .split('&')
+            .map((token) => token.trim())
+            .filter(Boolean);
+          if (!tokens.length) continue;
+          const filtered = [];
+          for (const token of tokens) {
+            const eqIdx = token.indexOf('=');
+            if (eqIdx <= 0) continue;
+            const key = token.slice(0, eqIdx).trim();
+            if (SEEKER_FILTER_KEY_SET.has(key)) filtered.push(token);
+          }
+          if (!filtered.length) continue;
+          const params = new URLSearchParams(filtered.join('&'));
+          if ([...params.keys()].length) return params;
+        }
+        return new URLSearchParams();
+      }
+
+      function q() {
+        const p = new URLSearchParams(location.search);
+        const malformedFallback = extractMalformedSeekerParams();
+        const paramStart = String(p.get('startapp') || p.get('startApp') || '').trim();
+        const initStart = String(tg?.initDataUnsafe?.start_param || '').trim();
+        let rawStart = paramStart;
+        if (initStart.startsWith('seekerjobs__')) {
+          if (!paramStart.startsWith('seekerjobs__') || initStart.length > paramStart.length) {
+            rawStart = initStart;
+          }
+        }
+
+        if (rawStart.startsWith('seekerjobs__')) {
+          let rawQuery = rawStart.slice('seekerjobs__'.length).trim();
+          const inner = innerParamsFromSeekerPayload(rawQuery);
+          const pick = (key) => {
+            const a = String(inner.get(key) || '').trim();
+            const m = String(malformedFallback.get(key) || '').trim();
+            const b = String(p.get(key) || '').trim();
+            return a || m || b || '';
+          };
+          return {
+            from: pick('from'),
+            to: pick('to'),
+            skillIds: pick('skillIds') || pick('skillId'),
+            applyTypes: normalizeApplyTypesCsv(pick('applyTypes') || pick('sourceIds')),
+            showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
+            jobId: pick('jobId'),
+            page: pick('page') || '1',
+            pageSize: pick('pageSize') || '100',
+          };
+        }
+
+        const qParam = String(p.get('q') || '').trim();
+        if (qParam) {
+          const inner = innerParamsFromSeekerPayload(qParam);
+          const pick = (key) => {
+            const a = String(inner.get(key) || '').trim();
+            const m = String(malformedFallback.get(key) || '').trim();
+            const b = String(p.get(key) || '').trim();
+            return a || m || b || '';
+          };
+          return {
+            from: pick('from'),
+            to: pick('to'),
+            skillIds: pick('skillIds') || pick('skillId'),
+            applyTypes: normalizeApplyTypesCsv(pick('applyTypes') || pick('sourceIds')),
+            showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
+            jobId: pick('jobId'),
+            page: pick('page') || '1',
+            pageSize: pick('pageSize') || '100',
+          };
+        }
+
+        return {
+          from: p.get('from') || malformedFallback.get('from') || '',
+          to: p.get('to') || malformedFallback.get('to') || '',
+          skillIds: p.get('skillIds') || p.get('skillId') || malformedFallback.get('skillIds') || malformedFallback.get('skillId') || '',
+          applyTypes: normalizeApplyTypesCsv(
+            p.get('applyTypes') || p.get('sourceIds') || malformedFallback.get('applyTypes') || malformedFallback.get('sourceIds') || ''
+          ),
+          showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || malformedFallback.get('showOnlyHighlyRelevant') || '',
+          jobId: p.get('jobId') || malformedFallback.get('jobId') || '',
+          page: p.get('page') || malformedFallback.get('page') || '1',
+          pageSize: p.get('pageSize') || malformedFallback.get('pageSize') || '100',
+        };
+      }
+      function decodeQParamForDebug(rawQ) {
+        const value = String(rawQ || '').trim();
+        if (!value) return '';
+        try {
+          return decodeBase64UrlToUtf8(value);
+        } catch {
+          try {
+            return decodeURIComponent(value);
+          } catch {
+            return value;
+          }
+        }
+      }
+      function showDeeplinkDebugAlertOnce() {
+        const onceKey = 'seeker-jobs-deeplink-debug-alert-shown';
+        if (window.sessionStorage?.getItem(onceKey) === '1') return;
+        const state = q();
+        const p = new URLSearchParams(window.location.search);
+        const paramStart = String(p.get('startapp') || p.get('startApp') || '').trim();
+        const initStart = String(tg?.initDataUnsafe?.start_param || '').trim();
+        const qParam = String(p.get('q') || '').trim();
+        const decodedQ = decodeQParamForDebug(qParam);
+        const rawPayload = paramStart || initStart;
+        const payloadBody = rawPayload.startsWith('seekerjobs__') ? rawPayload.slice('seekerjobs__'.length) : rawPayload;
+        const decodedStartPayload = payloadBody ? decodeQParamForDebug(payloadBody) : '';
+        const payloadParams = innerParamsFromSeekerPayload(payloadBody);
+        const lines = [
+          'Deeplink debug',
+          `url: ${window.location.href}`,
+          `startapp(query): ${paramStart || '(empty)'}`,
+          `start_param(initDataUnsafe): ${initStart || '(empty)'}`,
+          `q(query): ${qParam || '(empty)'}`,
+          `from(query): ${String(p.get('from') || '') || '(empty)'}`,
+          `to(query): ${String(p.get('to') || '') || '(empty)'}`,
+          `skillIds(query): ${String(p.get('skillIds') || p.get('skillId') || '') || '(empty)'}`,
+          `sourceIds(query): ${String(p.get('sourceIds') || '') || '(empty)'}`,
+          `showOnlyHighlyRelevant(query): ${String(p.get('showOnlyHighlyRelevant') || '') || '(empty)'}`,
+          `from(startapp payload): ${String(payloadParams.get('from') || '') || '(empty)'}`,
+          `to(startapp payload): ${String(payloadParams.get('to') || '') || '(empty)'}`,
+          `skillIds(startapp payload): ${String(payloadParams.get('skillIds') || payloadParams.get('skillId') || '') || '(empty)'}`,
+          `sourceIds(startapp payload): ${String(payloadParams.get('sourceIds') || '') || '(empty)'}`,
+          `showOnlyHighlyRelevant(startapp payload): ${String(payloadParams.get('showOnlyHighlyRelevant') || '') || '(empty)'}`,
+          `decoded startapp payload: ${decodedStartPayload || '(empty)'}`,
+          `decoded q payload: ${decodedQ || '(empty)'}`,
+          'resolved filters:',
+          `from=${state.from || ''}`,
+          `to=${state.to || ''}`,
+          `skillIds=${state.skillIds || ''}`,
+          `applyTypes=${state.applyTypes || ''}`,
+          `showOnlyHighlyRelevant=${state.showOnlyHighlyRelevant || ''}`,
+          `page=${state.page || ''}`,
+          `pageSize=${state.pageSize || ''}`,
+        ];
+        alert(lines.join('\n'));
+        window.sessionStorage?.setItem(onceKey, '1');
+      }
+      function isTruthyQueryParam(value) {
+        const v = String(value || '').trim().toLowerCase();
+        return v === 'true' || v === '1' || v === 'yes';
+      }
+      function lockDeeplinkFilters() {
+        const lockIds = ['fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'syncBtn'];
+        for (const id of lockIds) {
+          const el = document.getElementById(id);
+          if (el) el.disabled = true;
+        }
+      }
+      function shouldAutoSearchOnBoot(state) {
+        const initialParams = new URLSearchParams(initialLocationSearch);
+        const startapp = String(initialParams.get('startapp') || initialParams.get('startApp') || '').trim();
+        const qParam = String(initialParams.get('q') || '').trim();
+        const initStart = String(tg?.initDataUnsafe?.start_param || '').trim();
+        const hasDeepLinkPayload =
+          startapp.startsWith('seekerjobs__') || initStart.startsWith('seekerjobs__') || Boolean(qParam);
+        const hasFilterOverrides =
+          initialParams.has('from') ||
+          initialParams.has('to') ||
+          initialParams.has('skillIds') ||
+          initialParams.has('skillId') ||
+          initialParams.has('applyTypes') ||
+          initialParams.has('sourceIds') ||
+          isTruthyQueryParam(initialParams.get('showOnlyHighlyRelevant'));
+        const hasResolvedStateFilters =
+          Boolean(String(state?.skillIds || '').trim()) ||
+          Boolean(String(state?.applyTypes || '').trim()) ||
+          isTruthyQueryParam(state?.showOnlyHighlyRelevant);
+        return hasDeepLinkPayload || hasFilterOverrides || hasResolvedStateFilters;
+      }
+      function mapLegacyApplyTypeToken(value) {
+        const v = String(value || '').trim().toLowerCase();
+        if (!v) return '';
+        if (v === 'telegram' || v === 'telegram channels') return 'telegram';
+        if (v === 'external' || v === 'company sites') return 'external';
+        if (v === 'linkedin') return 'linkedin';
+        if (v === 'indeed') return 'indeed';
+        return '';
+      }
+      function normalizeApplyTypesCsv(csv) {
+        const unique = new Set(
+          String(csv || '')
+            .split(',')
+            .map((item) => mapLegacyApplyTypeToken(item))
+            .filter(Boolean)
+        );
+        return [...unique].join(',');
+      }
+      function setQ(next) {
+        const p = new URLSearchParams(location.search);
+        Object.entries(next).forEach(([k, v]) => {
+          if (v == null || v === '') p.delete(k); else p.set(k, String(v));
+        });
+        history.replaceState(null, '', `?${p.toString()}`);
+      }
+      function shouldOpenPricingOnBoot() {
+        const p = new URLSearchParams(location.search);
+        const raw = String(p.get('pricing') || p.get('view') || '').trim().toLowerCase();
+        return raw === '1' || raw === 'true' || raw === 'pricing';
+      }
+      function setMsg(id, txt, isErr = false) {
+        const el = document.getElementById(id);
+        el.textContent = txt || '';
+        el.className = isErr ? 'bad' : 'muted';
+      }
+      function esc(v) {
+        return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      function toUsdText(value) {
+        const n = Number.parseFloat(String(value || '').trim());
+        if (!Number.isFinite(n) || n <= 0) return '';
+        return `$${n.toFixed(2)}`;
+      }
+      function attrEsc(v) {
+        return String(v || '')
+          .replace(/\r\n|\r|\n/g, ' ')
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;');
+      }
+      function skillDisplayLine(s) {
+        const roleName = String(s.roleName || '').trim() || '—';
+        const name = String(s.name || '').trim() || '—';
+        return `${roleName}: ${name}`;
+      }
+      function renderJobSkillsHtml(skillsValue) {
+        const list = Array.isArray(skillsValue) ? skillsValue : [];
+        const primary = list.filter((s) => s.isHighlyRelevant === true);
+        const secondary = list.filter((s) => s.isHighlyRelevant !== true);
+        const chips = (arr, cls) =>
+          arr
+            .map((s) => {
+              const label = esc(skillDisplayLine(s));
+              const tip = attrEsc(s.justification || '');
+              return `<span class="skill-tag ${cls}" data-justification="${tip}" title="${tip}">${label}</span>`;
+            })
+            .join('');
+        let out = '<div class="skills-block">';
+        out += `<h4>Ключевые навыки</h4><div>${chips(primary, 'primary') || '<span class="muted">Нет</span>'}</div>`;
+        out += `<h4>Дополнительные навыки</h4><div>${chips(secondary, '') || '<span class="muted">Нет</span>'}</div>`;
+        out += '</div>';
+        return out;
+      }
+      function formatPostedDate(v) {
+        const s = String(v || '').trim();
+        if (!s) return '';
+        if (s.includes('T')) return s.split('T')[0];
+        return s;
+      }
+      function parseIsoDate(value) {
+        const v = String(value || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+        const d = new Date(`${v}T00:00:00`);
+        if (Number.isNaN(d.getTime())) return null;
+        return d;
+      }
+      /** Calendar date in local timezone (matches <input type="date">). Avoid toISOString() which can shift the day. */
+      function localIsoDate(d) {
+        if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+      function clampDateToBounds(value) {
+        const d = parseIsoDate(value);
+        const minD = parseIsoDate(dateBounds.min);
+        const maxD = parseIsoDate(dateBounds.max);
+        if (!d || !minD || !maxD) return dateBounds.max || value;
+        if (d < minD) return dateBounds.min;
+        if (d > maxD) return dateBounds.max;
+        return localIsoDate(d);
+      }
+      function onLoading(id, on) {
+        const el = document.getElementById(id);
+        el.className = on ? 'loader on' : 'loader';
+      }
+      function setSyncBusy(on) {
+        isSyncing = on;
+        onLoading('syncLoader', on);
+        const lockedFilters = new Set(['syncBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn']);
+        ['syncBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.disabled = on || lockedFilters.has(id);
+        });
+        updateHighlyRelevantFilterState();
+      }
+      function hasSelectedSkills() {
+        return Boolean(getSelectedSkillIdsCsv().trim());
+      }
+      function updateHighlyRelevantFilterState() {
+        const el = document.getElementById('showOnlyHighlyRelevant');
+        const wrap = document.getElementById('highlyRelevantFilterWrap');
+        if (!el || !wrap) return;
+        if (!hasSelectedSkills()) {
+          el.checked = false;
+          el.disabled = false;
+          wrap.classList.remove('is-visible');
+          wrap.setAttribute('aria-hidden', 'true');
+          setQ({ showOnlyHighlyRelevant: '' });
+          return;
+        }
+        wrap.classList.add('is-visible');
+        wrap.setAttribute('aria-hidden', 'false');
+        el.disabled = isSyncing;
+      }
+      function syncHighlyRelevantCheckboxFromQuery() {
+        const el = document.getElementById('showOnlyHighlyRelevant');
+        if (!el || !hasSelectedSkills()) return;
+        el.checked = isTruthyQueryParam(q().showOnlyHighlyRelevant);
+      }
+      function updatePagerUi() {
+        const info = document.getElementById('pageInfo');
+        const prev = document.getElementById('prevPageBtn');
+        const next = document.getElementById('nextPageBtn');
+        if (info) info.textContent = `Страница ${pageInfo.page} · ${pageInfo.count} на странице · Всего ${pageInfo.totalRows}`;
+        if (prev) prev.disabled = isSyncing || pageInfo.page <= 1;
+        if (next) next.disabled = isSyncing || !pageInfo.hasMore;
+      }
+      function setJobBusy(on) {
+        isJobBusy = on;
+        onLoading('jobLoader', on);
+        ['statusSel', 'notesText', 'genBtn'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.disabled = on;
+        });
+      }
+      function showInsight(title, text) {
+        document.getElementById('insightModalTitle').textContent = String(title || '').trim() || 'AI-пояснение';
+        document.getElementById('insightModalText').textContent = String(text || '').trim() || 'Нет данных.';
+        isInsightModalOpen = true;
+        document.getElementById('insightModal').classList.add('on');
+      }
+      function hideInsight() {
+        document.getElementById('insightModalTitle').textContent = '';
+        document.getElementById('insightModalText').textContent = '';
+        isInsightModalOpen = false;
+        document.getElementById('insightModal').classList.remove('on');
+      }
+      function openHighlyRelevantHintModal() {
+        isHighlyRelevantHintModalOpen = true;
+        document.getElementById('highlyRelevantHintModal').classList.add('on');
+      }
+      function closeHighlyRelevantHintModal() {
+        isHighlyRelevantHintModalOpen = false;
+        document.getElementById('highlyRelevantHintModal').classList.remove('on');
+      }
+      function bindJobDetailInteractions(job) {
+        document.querySelectorAll('.skill-tag[data-justification]').forEach((el) => {
+          el.addEventListener('click', () => {
+            const justification = el.getAttribute('data-justification') || '';
+            showInsight('Почему AI выделил этот навык?', justification);
+          });
+        });
+        const remoteBtn = document.getElementById('showRemoteReasonBtn');
+        if (remoteBtn) {
+          remoteBtn.addEventListener('click', () => {
+            showInsight('Почему AI считает вакансию удаленной?', job.remoteReasoning || 'Нет данных.');
+          });
+        }
+      }
+      function openJobModal() {
+        isJobModalOpen = true;
+        document.getElementById('jobModal').classList.add('on');
+      }
+      function closeJobModal() {
+        isJobModalOpen = false;
+        document.getElementById('jobModal').classList.remove('on');
+      }
+      function openResumeRequiredModal() {
+        isResumeRequiredModalOpen = true;
+        document.getElementById('resumeRequiredModal').classList.add('on');
+      }
+      function closeResumeRequiredModal() {
+        isResumeRequiredModalOpen = false;
+        document.getElementById('resumeRequiredModal').classList.remove('on');
+      }
+      function openSubscribeRequiredModal(payload, jobId) {
+        pendingSubscribeJobId = Number(jobId) || null;
+        isSubscribeRequiredModalOpen = true;
+        const channels = Array.isArray(payload?.channels) ? payload.channels : [];
+        const list = document.getElementById('subscribeChannelsList');
+        if (channels.length === 0) {
+          list.innerHTML = '<div class="muted">Обязательные каналы не настроены. Обратитесь к администратору.</div>';
+        } else {
+          list.innerHTML = channels
+            .map((ch, i) => {
+              const url = String(ch?.joinUrl || '').trim();
+              const label = url ? `Открыть канал ${i + 1}` : `У канала ${i + 1} нет ссылки`;
+              if (!url) return `<span class="muted">${esc(label)}</span>`;
+              return `<a href="${attrEsc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+            })
+            .join('');
+        }
+        setMsg('subscribeGateMsg', '');
+        document.getElementById('subscribeRequiredModal').classList.add('on');
+      }
+      function closeSubscribeRequiredModal() {
+        isSubscribeRequiredModalOpen = false;
+        document.getElementById('subscribeRequiredModal').classList.remove('on');
+        setMsg('subscribeGateMsg', '');
+      }
+      function openPaymentRequiredModal(payload) {
+        isPaymentRequiredModalOpen = true;
+        if (payload?.monetization) {
+          monetizationStatus = {
+            ...(monetizationStatus || {}),
+            monetization: payload.monetization,
+            requiredChannelsSatisfied: true,
+          };
+        }
+        const plans = Array.isArray(payload?.monetization?.plans) ? payload.monetization.plans : [];
+        const list = document.getElementById('paymentPlansList');
+        if (!plans.length) {
+          list.innerHTML = '<div class="muted">Сейчас нет доступных тарифов.</div>';
+        } else {
+          list.innerHTML = plans
+            .map((plan) => {
+              const code = String(plan?.code || '').trim().toLowerCase();
+              const usdText = toUsdText(plan?.priceUsd);
+              const priceLabel = usdText
+                ? `${Number(plan?.priceInStars || 0)} ⭐ (~${usdText})`
+                : `${Number(plan?.priceInStars || 0)} ⭐`;
+              const title = `${esc(plan?.name || code || 'Тариф')} · ${Number(plan?.jobOpenMonthlyLimit || 0)} открытий/мес · ${priceLabel}`;
+              const description = String(plan?.description || '').trim();
+              return `<div class="resume-upload-box" style="margin-top:0">
+                <div style="font-weight:600;margin-bottom:6px">${title}</div>
+                ${description ? `<div class="muted" style="margin-bottom:8px">${esc(description)}</div>` : ''}
+                <button type="button" data-plan-code="${attrEsc(code)}">Купить ${esc(plan?.name || code || 'тариф')}</button>
+              </div>`;
+            })
+            .join('');
+          list.querySelectorAll('[data-plan-code]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const planCode = String(btn.getAttribute('data-plan-code') || '').trim();
+              openTelegramPaymentForPlan(planCode).catch((err) => {
+                setMsg('paymentRequiredMsg', err?.message || 'Не удалось открыть ссылку на оплату.', true);
+              });
+            });
+          });
+        }
+        document.getElementById('paymentRequiredModal').classList.add('on');
+        setMsg('paymentRequiredMsg', '');
+      }
+      function closePaymentRequiredModal() {
+        isPaymentRequiredModalOpen = false;
+        document.getElementById('paymentRequiredModal').classList.remove('on');
+        setMsg('paymentRequiredMsg', '');
+      }
+      function parseErrorPayload(raw) {
+        const txt = String(raw || '').trim();
+        if (!txt) return {};
+        try {
+          return JSON.parse(txt);
+        } catch {
+          return { error: txt };
+        }
+      }
+      async function api(url, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        attachMiniAppAuthHeaders(headers);
+        const res = await fetch(url, { ...options, headers });
+        if (!res.ok) throw new Error(await res.text());
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) return res.json();
+        return res.text();
+      }
+
+      function postAnalytics(path, body) {
+        const headers = { 'Content-Type': 'application/json' };
+        attachMiniAppAuthHeaders(headers);
+        const url = `${API_BASE}${path}`;
+        fetch(url, { method: 'POST', headers, body: JSON.stringify(body || {}) }).catch(() => {});
+      }
+      async function trackJobDetailsOpen(jobId) {
+        const headers = { 'Content-Type': 'application/json' };
+        attachMiniAppAuthHeaders(headers);
+        const res = await fetch('/api/app/analytics/job-details-open', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ jobId }),
+        });
+        if (res.ok) {
+          return res.json().catch(() => ({ ok: true }));
+        }
+        const raw = await res.text();
+        const payload = parseErrorPayload(raw);
+        if (res.status === 403 && String(payload?.error || '') === 'subscribe_required') {
+          const err = new Error('subscribe_required');
+          err.code = 'subscribe_required';
+          err.payload = payload;
+          throw err;
+        }
+        if (res.status === 402 && String(payload?.error || '') === 'payment_required') {
+          const err = new Error('payment_required');
+          err.code = 'payment_required';
+          err.payload = payload;
+          throw err;
+        }
+        throw new Error(String(payload?.error || raw || 'Не удалось зафиксировать открытие деталей вакансии'));
+      }
+      async function verifyRequiredChannels() {
+        const payload = await api('/api/app/required-channels/verify', {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
+        if (payload?.monetization) {
+          monetizationStatus = {
+            ...(monetizationStatus || {}),
+            requiredChannelsSatisfied: Boolean(payload?.ok),
+            monetization: payload.monetization,
+          };
+        }
+        const channels = Array.isArray(payload?.channels) ? payload.channels : [];
+        if (payload?.ok) return true;
+        openSubscribeRequiredModal({ channels }, pendingSubscribeJobId);
+        return false;
+      }
+
+      async function loadMonetizationStatus() {
+        const payload = await api('/api/app/monetization/status');
+        monetizationStatus = payload || null;
+        return monetizationStatus;
+      }
+
+      async function loadBotUsername() {
+        if (botUsername) return botUsername;
+        const payload = await api('/api/app/bot-info');
+        botUsername = String(payload?.botUsername || '').trim();
+        return botUsername;
+      }
+
+      function openTelegramLinkAndCloseMiniApp(url) {
+        const tgApp = window.Telegram?.WebApp;
+        if (!tgApp?.openTelegramLink) return false;
+        tgApp.openTelegramLink(url);
+        // On iOS, explicitly collapse the mini app after navigation.
+        setTimeout(() => {
+          try {
+            tgApp.close?.();
+          } catch {
+            // Ignore close failures to avoid breaking navigation.
+          }
+        }, 220);
+        return true;
+      }
+
+      async function openTelegramPaymentForPlan(planCode) {
+        const code = String(planCode || '').trim().toLowerCase();
+        const endpoint = code
+          ? `/api/app/monetization/pay-link?plan=${encodeURIComponent(code)}`
+          : '/api/app/monetization/pay-link';
+        const payload = await api(endpoint);
+        const url = String(payload?.deepLink || '').trim();
+        if (!url) throw new Error('Ссылка на оплату пустая.');
+        if (openTelegramLinkAndCloseMiniApp(url)) return;
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+
+      async function openReferralBonusFlow() {
+        const username = await loadBotUsername();
+        if (!username) throw new Error('Не удалось получить username бота.');
+        const url = `https://t.me/${username}?start=referrals`;
+        if (openTelegramLinkAndCloseMiniApp(url)) return;
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+
+      async function openChannelAlternativeFlow() {
+        const url = CHANNEL_ALTERNATIVE_URL;
+        if (openTelegramLinkAndCloseMiniApp(url)) return;
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+
+      async function loadProfile() {
+        const apply = (profile) => {
+          seekerId = Number(profile?.id || 0) || null;
+          currentResumeUrl = String(profile?.resumeUrl || '').trim();
+        };
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const profile = await api('/api/app/profile');
+            apply(profile);
+            if (!seekerId) throw new Error('Не удалось определить текущего пользователя.');
+            return;
+          } catch (err) {
+            const msg = String(err?.message || '');
+            const isAuth = msg.includes('Unauthorized') || msg.includes('"error":"Unauthorized"');
+            if (attempt === 1 || !isAuth) throw err;
+            await new Promise((r) => setTimeout(r, 600));
+            await waitForTelegramInitData(6000);
+          }
+        }
+      }
+
+      async function loadSkills() {
+        const payload = await api(SKILLS_URL);
+        skills = payload.skills || payload || [];
+        const menu = document.getElementById('skillPickerMenu');
+        const grouped = new Map();
+        for (const s of skills) {
+          const roleName = String(s.roleName || s.RoleName || '').trim() || 'Другое';
+          const skillName = String(s.name || s.Name || `${s.id}`).trim() || String(s.id);
+          if (!grouped.has(roleName)) grouped.set(roleName, []);
+          grouped.get(roleName).push({ id: s.id, name: skillName });
+        }
+        const sortedGroups = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
+        const groupedOptionsHtml = sortedGroups.map(([roleName, items]) => {
+          const optionsHtml = items
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((item) =>
+              `<label class="skill-check"><input type="checkbox" value="${item.id}" />${esc(item.name)}</label>`
+            )
+            .join('');
+          return `<div class="skills-group"><div class="skills-group-title">${esc(roleName)}</div>${optionsHtml}</div>`;
+        }).join('');
+        menu.innerHTML = groupedOptionsHtml;
+      }
+
+      function getSelectedSkillIdsCsv() {
+        const checked = document.querySelectorAll('#skillPickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => String(opt.value || '').trim())
+          .filter(Boolean)
+          .join(',');
+      }
+
+      function applySelectedSkillIdsCsv(csv) {
+        const selected = new Set(
+          String(csv || '')
+            .split(',')
+            .map((v) => v.trim())
+            .filter(Boolean)
+        );
+        const checkboxes = document.querySelectorAll('#skillPickerMenu input[type="checkbox"]');
+        [...checkboxes].forEach((opt) => {
+          opt.checked = selected.has(String(opt.value));
+        });
+        renderSkillPickerSummary();
+      }
+
+      function renderSkillPickerSummary() {
+        const csv = getSelectedSkillIdsCsv();
+        const effectiveCsv = csv || bootDeepLinkSkillIdsCsv;
+        const btn = document.getElementById('skillPickerBtn');
+        if (!effectiveCsv) {
+          btn.textContent = 'Все роли';
+        } else {
+          const ids = [...new Set(effectiveCsv.split(',').map((id) => id.trim()).filter(Boolean))];
+          btn.textContent = `Выбрано ролей: ${ids.length}`;
+        }
+        updateHighlyRelevantFilterState();
+      }
+
+      function openSkillPicker() {
+        isSkillPickerOpen = true;
+        document.getElementById('skillPickerMenu').classList.add('open');
+      }
+
+      function closeSkillPicker() {
+        isSkillPickerOpen = false;
+        document.getElementById('skillPickerMenu').classList.remove('open');
+      }
+
+      function renderSourcePickerOptions() {
+        const menu = document.getElementById('sourcePickerMenu');
+        menu.innerHTML = APPLY_TYPE_OPTIONS
+          .map(
+            (item) =>
+              `<label class="skill-check"><input type="checkbox" value="${attrEsc(item.value)}" />${esc(item.label)}</label>`
+          )
+          .join('');
+      }
+
+      function getSelectedSources() {
+        const checked = document.querySelectorAll('#sourcePickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => String(opt.value || '').trim())
+          .filter(Boolean);
+      }
+
+      function applySelectedApplyTypesCsv(csv) {
+        const selected = new Set(
+          String(csv || '')
+            .split(',')
+            .map((v) => mapLegacyApplyTypeToken(v))
+            .filter(Boolean)
+        );
+        const checkboxes = document.querySelectorAll('#sourcePickerMenu input[type="checkbox"]');
+        [...checkboxes].forEach((opt) => {
+          opt.checked = selected.has(String(opt.value || '').trim().toLowerCase());
+        });
+        renderSourcePickerSummary();
+      }
+
+      function renderSourcePickerSummary() {
+        const selected = getSelectedSources();
+        const btn = document.getElementById('sourcePickerBtn');
+        btn.textContent = selected.length ? `Выбрано источников: ${selected.length}` : 'Все источники';
+      }
+
+      function openSourcePicker() {
+        isSourcePickerOpen = true;
+        document.getElementById('sourcePickerMenu').classList.add('open');
+      }
+
+      function closeSourcePicker() {
+        isSourcePickerOpen = false;
+        document.getElementById('sourcePickerMenu').classList.remove('open');
+      }
+
+      async function uploadMainResumeFromUi() {
+        const fileInput = document.getElementById('resumeFileInput');
+        const uploadBtn = document.getElementById('uploadResumeBtn');
+        const loaderId = 'uploadResumeLoader';
+        const file = fileInput.files?.[0];
+        if (!file) throw new Error('Сначала выберите файл.');
+        if (file.size > 15 * 1024 * 1024) throw new Error('Файл слишком большой. Максимум 15MB.');
+        const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+          throw new Error('Неподдерживаемый тип файла. Используйте PDF или изображение (JPG/PNG/WEBP).');
+        }
+        uploadBtn.disabled = true;
+        onLoading(loaderId, true);
+        try {
+          const resolveExtension = () => {
+            const name = String(file.name || '').toLowerCase();
+            const extMatch = name.match(/\.([a-z0-9]+)$/);
+            if (extMatch?.[1]) return extMatch[1];
+            if (file.type === 'application/pdf') return 'pdf';
+            if (file.type === 'image/png') return 'png';
+            if (file.type === 'image/webp') return 'webp';
+            return 'jpg';
+          };
+          // Android WebView may reject non ISO-8859-1 header values.
+          const safeFileName = `resume-${Date.now()}.${resolveExtension()}`;
+          const headers = {
+            'Content-Type': 'application/octet-stream',
+            'x-file-name': safeFileName,
+            'x-file-type': file.type || 'application/octet-stream',
+          };
+          attachMiniAppAuthHeaders(headers);
+          const bytes = await file.arrayBuffer();
+          const response = await fetch('/api/app/profile/resume-upload', {
+            method: 'POST',
+            headers,
+            body: bytes,
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(typeof payload?.error === 'string' ? payload.error : 'Не удалось загрузить резюме');
+          }
+          currentResumeUrl = String(payload?.resumeUrl || '').trim();
+          if (!currentResumeUrl) throw new Error('Резюме загружено, но ссылка отсутствует.');
+          setMsg('resumeUploadMsg', 'Резюме успешно загружено.');
+          return true;
+        } finally {
+          onLoading(loaderId, false);
+          uploadBtn.disabled = false;
+        }
+      }
+
+      async function loadApplicationsByUser() {
+        applications = await api(`${API_BASE}/api/app/applications/by-user?userId=${encodeURIComponent(seekerId)}&limit=100&offset=0`);
+      }
+
+      async function syncJobs(options = {}) {
+        if (isSyncing) return;
+        let from = document.getElementById('fromDate').value;
+        let to = document.getElementById('toDate').value;
+        from = clampDateToBounds(from);
+        to = clampDateToBounds(to);
+        if (from > to) from = to;
+        document.getElementById('fromDate').value = from;
+        document.getElementById('toDate').value = to;
+        const selectedSkillIds = getSelectedSkillIdsCsv();
+        const fallbackSkillIds = String(q().skillIds || '').trim();
+        const skillIds = selectedSkillIds || bootDeepLinkSkillIdsCsv || fallbackSkillIds;
+        const showOnlyHighlyRelevant =
+          Boolean(skillIds.trim()) && document.getElementById('showOnlyHighlyRelevant').checked;
+        const query = q();
+        const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
+        const pageSize = 100;
+        const applyTypes = getSelectedSources().join(',');
+        if (!from || !to) throw new Error('Укажите даты "С" и "По".');
+
+        setQ({
+          from,
+          to,
+          skillIds,
+          applyTypes,
+          showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '',
+          page,
+          pageSize,
+        });
+        if (options.trackSearchClick) {
+          const searchUrl =
+            (window.location.origin || '') + window.location.pathname + (window.location.search || '');
+          postAnalytics('/api/app/analytics/search-click', { searchUrl });
+        }
+        setSyncBusy(true);
+        try {
+          const posUrl =
+            `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
+            `${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}` +
+            `${applyTypes ? `&applyTypes=${encodeURIComponent(applyTypes)}` : ''}` +
+            `${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}` +
+            `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+          const data = await api(posUrl);
+          positions = data.positions || [];
+          pageInfo = {
+            page: Number(data.page || page),
+            pageSize: Number(data.pageSize || pageSize),
+            hasMore: !!data.hasMore,
+            count: Number(data.count || positions.length),
+            totalRows: Number(data.totalRows || data.count || positions.length),
+          };
+          await loadApplicationsByUser();
+          renderJobs();
+          updatePagerUi();
+          setMsg('dashMsg', `Загружена страница ${pageInfo.page}: ${pageInfo.count} вакансий. Всего доступно: ${pageInfo.totalRows}.`);
+        } finally {
+          setSyncBusy(false);
+          updatePagerUi();
+        }
+      }
+
+      function appByScreenlyId(screenlyId) {
+        return applications.find((a) => Number(a.ScreenlyJobId) === Number(screenlyId)) || null;
+      }
+
+      function renderJobs() {
+        const body = document.getElementById('jobsList');
+        if (!positions.length) {
+          body.innerHTML = '<div class="muted">Вакансии не найдены.</div>';
+          return;
+        }
+        body.innerHTML = positions.map((p) => {
+          const app = appByScreenlyId(p.id);
+          return `<div class="job-card" data-open-job="${p.id}">
+            <div class="job-card-head">
+              <div>
+                <div class="job-card-title">${esc(p.title)}</div>
+                <div class="job-card-sub">${esc(p.company)} · ${esc(p.location)}</div>
+              </div>
+              <span class="job-status-pill">${esc(app?.Status || 'new')}</span>
+            </div>
+            <div class="job-card-meta">
+              <span>#${esc(p.id)}</span>
+              <span>Опубликовано: ${esc(formatPostedDate(p.publishedAt) || '—')}</span>
+              <span>Отклик: ${esc(APPLY_TYPE_LABELS[String(p.applyType || '').toLowerCase()] || p.applyType || '—')}</span>
+            </div>
+          </div>`;
+        }).join('');
+        body.querySelectorAll('[data-open-job]').forEach((row) => {
+          row.addEventListener('click', () => {
+            const id = Number(row.getAttribute('data-open-job'));
+            setQ({ jobId: id });
+            openJobById(id);
+          });
+        });
+      }
+
+      async function ensureApplication(job) {
+        let app = appByScreenlyId(job.id);
+        if (app) return app;
+        app = await api(`${API_BASE}/api/app/applications`, {
+          method: 'POST',
+          body: JSON.stringify({
+            userId: Number(seekerId),
+            screenlyJobId: Number(job.id),
+            vacancyTitle: job.title,
+            companyName: job.company,
+            source: job.source,
+            appliedAt: new Date().toISOString(),
+            metaJson: {
+              positionId: job.id,
+              applyUrl: job.applyUrl || null,
+              location: job.location || null,
+              shortSummary: job.shortSummary || null,
+            },
+          }),
+        });
+        await loadApplicationsByUser();
+        return appByScreenlyId(job.id) || app;
+      }
+
+      function openJobById(id) {
+        const job = positions.find((x) => Number(x.id) === Number(id));
+        if (!job) {
+          document.getElementById('jobNotesBlock').style.display = 'none';
+          document.getElementById('jobActions').style.display = 'none';
+          return;
+        }
+        selectedJob = job;
+        selectedApplication = appByScreenlyId(job.id);
+        document.getElementById('jobInfo').classList.remove('muted');
+        document.getElementById('jobNotesBlock').style.display = 'block';
+        document.getElementById('jobActions').style.display = 'block';
+        hideInsight();
+        const sumHtml = String(job.shortSummary || '').trim()
+          ? `<div class="skills-block" style="margin-top:10px"><h4>Кратко</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
+          : '';
+        const remoteHtml = String(job.remoteReasoning || '').trim()
+          ? `<div class="skills-block"><h4>Удаленка</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Почему AI считает эту вакансию удаленной?</button></div>`
+          : '';
+        document.getElementById('jobInfo').innerHTML =
+          `<div class="job-detail">` +
+          `<div><strong>${esc(job.title)}</strong></div>` +
+          `<div class="sub">${esc(job.company)} · ${esc(job.location)}</div>` +
+          `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Открыть вакансию в источнике</a></div>` +
+          remoteHtml +
+          sumHtml +
+          renderJobSkillsHtml(job.skills) +
+          `</div>`;
+        document.getElementById('statusSel').value = selectedApplication?.Status || 'new';
+        document.getElementById('notesText').value = selectedApplication?.Notes || '';
+        renderArtifacts();
+        bindJobDetailInteractions(job);
+        openJobModal();
+      }
+
+      function renderArtifacts() {
+        const links = document.getElementById('artifactLinks');
+        const cover = document.getElementById('coverPreview');
+        if (!selectedApplication) {
+          links.innerHTML = '';
+          cover.value = '';
+          return;
+        }
+        links.innerHTML = selectedApplication.TailoredCVURL
+          ? `<a href="${esc(selectedApplication.TailoredCVURL)}" download target="_blank" rel="noopener noreferrer">Скачать адаптированное CV</a>`
+          : '';
+        cover.value = selectedApplication.CoverLetter || '';
+      }
+
+      async function saveStatus() {
+        if (isJobBusy) return;
+        if (!selectedJob) throw new Error('Сначала откройте вакансию.');
+        setJobBusy(true);
+        try {
+          const app = await ensureApplication(selectedJob);
+          const updated = await api(`${API_BASE}/api/app/applications/${app.Id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              status: document.getElementById('statusSel').value,
+              notes: document.getElementById('notesText').value,
+            }),
+          });
+          selectedApplication = updated;
+          await loadApplicationsByUser();
+          renderJobs();
+          renderArtifacts();
+          setMsg('jobMsg', 'Статус сохранен.');
+        } finally {
+          setJobBusy(false);
+        }
+      }
+
+      async function generateMaterials() {
+        if (isJobBusy) return;
+        if (!selectedJob) throw new Error('Сначала откройте вакансию.');
+        if (!currentResumeUrl) {
+          continueGenerateAfterResumeUpload = true;
+          setMsg('resumeUploadMsg', 'Чтобы продолжить, загрузите основное резюме.');
+          openResumeRequiredModal();
+          return;
+        }
+        setJobBusy(true);
+        try {
+          const app = await ensureApplication(selectedJob);
+          const resumePayload = await api(`${API_BASE}/api/app/admin/users/${encodeURIComponent(seekerId)}/resume-text`);
+          const mainResumeText = String(resumePayload.resumeText || '').trim();
+          if (!mainResumeText) throw new Error('Текст резюме не найден у текущего пользователя.');
+
+          const [tailored, cover] = await Promise.all([
+            api(`${API_BASE}/api/tailored-resume/upload`, {
+              method: 'POST',
+              body: JSON.stringify({
+                seekerId: Number(seekerId),
+                screenlyJobId: Number(selectedJob.id),
+                jobTitle: selectedJob.title || '',
+                jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
+                mainResumeText,
+              }),
+            }),
+            api(`${API_BASE}/api/cover-letter`, {
+              method: 'POST',
+              body: JSON.stringify({
+                seekerId: Number(seekerId),
+                jobTitle: selectedJob.title || '',
+                jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
+                mainResumeText,
+              }),
+            }),
+          ]);
+
+          const updated = await api(`${API_BASE}/api/app/applications/${app.Id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              tailoredCvUrl: tailored.tailoredCvUrl,
+              coverLetter: cover.coverLetter,
+              notes: document.getElementById('notesText').value,
+            }),
+          });
+          selectedApplication = updated;
+          await loadApplicationsByUser();
+          renderJobs();
+          renderArtifacts();
+          setMsg('jobMsg', 'Адаптированные CV и cover letter сгенерированы и сохранены.');
+        } catch (err) {
+          const rawMessage = String(err?.message || '');
+          if (rawMessage.includes('gold_required')) {
+            const payload = parseErrorPayload(rawMessage);
+            openPaymentRequiredModal(payload || {});
+            setMsg('jobMsg', 'AI-инструменты доступны в Premium или при наличии открытий.', true);
+            return;
+          }
+          throw err;
+        } finally {
+          setJobBusy(false);
+        }
+      }
+
+      function hydrateStateToInputs() {
+        const s = q();
+        const now = new Date();
+        const to = localIsoDate(now);
+        const minBound = new Date(now);
+        minBound.setMonth(minBound.getMonth() - 1);
+        const minStr = localIsoDate(minBound);
+        const defaultFrom = new Date(now);
+        defaultFrom.setDate(defaultFrom.getDate() - 7);
+        const defaultFromStr = localIsoDate(defaultFrom);
+        dateBounds = { min: minStr, max: to };
+
+        const fromInput = document.getElementById('fromDate');
+        const toInput = document.getElementById('toDate');
+        fromInput.min = minStr;
+        fromInput.max = to;
+        toInput.min = minStr;
+        toInput.max = to;
+
+        const resolvedFrom = clampDateToBounds(s.from || defaultFromStr);
+        const resolvedTo = clampDateToBounds(s.to || to);
+        const finalFrom = resolvedFrom > resolvedTo ? resolvedTo : resolvedFrom;
+        const finalTo = resolvedTo < resolvedFrom ? resolvedFrom : resolvedTo;
+        fromInput.value = finalFrom;
+        toInput.value = finalTo;
+        setQ({ from: finalFrom, to: finalTo });
+      }
+
+      async function boot() {
+        hydrateStateToInputs();
+        showDeeplinkDebugAlertOnce();
+        renderSourcePickerOptions();
+        applySelectedApplyTypesCsv(q().applyTypes || '');
+        lockDeeplinkFilters();
+        await waitForTelegramInitData();
+        if (!String(getTgInitDataString()).trim() && !devTelegramId) {
+          const hrefLen = String(window.location.href || '').length;
+          const hint =
+            hrefLen > 6000
+              ? ' Ссылка может быть слишком длинной для Telegram на iOS. Откройте поиск из меню бота или сократите фильтры в ссылке.'
+              : ' Открывайте этот экран только из Telegram (меню бота или кнопка в чате), а не во внешнем браузере.';
+          throw new Error(`Нет данных Telegram Web App (init data).${hint}`);
+        }
+        await Promise.all([loadProfile(), loadSkills()]);
+        const s = q();
+        bootDeepLinkSkillIdsCsv = String(s.skillIds || '').trim();
+        if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
+        else renderSkillPickerSummary();
+        syncHighlyRelevantCheckboxFromQuery();
+        updatePagerUi();
+        if (shouldOpenPricingOnBoot()) {
+          if (!monetizationStatus) {
+            await loadMonetizationStatus();
+          }
+          openPaymentRequiredModal({ monetization: monetizationStatus?.monetization || {} });
+        }
+        if (shouldAutoSearchOnBoot(s)) {
+          await syncJobs();
+        }
+      }
+
+      document.getElementById('syncBtn').addEventListener('click', () =>
+        syncJobs({ trackSearchClick: true }).catch((e) => setMsg('dashMsg', e.message, true))
+      );
+      document.getElementById('prevPageBtn').addEventListener('click', () => {
+        const cur = q();
+        const nextPage = Math.max(1, (Number.parseInt(String(cur.page || '1'), 10) || 1) - 1);
+        setQ({ page: nextPage });
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('nextPageBtn').addEventListener('click', () => {
+        const cur = q();
+        const nextPage = (Number.parseInt(String(cur.page || '1'), 10) || 1) + 1;
+        setQ({ page: nextPage });
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('statusSel').addEventListener('change', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('notesText').addEventListener('blur', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('genBtn').addEventListener('click', () => generateMaterials().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('skillPickerBtn').addEventListener('click', () => {
+        if (isSkillPickerOpen) closeSkillPicker(); else openSkillPicker();
+      });
+      document.getElementById('skillPickerMenu').addEventListener('change', () => {
+        bootDeepLinkSkillIdsCsv = '';
+        renderSkillPickerSummary();
+      });
+      document.getElementById('sourcePickerBtn').addEventListener('click', () => {
+        if (isSourcePickerOpen) closeSourcePicker(); else openSourcePicker();
+      });
+      document.getElementById('sourcePickerMenu').addEventListener('change', () => {
+        renderSourcePickerSummary();
+        setQ({ applyTypes: getSelectedSources().join(','), page: '1' });
+      });
+      document.getElementById('showOnlyHighlyRelevant').addEventListener('change', (event) => {
+        if (!hasSelectedSkills()) {
+          event.target.checked = false;
+          return;
+        }
+        setQ({ showOnlyHighlyRelevant: event.target.checked ? 'true' : '' });
+        setQ({ page: '1' });
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('inviteFriendBtn').addEventListener('click', async () => {
+        try {
+          await openReferralBonusFlow();
+        } catch (err) {
+          setMsg('paymentRequiredMsg', err?.message || 'Не удалось открыть реферальный экран.', true);
+        }
+      });
+      document.getElementById('openChannelAlternativeBtn').addEventListener('click', async () => {
+        try {
+          await openChannelAlternativeFlow();
+        } catch (err) {
+          setMsg('paymentRequiredMsg', err?.message || 'Не удалось открыть ссылку на канал.', true);
+        }
+      });
+      document.getElementById('uploadResumeBtn').addEventListener('click', () => {
+        uploadMainResumeFromUi()
+          .then((ok) => {
+            if (!ok) return;
+            if (continueGenerateAfterResumeUpload) {
+              continueGenerateAfterResumeUpload = false;
+              closeResumeRequiredModal();
+              generateMaterials().catch((e) => setMsg('jobMsg', e.message, true));
+            }
+          })
+          .catch((err) => setMsg('resumeUploadMsg', err.message, true));
+      });
+      document.getElementById('resumeRequiredClose').addEventListener('click', () => {
+        continueGenerateAfterResumeUpload = false;
+        closeResumeRequiredModal();
+      });
+      document.getElementById('resumeRequiredModal').addEventListener('click', (event) => {
+        if (event.target.id === 'resumeRequiredModal') {
+          continueGenerateAfterResumeUpload = false;
+          closeResumeRequiredModal();
+        }
+      });
+      document.getElementById('subscribeRequiredClose').addEventListener('click', closeSubscribeRequiredModal);
+      document.getElementById('subscribeRequiredModal').addEventListener('click', (event) => {
+        if (event.target.id === 'subscribeRequiredModal') closeSubscribeRequiredModal();
+      });
+      document.getElementById('paymentRequiredClose').addEventListener('click', closePaymentRequiredModal);
+      document.getElementById('paymentRequiredModal').addEventListener('click', (event) => {
+        if (event.target.id === 'paymentRequiredModal') closePaymentRequiredModal();
+      });
+      document.getElementById('verifySubscriptionBtn').addEventListener('click', async () => {
+        onLoading('verifySubscriptionLoader', true);
+        try {
+          const ok = await verifyRequiredChannels();
+          if (!ok) {
+            setMsg('subscribeGateMsg', 'Вы все еще подписаны не на все обязательные каналы.', true);
+            return;
+          }
+          const pendingJobId = Number(pendingSubscribeJobId || 0);
+          if (!Number.isSafeInteger(pendingJobId) || pendingJobId <= 0) {
+            closeSubscribeRequiredModal();
+            return;
+          }
+          closeSubscribeRequiredModal();
+          openJobById(pendingJobId);
+        } catch (err) {
+          if (err?.code === 'subscribe_required') {
+            openSubscribeRequiredModal(err.payload || {}, pendingSubscribeJobId);
+            setMsg('subscribeGateMsg', 'Вы все еще подписаны не на все обязательные каналы.', true);
+            return;
+          }
+          if (err?.code === 'payment_required') {
+            closeSubscribeRequiredModal();
+            openPaymentRequiredModal(err.payload || {});
+            return;
+          }
+          setMsg('subscribeGateMsg', err?.message || 'Не удалось проверить подписку.', true);
+        } finally {
+          onLoading('verifySubscriptionLoader', false);
+        }
+      });
+      document.getElementById('insightModalClose').addEventListener('click', hideInsight);
+      document.getElementById('insightModal').addEventListener('click', (event) => {
+        if (event.target.id === 'insightModal') hideInsight();
+      });
+      document.getElementById('highlyRelevantHintBtn').addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openHighlyRelevantHintModal();
+      });
+      document.getElementById('highlyRelevantHintClose').addEventListener('click', closeHighlyRelevantHintModal);
+      document.getElementById('highlyRelevantHintModal').addEventListener('click', (event) => {
+        if (event.target.id === 'highlyRelevantHintModal') closeHighlyRelevantHintModal();
+      });
+      document.getElementById('jobModalClose').addEventListener('click', closeJobModal);
+      document.getElementById('jobModal').addEventListener('click', (event) => {
+        if (event.target.id === 'jobModal') closeJobModal();
+      });
+      document.addEventListener('click', (event) => {
+        const picker = event.target.closest('.skills-picker');
+        if (!picker) {
+          if (isSkillPickerOpen) closeSkillPicker();
+          if (isSourcePickerOpen) closeSourcePicker();
+        }
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          if (isJobModalOpen) closeJobModal();
+          if (isSkillPickerOpen) closeSkillPicker();
+          if (isSourcePickerOpen) closeSourcePicker();
+          if (isResumeRequiredModalOpen) {
+            continueGenerateAfterResumeUpload = false;
+            closeResumeRequiredModal();
+          }
+          if (isSubscribeRequiredModalOpen) closeSubscribeRequiredModal();
+          if (isPaymentRequiredModalOpen) closePaymentRequiredModal();
+          if (isInsightModalOpen) hideInsight();
+          if (isHighlyRelevantHintModalOpen) closeHighlyRelevantHintModal();
+        }
+      });
+
+      boot().catch((err) => {
+        setMsg('globalMsg', `Не удалось инициализировать страницу поиска вакансий: ${err.message}`, true);
+      });
+    </script>
+  </body>
+</html>

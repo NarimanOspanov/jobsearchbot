@@ -2181,13 +2181,13 @@ async function main() {
 
   app.get('/', (_req, res) => res.status(200).send('OK'));
   /**
-   * Serve seeker jobs HTML on /app for seekerjobs__ deep links (no HTTP redirect).
+   * Serve deeplink jobs HTML on /app for seekerjobs__ deep links (no HTTP redirect).
    * Redirects can drop the URL fragment (#tgWebAppData=...) that Telegram uses for WebApp auth,
    * which breaks miniAppAuth (empty initData) on the next document.
    */
   const serveSeekerJobsForDeeplink = (req, res, next) => {
     if (!isSeekerJobsDeeplinkRequest(req)) return next();
-    return res.sendFile(join(__dirname, '..', 'public', 'app', 'seeker-jobs.html'));
+    return res.sendFile(join(__dirname, '..', 'public', 'app', 'seeker-jobs-deeplink.html'));
   };
   app.get('/app', serveSeekerJobsForDeeplink);
   app.get('/app/', serveSeekerJobsForDeeplink);
@@ -2203,6 +2203,9 @@ async function main() {
   });
   app.get('/app/seeker-jobs', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'seeker-jobs.html'));
+  });
+  app.get('/app/seeker-jobs-deeplink', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'seeker-jobs-deeplink.html'));
   });
   app.get('/app/pricing', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'pricing.html'));
