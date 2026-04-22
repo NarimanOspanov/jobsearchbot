@@ -742,6 +742,7 @@
         if (window.sessionStorage?.getItem(onceKey) === '1') return;
         const state = q();
         const p = new URLSearchParams(window.location.search);
+        const initialParams = new URLSearchParams(initialLocationSearch);
         const paramStart = String(p.get('startapp') || p.get('startApp') || '').trim();
         const initStart = String(tg?.initDataUnsafe?.start_param || '').trim();
         const qParam = String(p.get('q') || '').trim();
@@ -750,12 +751,20 @@
         const payloadBody = rawPayload.startsWith('seekerjobs__') ? rawPayload.slice('seekerjobs__'.length) : rawPayload;
         const decodedStartPayload = payloadBody ? decodeQParamForDebug(payloadBody) : '';
         const payloadParams = innerParamsFromSeekerPayload(payloadBody);
+        const looksLikeTruncatedStartapp =
+          (paramStart.startsWith('seekerjobs__') || initStart.startsWith('seekerjobs__')) &&
+          Boolean(String(payloadParams.get('from') || '').trim()) &&
+          !Boolean(String(payloadParams.get('to') || '').trim()) &&
+          !Boolean(String(payloadParams.get('skillIds') || payloadParams.get('skillId') || '').trim());
         const lines = [
           'Deeplink debug',
           `url: ${window.location.href}`,
+          `initial search: ${initialLocationSearch || '(empty)'}`,
           `startapp(query): ${paramStart || '(empty)'}`,
           `start_param(initDataUnsafe): ${initStart || '(empty)'}`,
           `q(query): ${qParam || '(empty)'}`,
+          `startapp(initial search): ${String(initialParams.get('startapp') || initialParams.get('startApp') || '') || '(empty)'}`,
+          `q(initial search): ${String(initialParams.get('q') || '') || '(empty)'}`,
           `from(query): ${String(p.get('from') || '') || '(empty)'}`,
           `to(query): ${String(p.get('to') || '') || '(empty)'}`,
           `skillIds(query): ${String(p.get('skillIds') || p.get('skillId') || '') || '(empty)'}`,
@@ -768,6 +777,9 @@
           `showOnlyHighlyRelevant(startapp payload): ${String(payloadParams.get('showOnlyHighlyRelevant') || '') || '(empty)'}`,
           `decoded startapp payload: ${decodedStartPayload || '(empty)'}`,
           `decoded q payload: ${decodedQ || '(empty)'}`,
+          looksLikeTruncatedStartapp
+            ? 'warning: startapp looks truncated (Telegram usually cuts unencoded startapp at first "&").'
+            : 'warning: no obvious startapp truncation detected.',
           'resolved filters:',
           `from=${state.from || ''}`,
           `to=${state.to || ''}`,
@@ -1690,12 +1702,11 @@
         const finalTo = resolvedTo < resolvedFrom ? resolvedFrom : resolvedTo;
         fromInput.value = finalFrom;
         toInput.value = finalTo;
-        setQ({ from: finalFrom, to: finalTo });
       }
 
       async function boot() {
-        hydrateStateToInputs();
         showDeeplinkDebugAlertOnce();
+        hydrateStateToInputs();
         renderSourcePickerOptions();
         applySelectedApplyTypesCsv(q().applyTypes || '');
         lockDeeplinkFilters();
