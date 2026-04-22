@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Поиск вакансий (deeplink)</title>
+    <title>Поиск вакансий</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root {
@@ -261,7 +261,7 @@
 
       <div class="layout">
         <section class="card layout-col">
-          <h2>Поиск вакансий (deeplink)</h2>
+          <h2>Поиск вакансий</h2>
           <div class="row date-range-row">
             <span class="date-range">
               <label>С <input id="fromDate" type="date" /></label>
@@ -287,7 +287,8 @@
             </div>
           </div>
           <div class="row date-range-row">
-            <button id="syncBtn">Поиск</button>
+            <button id="syncBtn">Искать</button>
+            <button id="advancedSearchBtn" type="button" class="ghost-btn">Расширенный поиск</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
             <span class="pager">
               <button id="prevPageBtn" type="button" class="ghost-btn">Назад</button>
@@ -724,80 +725,12 @@
           pageSize: p.get('pageSize') || malformedFallback.get('pageSize') || '100',
         };
       }
-      function decodeQParamForDebug(rawQ) {
-        const value = String(rawQ || '').trim();
-        if (!value) return '';
-        try {
-          return decodeBase64UrlToUtf8(value);
-        } catch {
-          try {
-            return decodeURIComponent(value);
-          } catch {
-            return value;
-          }
-        }
-      }
-      function showDeeplinkDebugAlertOnce() {
-        const onceKey = 'seeker-jobs-deeplink-debug-alert-shown';
-        if (window.sessionStorage?.getItem(onceKey) === '1') return;
-        const state = q();
-        const p = new URLSearchParams(window.location.search);
-        const initialParams = new URLSearchParams(initialLocationSearch);
-        const paramStart = String(p.get('startapp') || p.get('startApp') || '').trim();
-        const initStart = String(tg?.initDataUnsafe?.start_param || '').trim();
-        const qParam = String(p.get('q') || '').trim();
-        const decodedQ = decodeQParamForDebug(qParam);
-        const rawPayload = paramStart || initStart;
-        const payloadBody = rawPayload.startsWith('seekerjobs__') ? rawPayload.slice('seekerjobs__'.length) : rawPayload;
-        const decodedStartPayload = payloadBody ? decodeQParamForDebug(payloadBody) : '';
-        const payloadParams = innerParamsFromSeekerPayload(payloadBody);
-        const looksLikeTruncatedStartapp =
-          (paramStart.startsWith('seekerjobs__') || initStart.startsWith('seekerjobs__')) &&
-          Boolean(String(payloadParams.get('from') || '').trim()) &&
-          !Boolean(String(payloadParams.get('to') || '').trim()) &&
-          !Boolean(String(payloadParams.get('skillIds') || payloadParams.get('skillId') || '').trim());
-        const lines = [
-          'Deeplink debug',
-          `url: ${window.location.href}`,
-          `initial search: ${initialLocationSearch || '(empty)'}`,
-          `startapp(query): ${paramStart || '(empty)'}`,
-          `start_param(initDataUnsafe): ${initStart || '(empty)'}`,
-          `q(query): ${qParam || '(empty)'}`,
-          `startapp(initial search): ${String(initialParams.get('startapp') || initialParams.get('startApp') || '') || '(empty)'}`,
-          `q(initial search): ${String(initialParams.get('q') || '') || '(empty)'}`,
-          `from(query): ${String(p.get('from') || '') || '(empty)'}`,
-          `to(query): ${String(p.get('to') || '') || '(empty)'}`,
-          `skillIds(query): ${String(p.get('skillIds') || p.get('skillId') || '') || '(empty)'}`,
-          `sourceIds(query): ${String(p.get('sourceIds') || '') || '(empty)'}`,
-          `showOnlyHighlyRelevant(query): ${String(p.get('showOnlyHighlyRelevant') || '') || '(empty)'}`,
-          `from(startapp payload): ${String(payloadParams.get('from') || '') || '(empty)'}`,
-          `to(startapp payload): ${String(payloadParams.get('to') || '') || '(empty)'}`,
-          `skillIds(startapp payload): ${String(payloadParams.get('skillIds') || payloadParams.get('skillId') || '') || '(empty)'}`,
-          `sourceIds(startapp payload): ${String(payloadParams.get('sourceIds') || '') || '(empty)'}`,
-          `showOnlyHighlyRelevant(startapp payload): ${String(payloadParams.get('showOnlyHighlyRelevant') || '') || '(empty)'}`,
-          `decoded startapp payload: ${decodedStartPayload || '(empty)'}`,
-          `decoded q payload: ${decodedQ || '(empty)'}`,
-          looksLikeTruncatedStartapp
-            ? 'warning: startapp looks truncated (Telegram usually cuts unencoded startapp at first "&").'
-            : 'warning: no obvious startapp truncation detected.',
-          'resolved filters:',
-          `from=${state.from || ''}`,
-          `to=${state.to || ''}`,
-          `skillIds=${state.skillIds || ''}`,
-          `applyTypes=${state.applyTypes || ''}`,
-          `showOnlyHighlyRelevant=${state.showOnlyHighlyRelevant || ''}`,
-          `page=${state.page || ''}`,
-          `pageSize=${state.pageSize || ''}`,
-        ];
-        alert(lines.join('\n'));
-        window.sessionStorage?.setItem(onceKey, '1');
-      }
       function isTruthyQueryParam(value) {
         const v = String(value || '').trim().toLowerCase();
         return v === 'true' || v === '1' || v === 'yes';
       }
       function lockDeeplinkFilters() {
-        const lockIds = ['fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'syncBtn'];
+        const lockIds = ['fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn'];
         for (const id of lockIds) {
           const el = document.getElementById(id);
           if (el) el.disabled = true;
@@ -934,7 +867,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        const lockedFilters = new Set(['syncBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn']);
+        const lockedFilters = new Set(['fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn']);
         ['syncBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on || lockedFilters.has(id);
@@ -1226,6 +1159,13 @@
         if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
       }
+      async function openAdvancedSearchFlow() {
+        const username = await loadBotUsername();
+        if (!username) throw new Error('Не удалось получить username бота.');
+        const url = `https://t.me/${username}?start=jobsearch`;
+        if (openTelegramLinkAndCloseMiniApp(url)) return;
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
 
       async function loadProfile() {
         const apply = (profile) => {
@@ -1304,7 +1244,26 @@
           const ids = [...new Set(effectiveCsv.split(',').map((id) => id.trim()).filter(Boolean))];
           btn.textContent = `Выбрано ролей: ${ids.length}`;
         }
+        renderSyncButtonLabel();
         updateHighlyRelevantFilterState();
+      }
+      function renderSyncButtonLabel() {
+        const btn = document.getElementById('syncBtn');
+        if (!btn) return;
+        const csv = getSelectedSkillIdsCsv() || bootDeepLinkSkillIdsCsv;
+        const ids = [...new Set(String(csv || '').split(',').map((v) => v.trim()).filter(Boolean))];
+        if (!ids.length) {
+          btn.textContent = 'Искать';
+          return;
+        }
+        const idSet = new Set(ids);
+        const selected = skills.filter((s) => idSet.has(String(s.id)));
+        const firstSkillName = String(selected[0]?.name || selected[0]?.Name || '').trim();
+        if (!firstSkillName) {
+          btn.textContent = 'Искать';
+          return;
+        }
+        btn.textContent = `Искать ${firstSkillName}`;
       }
 
       function openSkillPicker() {
@@ -1705,7 +1664,6 @@
       }
 
       async function boot() {
-        showDeeplinkDebugAlertOnce();
         hydrateStateToInputs();
         renderSourcePickerOptions();
         applySelectedApplyTypesCsv(q().applyTypes || '');
@@ -1790,6 +1748,13 @@
           await openChannelAlternativeFlow();
         } catch (err) {
           setMsg('paymentRequiredMsg', err?.message || 'Не удалось открыть ссылку на канал.', true);
+        }
+      });
+      document.getElementById('advancedSearchBtn').addEventListener('click', async () => {
+        try {
+          await openAdvancedSearchFlow();
+        } catch (err) {
+          setMsg('dashMsg', err?.message || 'Не удалось открыть расширенный поиск.', true);
         }
       });
       document.getElementById('uploadResumeBtn').addEventListener('click', () => {

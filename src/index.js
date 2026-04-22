@@ -1569,6 +1569,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.start(async (ctx) => {
     const payload = parseStartPayload(ctx);
+    if (payload === 'jobsearch') {
+      await openJobSearchFromBot(ctx);
+      return;
+    }
     if (payload.startsWith('buy_')) {
       const requestedCode = payload.replace(/^buy_/, '').trim().toLowerCase();
       if (requestedCode) {
