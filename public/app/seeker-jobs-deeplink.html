@@ -313,7 +313,7 @@
           <div id="jobInfo" class="muted">Выберите вакансию, чтобы продолжить.</div>
           <div id="jobActions" style="display:none">
             <div class="row">
-              <label>Статус
+              <label style="display:none">Статус
                 <select id="statusSel">
                   <option value="new">новая</option>
                   <option value="applied">откликнулся</option>
@@ -1502,14 +1502,12 @@
       function openJobById(id) {
         const job = positions.find((x) => Number(x.id) === Number(id));
         if (!job) {
-          document.getElementById('jobNotesBlock').style.display = 'none';
           document.getElementById('jobActions').style.display = 'none';
           return;
         }
         selectedJob = job;
         selectedApplication = appByScreenlyId(job.id);
         document.getElementById('jobInfo').classList.remove('muted');
-        document.getElementById('jobNotesBlock').style.display = 'block';
         document.getElementById('jobActions').style.display = 'block';
         hideInsight();
         const sumHtml = String(job.shortSummary || '').trim()
