@@ -286,7 +286,7 @@
               <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
             </div>
           </div>
-          <div class="row date-range-row">
+          <div id="sourceFilterRow" class="row date-range-row" style="display:none">
             <label>Source
               <select id="sourceSel">
                 <option value="">Все</option>
@@ -532,6 +532,7 @@
       const POSITIONS_URL = '/api/admin/positions';
 
       let seekerId = null;
+      let isBotAdminUser = false;
       let skills = [];
       let positions = [];
       let applications = [];
@@ -897,6 +898,18 @@
         });
         updateHighlyRelevantFilterState();
       }
+      function updateSourceFilterVisibility() {
+        const row = document.getElementById('sourceFilterRow');
+        const sourceSel = document.getElementById('sourceSel');
+        if (!row || !sourceSel) return;
+        if (isBotAdminUser) {
+          row.style.display = '';
+          return;
+        }
+        row.style.display = 'none';
+        sourceSel.value = '';
+        setQ({ source: '' });
+      }
       function hasSelectedSkills() {
         return Boolean(getSelectedSkillIdsCsv().trim());
       }
@@ -1193,7 +1206,9 @@
       async function loadProfile() {
         const apply = (profile) => {
           seekerId = Number(profile?.id || 0) || null;
+          isBotAdminUser = Boolean(profile?.isBotAdmin);
           currentResumeUrl = String(profile?.resumeUrl || '').trim();
+          updateSourceFilterVisibility();
         };
         for (let attempt = 0; attempt < 2; attempt += 1) {
           try {
@@ -1419,7 +1434,9 @@
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = 100;
         const applyTypes = getSelectedSources().join(',');
-        const source = normalizeSourceToken(document.getElementById('sourceSel')?.value || query.source || '');
+        const source = isBotAdminUser
+          ? normalizeSourceToken(document.getElementById('sourceSel')?.value || query.source || '')
+          : '';
         if (!from || !to) throw new Error('Укажите даты "С" и "По".');
 
         setQ({
@@ -1691,7 +1708,7 @@
         hydrateStateToInputs();
         renderSourcePickerOptions();
         applySelectedApplyTypesCsv(q().applyTypes || '');
-        document.getElementById('sourceSel').value = q().source || '';
+        updateSourceFilterVisibility();
         lockDeeplinkFilters();
         await waitForTelegramInitData();
         if (!String(getTgInitDataString()).trim() && !devTelegramId) {
@@ -1705,6 +1722,8 @@
         await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
         bootDeepLinkSkillIdsCsv = String(s.skillIds || '').trim();
+        if (isBotAdminUser) document.getElementById('sourceSel').value = s.source || '';
+        else document.getElementById('sourceSel').value = '';
         if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
         else renderSkillPickerSummary();
         syncHighlyRelevantCheckboxFromQuery();

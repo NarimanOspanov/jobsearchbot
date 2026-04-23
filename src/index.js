@@ -2623,10 +2623,17 @@ async function main() {
         req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
       );
       const monetization = await buildMonetizationStatus(user.Id);
+      const adminIds = config.botAdminTelegramIds;
+      const telegramUserId = Number(req.miniAppUser?.id);
+      const isBotAdmin =
+        Number.isSafeInteger(telegramUserId) &&
+        adminIds.size > 0 &&
+        adminIds.has(telegramUserId);
       res.json({
         id: user.Id,
         telegramChatId: String(user.TelegramChatId),
         telegramUserName: user.TelegramUserName,
+        isBotAdmin,
         resumeUrl: user.ResumeURL,
         skills: user.skills,
         monetization,
