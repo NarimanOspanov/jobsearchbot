@@ -323,19 +323,19 @@
           <div id="jobInfo" class="muted">Выберите вакансию, чтобы продолжить.</div>
           <div id="jobActions" style="display:none">
             <div class="row">
-              <label style="display:none">Статус
-                <select id="statusSel">
-                  <option value="new">новая</option>
-                  <option value="applied">откликнулся</option>
-                  <option value="skipped">пропущена</option>
-                </select>
-              </label>
               <button id="genBtn">Сгенерировать адаптированные CV + Cover Letter</button>
               <span id="jobLoader" class="loader" aria-hidden="true"></span>
             </div>
             <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
             <label>Сопроводительное письмо</label>
             <textarea id="coverPreview" readonly></textarea>
+            <label>Статус
+              <select id="statusSel">
+                <option value="new">новая</option>
+                <option value="applied">откликнулся</option>
+                <option value="skipped">пропущена</option>
+              </select>
+            </label>
             <p id="jobMsg" class="muted"></p>
           </div>
           <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
@@ -1559,12 +1559,14 @@
         const job = positions.find((x) => Number(x.id) === Number(id));
         if (!job) {
           document.getElementById('jobActions').style.display = 'none';
+          document.getElementById('jobNotesBlock').style.display = 'none';
           return;
         }
         selectedJob = job;
         selectedApplication = appByScreenlyId(job.id);
         document.getElementById('jobInfo').classList.remove('muted');
         document.getElementById('jobActions').style.display = 'block';
+        document.getElementById('jobNotesBlock').style.display = 'block';
         hideInsight();
         const sumHtml = String(job.shortSummary || '').trim()
           ? `<div class="skills-block" style="margin-top:10px"><h4>Кратко</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
