@@ -1481,7 +1481,6 @@
               <span class="job-status-pill">${esc(app?.Status || 'new')}</span>
             </div>
             <div class="job-card-meta">
-              <span>#${esc(p.id)}</span>
               <span>Опубликовано: ${esc(formatPostedDate(p.publishedAt) || '—')}</span>
               <span>Отклик: ${esc(getApplyTypeDisplay(p))}</span>
             </div>
@@ -1555,10 +1554,14 @@
           : '';
         const applyTypeDisplay = String(getApplyTypeDisplay(job) || '').trim();
         const applyCtaSuffix = applyTypeDisplay && applyTypeDisplay !== '—' ? ` (${esc(applyTypeDisplay)})` : '';
+        const adminJobIdHtml = isBotAdminUser
+          ? `<div class="sub" style="margin-top:4px">ID: #${esc(job.id)}</div>`
+          : '';
         document.getElementById('jobInfo').innerHTML =
           `<div class="job-detail">` +
           `<div><strong>${esc(job.title)}</strong></div>` +
           `<div class="sub">${esc(job.company)} · ${esc(job.location)}</div>` +
+          adminJobIdHtml +
           `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Откликнуться${applyCtaSuffix}</a></div>` +
           remoteHtml +
           sumHtml +
