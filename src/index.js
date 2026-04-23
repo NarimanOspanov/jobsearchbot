@@ -3269,7 +3269,7 @@ async function main() {
     await bot.telegram.setMyCommands([
       { command: 'start', description: 'Вакансии на удалёнку' },
       { command: 'companies', description: 'Компании с удалёнкой' },
-      { command: 'referrals', description: 'Бонусы за приглашения' },
+      { command: 'referrals', description: 'Реферальная программа' },
       { command: 'news', description: 'Новости про релокацию, удалёнку и ИИ' },
     ]);
   } catch (err) {
