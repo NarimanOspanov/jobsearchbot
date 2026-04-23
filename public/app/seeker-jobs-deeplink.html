@@ -1488,7 +1488,7 @@
           await loadApplicationsByUser();
           renderJobs();
           updatePagerUi();
-          setMsg('dashMsg', `Загружена страница ${pageInfo.page}: ${pageInfo.count} вакансий. Всего доступно: ${pageInfo.totalRows}.`);
+          setMsg('dashMsg', '');
         } finally {
           setSyncBusy(false);
           updatePagerUi();
