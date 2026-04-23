@@ -1553,11 +1553,13 @@
         const remoteHtml = (String(job.source || '').trim().toLowerCase() !== 'hirehi' && String(job.remoteReasoning || '').trim())
           ? `<div class="skills-block"><h4>Удаленка</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Почему AI считает эту вакансию удаленной?</button></div>`
           : '';
+        const applyTypeDisplay = String(getApplyTypeDisplay(job) || '').trim();
+        const applyCtaSuffix = applyTypeDisplay && applyTypeDisplay !== '—' ? ` (${esc(applyTypeDisplay)})` : '';
         document.getElementById('jobInfo').innerHTML =
           `<div class="job-detail">` +
           `<div><strong>${esc(job.title)}</strong></div>` +
           `<div class="sub">${esc(job.company)} · ${esc(job.location)}</div>` +
-          `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Откликнуться</a></div>` +
+          `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Откликнуться${applyCtaSuffix}</a></div>` +
           remoteHtml +
           sumHtml +
           renderJobSkillsHtml(job.skills) +
