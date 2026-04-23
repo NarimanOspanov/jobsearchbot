@@ -2392,12 +2392,31 @@ async function main() {
         }
         return [...unique];
       };
+      const normalizeSourceToken = (rawToken) => {
+        const value = String(rawToken || '').trim().toLowerCase();
+        if (!value) return '';
+        if (value === 'linkedin') return 'Linkedin';
+        if (value === 'indeed') return 'Indeed';
+        if (value === 'hirehi') return 'hirehi';
+        return '';
+      };
+      const parseSource = (input) => {
+        const rawValues = Array.isArray(input) ? input : [input];
+        for (const rawValue of rawValues) {
+          const tokens = String(rawValue || '')
+            .split(',')
+            .map((item) => normalizeSourceToken(item))
+            .filter(Boolean);
+          if (tokens.length) return tokens[0];
+        }
+        return '';
+      };
       const applyTypes = parseApplyTypes(
         req.query.applyType,
         req.query.applyTypes,
-        req.query.source,
         req.query.sourceIds
       );
+      const source = parseSource(req.query.source);
       const pageRaw = Number.parseInt(String(req.query.page || '1'), 10);
       const pageSizeRaw = Number.parseInt(String(req.query.pageSize || '100'), 10);
       const page = Number.isSafeInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
@@ -2410,6 +2429,7 @@ async function main() {
       upstreamParams.set('to', to);
       if (skillIds) upstreamParams.set('skillIds', skillIds);
       if (showOnlyHighlyRelevant) upstreamParams.set('showOnlyHighlyRelevant', 'true');
+      if (source) upstreamParams.set('source', source);
       for (const applyType of applyTypes) {
         // Upstream supports repeated applyType params and CSV; prefer repeated params.
         upstreamParams.append('applyType', applyType);

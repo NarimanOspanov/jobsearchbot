@@ -287,6 +287,16 @@
             </div>
           </div>
           <div class="row date-range-row">
+            <label>Source
+              <select id="sourceSel">
+                <option value="">Все</option>
+                <option value="Linkedin">Linkedin</option>
+                <option value="Indeed">Indeed</option>
+                <option value="hirehi">hirehi</option>
+              </select>
+            </label>
+          </div>
+          <div class="row date-range-row">
             <button id="syncBtn">Искать</button>
             <button id="advancedSearchBtn" type="button" class="ghost-btn">Расширенный поиск</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
@@ -564,6 +574,7 @@
         'to',
         'skillIds',
         'applyTypes',
+        'source',
         'sourceIds',
         'page',
         'pageSize',
@@ -684,6 +695,7 @@
             to: pick('to'),
             skillIds: pick('skillIds') || pick('skillId'),
             applyTypes: normalizeApplyTypesCsv(pick('applyTypes') || pick('sourceIds')),
+            source: normalizeSourceToken(pick('source')),
             showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
             jobId: pick('jobId'),
             page: pick('page') || '1',
@@ -705,6 +717,7 @@
             to: pick('to'),
             skillIds: pick('skillIds') || pick('skillId'),
             applyTypes: normalizeApplyTypesCsv(pick('applyTypes') || pick('sourceIds')),
+            source: normalizeSourceToken(pick('source')),
             showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
             jobId: pick('jobId'),
             page: pick('page') || '1',
@@ -719,6 +732,7 @@
           applyTypes: normalizeApplyTypesCsv(
             p.get('applyTypes') || p.get('sourceIds') || malformedFallback.get('applyTypes') || malformedFallback.get('sourceIds') || ''
           ),
+          source: normalizeSourceToken(p.get('source') || malformedFallback.get('source') || ''),
           showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || malformedFallback.get('showOnlyHighlyRelevant') || '',
           jobId: p.get('jobId') || malformedFallback.get('jobId') || '',
           page: p.get('page') || malformedFallback.get('page') || '1',
@@ -730,7 +744,7 @@
         return v === 'true' || v === '1' || v === 'yes';
       }
       function lockDeeplinkFilters() {
-        const lockIds = ['fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn'];
+        const lockIds = ['fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'sourceSel'];
         for (const id of lockIds) {
           const el = document.getElementById(id);
           if (el) el.disabled = true;
@@ -749,13 +763,22 @@
           initialParams.has('skillIds') ||
           initialParams.has('skillId') ||
           initialParams.has('applyTypes') ||
+          initialParams.has('source') ||
           initialParams.has('sourceIds') ||
           isTruthyQueryParam(initialParams.get('showOnlyHighlyRelevant'));
         const hasResolvedStateFilters =
           Boolean(String(state?.skillIds || '').trim()) ||
           Boolean(String(state?.applyTypes || '').trim()) ||
+          Boolean(String(state?.source || '').trim()) ||
           isTruthyQueryParam(state?.showOnlyHighlyRelevant);
         return hasDeepLinkPayload || hasFilterOverrides || hasResolvedStateFilters;
+      }
+      function normalizeSourceToken(value) {
+        const v = String(value || '').trim().toLowerCase();
+        if (v === 'linkedin') return 'Linkedin';
+        if (v === 'indeed') return 'Indeed';
+        if (v === 'hirehi') return 'hirehi';
+        return '';
       }
       function mapLegacyApplyTypeToken(value) {
         const v = String(value || '').trim().toLowerCase();
@@ -867,8 +890,8 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        const lockedFilters = new Set(['fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn']);
-        ['syncBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
+        const lockedFilters = new Set(['fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'sourceSel']);
+        ['syncBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'sourceSel', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on || lockedFilters.has(id);
         });
@@ -1396,6 +1419,7 @@
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = 100;
         const applyTypes = getSelectedSources().join(',');
+        const source = normalizeSourceToken(document.getElementById('sourceSel')?.value || query.source || '');
         if (!from || !to) throw new Error('Укажите даты "С" и "По".');
 
         setQ({
@@ -1403,6 +1427,7 @@
           to,
           skillIds,
           applyTypes,
+          source,
           showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '',
           page,
           pageSize,
@@ -1418,6 +1443,7 @@
             `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
             `${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}` +
             `${applyTypes ? `&applyTypes=${encodeURIComponent(applyTypes)}` : ''}` +
+            `${source ? `&source=${encodeURIComponent(source)}` : ''}` +
             `${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}` +
             `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
           const data = await api(posUrl);
@@ -1665,6 +1691,7 @@
         hydrateStateToInputs();
         renderSourcePickerOptions();
         applySelectedApplyTypesCsv(q().applyTypes || '');
+        document.getElementById('sourceSel').value = q().source || '';
         lockDeeplinkFilters();
         await waitForTelegramInitData();
         if (!String(getTgInitDataString()).trim() && !devTelegramId) {
@@ -1724,6 +1751,10 @@
       document.getElementById('sourcePickerMenu').addEventListener('change', () => {
         renderSourcePickerSummary();
         setQ({ applyTypes: getSelectedSources().join(','), page: '1' });
+      });
+      document.getElementById('sourceSel').addEventListener('change', (event) => {
+        const source = normalizeSourceToken(event.target.value);
+        setQ({ source, page: '1' });
       });
       document.getElementById('showOnlyHighlyRelevant').addEventListener('change', (event) => {
         if (!hasSelectedSkills()) {
