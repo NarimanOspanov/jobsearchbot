@@ -1538,6 +1538,7 @@
         if (!job) {
           document.getElementById('jobActions').style.display = 'none';
           document.getElementById('jobNotesBlock').style.display = 'none';
+          setMsg('jobMsg', '');
           return;
         }
         selectedJob = job;
@@ -1563,6 +1564,7 @@
           `</div>`;
         document.getElementById('statusSel').value = selectedApplication?.Status || 'new';
         document.getElementById('notesText').value = selectedApplication?.Notes || '';
+        setMsg('jobMsg', '');
         renderArtifacts();
         bindJobDetailInteractions(job);
         openJobModal();
