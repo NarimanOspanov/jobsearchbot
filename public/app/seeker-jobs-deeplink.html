@@ -1569,7 +1569,7 @@
         const sumHtml = String(job.shortSummary || '').trim()
           ? `<div class="skills-block" style="margin-top:10px"><h4>Кратко</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
           : '';
-        const remoteHtml = String(job.remoteReasoning || '').trim()
+        const remoteHtml = (String(job.source || '').trim().toLowerCase() !== 'hirehi' && String(job.remoteReasoning || '').trim())
           ? `<div class="skills-block"><h4>Удаленка</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Почему AI считает эту вакансию удаленной?</button></div>`
           : '';
         document.getElementById('jobInfo').innerHTML =
