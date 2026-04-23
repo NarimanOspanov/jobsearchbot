@@ -568,6 +568,19 @@
         telegram: 'Telegram',
         external: 'Сайты компаний',
       };
+      function getApplyTypeDisplay(position) {
+        const applyType = String(position?.applyType || '').trim().toLowerCase();
+        const source = String(position?.source || '').trim().toLowerCase();
+        if (applyType === 'easy_apply') {
+          if (source === 'linkedin') return 'LinkedIn';
+          if (source === 'indeed') return 'Indeed';
+        }
+        if (applyType === 'telegram') return 'Telegram';
+        if (applyType === 'external') return 'Сторонний сайт';
+        if (applyType === 'linkedin') return 'LinkedIn';
+        if (applyType === 'indeed') return 'Indeed';
+        return APPLY_TYPE_LABELS[applyType] || position?.applyType || '—';
+      }
 
       const SEEKER_FILTER_KEYS = [
         'from',
@@ -1470,7 +1483,7 @@
             <div class="job-card-meta">
               <span>#${esc(p.id)}</span>
               <span>Опубликовано: ${esc(formatPostedDate(p.publishedAt) || '—')}</span>
-              <span>Отклик: ${esc(APPLY_TYPE_LABELS[String(p.applyType || '').toLowerCase()] || p.applyType || '—')}</span>
+              <span>Отклик: ${esc(getApplyTypeDisplay(p))}</span>
             </div>
           </div>`;
         }).join('');
