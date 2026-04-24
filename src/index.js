@@ -1588,10 +1588,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '',
       String(position.Description || '').trim(),
       '',
-      'Чтобы откликнуться, отправьте резюме файлом (PDF или изображение).',
+      '<b>Чтобы откликнуться, отправьте резюме файлом (PDF или изображение).</b>',
     ];
     hireAgentStateByChatId.set(chat.id, { step: 'awaiting_cv_for_position', positionId: position.Id });
     await ctx.reply(lines.join('\n'), {
+      parse_mode: 'HTML',
       disable_web_page_preview: true,
     });
   };

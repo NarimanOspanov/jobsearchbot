@@ -617,6 +617,7 @@
       let monetizationStatus = null;
       let botUsername = '';
       let bootDeepLinkSkillIdsCsv = '';
+      let profileSkillIdsCsv = '';
       const CHANNEL_ALTERNATIVE_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
       const APPLY_TYPE_OPTIONS = [
         { value: 'linkedin', label: 'LinkedIn' },
@@ -1271,6 +1272,12 @@
           seekerId = Number(profile?.id || 0) || null;
           isBotAdminUser = Boolean(profile?.isBotAdmin);
           currentResumeUrl = String(profile?.resumeUrl || '').trim();
+          profileSkillIdsCsv = Array.isArray(profile?.skills)
+            ? profile.skills
+              .map((id) => String(id || '').trim())
+              .filter((id) => /^\d+$/.test(id))
+              .join(',')
+            : '';
           updateSourceFilterVisibility();
         };
         for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -1788,10 +1795,22 @@
         await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
         bootDeepLinkSkillIdsCsv = String(s.skillIds || '').trim();
+        const shouldUseProfileSkillsByDefault = !bootDeepLinkSkillIdsCsv && Boolean(profileSkillIdsCsv);
+        if (shouldUseProfileSkillsByDefault) {
+          bootDeepLinkSkillIdsCsv = profileSkillIdsCsv;
+          setQ({
+            skillIds: profileSkillIdsCsv,
+            showOnlyHighlyRelevant: 'true',
+            page: '1',
+          });
+        }
         if (isBotAdminUser) document.getElementById('sourceSel').value = s.source || '';
         else document.getElementById('sourceSel').value = '';
-        if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
+        if (bootDeepLinkSkillIdsCsv) applySelectedSkillIdsCsv(bootDeepLinkSkillIdsCsv);
         else renderSkillPickerSummary();
+        if (shouldUseProfileSkillsByDefault) {
+          document.getElementById('showOnlyHighlyRelevant').checked = true;
+        }
         syncHighlyRelevantCheckboxFromQuery();
         updatePagerUi();
         if (shouldOpenPricingOnBoot()) {
@@ -1800,7 +1819,7 @@
           }
           openPaymentRequiredModal({ monetization: monetizationStatus?.monetization || {} });
         }
-        if (shouldAutoSearchOnBoot(s)) {
+        if (shouldAutoSearchOnBoot(s) || shouldUseProfileSkillsByDefault) {
           await syncJobs();
         }
       }
