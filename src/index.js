@@ -952,6 +952,32 @@ ${text}`;
   return normalizeSkillIds(parsed).filter((id) => allowedIds.has(id));
 }
 
+function runResumeEnrichmentInBackground({ userId, resumeUrl, includeSkills = false }) {
+  setTimeout(async () => {
+    try {
+      const user = await models.Users.findByPk(userId);
+      if (!user) return;
+      const resumeText = await extractResumeTextFromUrl(resumeUrl);
+      const contactsPromise = extractResumeContactsWithAI(resumeText);
+      const skillsPromise = includeSkills
+        ? fetchScreenlySkillsCatalog()
+            .then((skillsCatalog) => extractResumeSkillIdsWithAI(resumeText, skillsCatalog))
+            .catch((skillsErr) => {
+              console.warn('Resume skills enrichment failed:', skillsErr?.message || skillsErr);
+              return [];
+            })
+        : Promise.resolve([]);
+      const [resumeContacts, resumeSkillIds] = await Promise.all([contactsPromise, skillsPromise]);
+      const updates = {};
+      if (resumeContacts) updates.ResumeContactsJson = JSON.stringify(resumeContacts);
+      if (includeSkills && Array.isArray(resumeSkillIds)) updates.skills = resumeSkillIds;
+      if (Object.keys(updates).length > 0) await user.update(updates);
+    } catch (parseErr) {
+      console.warn('Background resume enrichment failed:', parseErr?.message || parseErr);
+    }
+  }, 0);
+}
+
 function buildAdminUserContactProjection(user) {
   const resumeContacts = parseResumeContactsJson(user.ResumeContactsJson);
   const resumeName = resumeContacts.name || null;
@@ -1787,20 +1813,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         ctx.from?.first_name ?? null,
         ctx.from?.last_name ?? null
       );
-      let resumeContactsJson = null;
-      let resumeSkillIds = [];
-      try {
-        const resumeText = await extractResumeTextFromUrl(resumeUrl);
-        const [resumeContacts, skillsCatalog] = await Promise.all([
-          extractResumeContactsWithAI(resumeText),
-          fetchScreenlySkillsCatalog(),
-        ]);
-        if (resumeContacts) resumeContactsJson = JSON.stringify(resumeContacts);
-        resumeSkillIds = await extractResumeSkillIdsWithAI(resumeText, skillsCatalog);
-      } catch (parseErr) {
-        console.warn('Resume enrichment failed, keeping upload flow:', parseErr?.message || parseErr);
-      }
-      await user.update({ ResumeURL: resumeUrl, ResumeContactsJson: resumeContactsJson, skills: resumeSkillIds });
+      await user.update({ ResumeURL: resumeUrl });
+      runResumeEnrichmentInBackground({ userId: user.Id, resumeUrl, includeSkills: true });
       const totalWithResume = await models.Users.count({
         where: {
           ResumeURL: {
