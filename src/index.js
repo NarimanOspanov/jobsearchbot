@@ -853,9 +853,12 @@ function parseResumeContactsJson(jsonValue) {
 }
 
 async function extractResumeContactsWithAI(resumeText) {
-  if (!genAI) return null;
   const text = String(resumeText || '').trim();
   if (!text) return null;
+  if (!genAI) {
+    console.warn('Resume contacts AI parsing skipped: GEMINI_API_KEY is missing');
+    return null;
+  }
 
   const prompt = `Extract candidate contact information from this resume text.
 Return strict JSON only (no markdown, no explanations), with this exact shape:
@@ -955,6 +958,7 @@ ${text}`;
 function runResumeEnrichmentInBackground({ userId, resumeUrl, includeSkills = false }) {
   setTimeout(async () => {
     try {
+      console.info('[resume-enrichment] started', { userId, includeSkills });
       const user = await models.Users.findByPk(userId);
       if (!user) return;
       const resumeText = await extractResumeTextFromUrl(resumeUrl);
@@ -971,7 +975,16 @@ function runResumeEnrichmentInBackground({ userId, resumeUrl, includeSkills = fa
       const updates = {};
       if (resumeContacts) updates.ResumeContactsJson = JSON.stringify(resumeContacts);
       if (includeSkills && Array.isArray(resumeSkillIds)) updates.skills = resumeSkillIds;
-      if (Object.keys(updates).length > 0) await user.update(updates);
+      if (Object.keys(updates).length > 0) {
+        await user.update(updates);
+        console.info('[resume-enrichment] saved', {
+          userId,
+          hasContacts: Boolean(updates.ResumeContactsJson),
+          skillsCount: Array.isArray(updates.skills) ? updates.skills.length : 0,
+        });
+      } else {
+        console.warn('[resume-enrichment] no parsed data to save', { userId });
+      }
     } catch (parseErr) {
       console.warn('Background resume enrichment failed:', parseErr?.message || parseErr);
     }
