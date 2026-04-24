@@ -49,6 +49,9 @@
           <label class="checkbox"><input id="isArchivedInput" type="checkbox" /> Архивирована</label>
         </div>
         <div style="margin-top:8px">
+          <input id="externalApplyUrlInput" placeholder="Внешняя ссылка для отклика (https://...)" />
+        </div>
+        <div style="margin-top:8px">
           <textarea id="descriptionInput" placeholder="Описание вакансии"></textarea>
         </div>
         <div class="row-actions" style="margin-top:8px">
@@ -87,6 +90,7 @@
         document.getElementById('titleInput').value = '';
         document.getElementById('companyNameInput').value = '';
         document.getElementById('companyWebsiteInput').value = '';
+        document.getElementById('externalApplyUrlInput').value = '';
         document.getElementById('descriptionInput').value = '';
         document.getElementById('isArchivedInput').checked = false;
         document.getElementById('cancelEditBtn').style.display = 'none';
@@ -98,6 +102,7 @@
         document.getElementById('titleInput').value = row.Title || '';
         document.getElementById('companyNameInput').value = row.CompanyName || '';
         document.getElementById('companyWebsiteInput').value = row.CompanyWebsite || '';
+        document.getElementById('externalApplyUrlInput').value = row.ExternalApplyURL || '';
         document.getElementById('descriptionInput').value = row.Description || '';
         document.getElementById('isArchivedInput').checked = !!row.IsArchived;
         document.getElementById('cancelEditBtn').style.display = 'inline-block';
@@ -115,6 +120,7 @@
             <strong>${esc(row.Title)}</strong>
             <div class="muted">${esc(row.CompanyName)}${row.IsArchived ? ' · Архив' : ''}</div>
             ${row.CompanyWebsite ? `<div><a href="${esc(row.CompanyWebsite)}" target="_blank" rel="noopener noreferrer">${esc(row.CompanyWebsite)}</a></div>` : ''}
+            ${row.ExternalApplyURL ? `<div style="margin-top:6px"><span class="muted">Внешний отклик:</span> <a href="${esc(row.ExternalApplyURL)}" target="_blank" rel="noopener noreferrer">${esc(row.ExternalApplyURL)}</a></div>` : ''}
             <div style="margin-top:8px; white-space:pre-wrap">${esc(row.Description || '')}</div>
             <div style="margin-top:8px"><span class="muted">Apply link:</span> ${row.applyLink ? `<a href="${esc(row.applyLink)}" target="_blank" rel="noopener noreferrer">${esc(row.applyLink)}</a>` : '<span class="muted">недоступно</span>'}</div>
             <div class="row-actions">
@@ -160,6 +166,7 @@
             title: document.getElementById('titleInput').value.trim(),
             companyName: document.getElementById('companyNameInput').value.trim(),
             companyWebsite: document.getElementById('companyWebsiteInput').value.trim(),
+            externalApplyUrl: document.getElementById('externalApplyUrlInput').value.trim(),
             description: document.getElementById('descriptionInput').value.trim(),
             isArchived: document.getElementById('isArchivedInput').checked,
           };
@@ -167,6 +174,7 @@
             throw new Error('Заполните название, компанию и описание');
           }
           if (!payload.companyWebsite) delete payload.companyWebsite;
+          if (!payload.externalApplyUrl) delete payload.externalApplyUrl;
 
           if (editingId) {
             await api(`/api/app/admin/positions/${encodeURIComponent(editingId)}`, {

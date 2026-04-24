@@ -26,6 +26,10 @@ export default function definePosition(sequelize) {
         type: DataTypes.STRING(1024),
         allowNull: true,
       },
+      ExternalApplyURL: {
+        type: DataTypes.STRING(2048),
+        allowNull: true,
+      },
       DateCreated: {
         type: DataTypes.DATE,
         allowNull: false,

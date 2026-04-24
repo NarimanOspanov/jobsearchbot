@@ -1581,15 +1581,24 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     const website = String(position.CompanyWebsite || '').trim();
+    const externalApplyUrl = String(position.ExternalApplyURL || '').trim();
     const lines = [
       `Вакансия: ${position.Title}`,
       `Компания: ${position.CompanyName}`,
       ...(website ? [`Сайт компании: ${website}`] : []),
       '',
       String(position.Description || '').trim(),
-      '',
-      '<b>Чтобы откликнуться, отправьте резюме файлом (PDF или изображение).</b>',
     ];
+    if (externalApplyUrl) {
+      await ctx.reply(lines.join('\n'), {
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Откликнуться', url: externalApplyUrl }]],
+        },
+      });
+      return;
+    }
+    lines.push('', '<b>Чтобы откликнуться, отправьте резюме файлом (PDF или изображение).</b>');
     hireAgentStateByChatId.set(chat.id, { step: 'awaiting_cv_for_position', positionId: position.Id });
     await ctx.reply(lines.join('\n'), {
       parse_mode: 'HTML',
@@ -3306,6 +3315,7 @@ async function main() {
       const description = req.body.description == null ? '' : String(req.body.description).trim();
       const companyName = toStringOrUndefined(req.body.companyName, 255);
       const companyWebsite = req.body.companyWebsite == null ? null : toValidUrlOrUndefined(req.body.companyWebsite);
+      const externalApplyUrl = req.body.externalApplyUrl == null ? null : toValidUrlOrUndefined(req.body.externalApplyUrl);
       const isArchived = toBoolOrUndefined(req.body.isArchived);
       if (!title || !description || !companyName) {
         return res.status(400).json({ error: 'title, description, companyName are required' });
@@ -3313,11 +3323,15 @@ async function main() {
       if (req.body.companyWebsite != null && !companyWebsite) {
         return res.status(400).json({ error: 'companyWebsite must be a valid URL' });
       }
+      if (req.body.externalApplyUrl != null && !externalApplyUrl) {
+        return res.status(400).json({ error: 'externalApplyUrl must be a valid URL' });
+      }
       const row = await models.Positions.create({
         Title: title,
         Description: description,
         CompanyName: companyName,
         CompanyWebsite: companyWebsite,
+        ExternalApplyURL: externalApplyUrl,
         DateCreated: Sequelize.literal('GETUTCDATE()'),
         IsArchived: isArchived ?? false,
       });
@@ -3359,6 +3373,15 @@ async function main() {
           const companyWebsite = toValidUrlOrUndefined(req.body.companyWebsite);
           if (!companyWebsite) return res.status(400).json({ error: 'companyWebsite must be a valid URL' });
           updates.CompanyWebsite = companyWebsite;
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body, 'externalApplyUrl')) {
+        if (req.body.externalApplyUrl == null || String(req.body.externalApplyUrl).trim() === '') {
+          updates.ExternalApplyURL = null;
+        } else {
+          const externalApplyUrl = toValidUrlOrUndefined(req.body.externalApplyUrl);
+          if (!externalApplyUrl) return res.status(400).json({ error: 'externalApplyUrl must be a valid URL' });
+          updates.ExternalApplyURL = externalApplyUrl;
         }
       }
       if (Object.prototype.hasOwnProperty.call(req.body, 'isArchived')) {
