@@ -1586,6 +1586,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const externalApplyButtonText = companyName
       ? `Откликнуться на сайте ${companyName}`
       : 'Откликнуться на сайте работодателя';
+    const openOtherJobsButton = canUseSeekerJobsWebApp
+      ? { text: 'Открыть другие вакансии на 100% удалёнку', web_app: { url: seekerJobsUrl } }
+      : { text: 'Открыть другие вакансии на 100% удалёнку', callback_data: 'start_open_jobsearch' };
     const lines = [
       `Вакансия: ${position.Title}`,
       `Компания: ${position.CompanyName}`,
@@ -1597,7 +1600,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       await ctx.reply(lines.join('\n'), {
         disable_web_page_preview: true,
         reply_markup: {
-          inline_keyboard: [[{ text: externalApplyButtonText, url: externalApplyUrl }]],
+          inline_keyboard: [
+            [{ text: externalApplyButtonText, url: externalApplyUrl }],
+            [openOtherJobsButton],
+          ],
         },
       });
       return;
