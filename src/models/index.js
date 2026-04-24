@@ -11,6 +11,8 @@ import defineTelegramPayment from './TelegramPayment.js';
 import defineUserSubscription from './UserSubscription.js';
 import defineUserBonusOpen from './UserBonusOpen.js';
 import defineReferral from './Referral.js';
+import definePosition from './Position.js';
+import defineUserApplication from './UserApplication.js';
 
 /**
  * Initialize only the User model for empty bot runtime.
@@ -29,6 +31,8 @@ export function initModels(sequelize) {
   const UserSubscription = defineUserSubscription(sequelize);
   const UserBonusOpen = defineUserBonusOpen(sequelize);
   const Referral = defineReferral(sequelize);
+  const Position = definePosition(sequelize);
+  const UserApplication = defineUserApplication(sequelize);
 
   User.hasMany(Application, { foreignKey: 'UserId' });
   Application.belongsTo(User, { foreignKey: 'UserId' });
@@ -52,6 +56,10 @@ export function initModels(sequelize) {
   Referral.belongsTo(User, { as: 'Referrer', foreignKey: 'ReferrerUserId' });
   User.hasMany(Referral, { foreignKey: 'ReferredUserId' });
   Referral.belongsTo(User, { as: 'Referred', foreignKey: 'ReferredUserId' });
+  User.hasMany(UserApplication, { foreignKey: 'UserId' });
+  UserApplication.belongsTo(User, { foreignKey: 'UserId' });
+  Position.hasMany(UserApplication, { foreignKey: 'PositionId' });
+  UserApplication.belongsTo(Position, { foreignKey: 'PositionId' });
 
   return {
     User,
@@ -80,5 +88,9 @@ export function initModels(sequelize) {
     UserBonusOpens: UserBonusOpen,
     Referral,
     Referrals: Referral,
+    Position,
+    Positions: Position,
+    UserApplication,
+    UserApplications: UserApplication,
   };
 }

@@ -452,6 +452,13 @@ function parseStartReferralChatId(startPayload) {
   return Number.isSafeInteger(chatId) && chatId > 0 ? chatId : null;
 }
 
+function parseStartPositionId(startPayload) {
+  const payload = String(startPayload || '').trim();
+  const match = payload.match(/^apply_([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
+  if (!match) return null;
+  return String(match[1]).toLowerCase();
+}
+
 function buildPlanInvoicePayload(plan) {
   return JSON.stringify({
     type: 'monthly_plan',
@@ -1162,6 +1169,7 @@ async function removeUserDataByTelegramChatId(telegramChatId) {
         requiredChannelUsersDeleted: 0,
         searchClicksDeleted: 0,
         jobDetailsOpensDeleted: 0,
+        userApplicationsDeleted: 0,
       };
     }
     const applicationsDeleted = await models.Applications.destroy({
@@ -1215,6 +1223,12 @@ async function removeUserDataByTelegramChatId(telegramChatId) {
         transaction,
       })
       : 0;
+    const userApplicationsDeleted = models.UserApplications
+      ? await models.UserApplications.destroy({
+        where: { UserId: user.Id },
+        transaction,
+      })
+      : 0;
     await user.destroy({ transaction });
     return {
       ok: true,
@@ -1227,6 +1241,7 @@ async function removeUserDataByTelegramChatId(telegramChatId) {
       requiredChannelUsersDeleted,
       searchClicksDeleted,
       jobDetailsOpensDeleted,
+      userApplicationsDeleted,
     };
   });
 }
@@ -1323,6 +1338,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const companiesUrl = appBaseUrl ? `${appBaseUrl}/app/companies` : '';
   const adminUrl = appBaseUrl ? `${appBaseUrl}/app/admin` : '';
   const adminCompaniesUrl = appBaseUrl ? `${appBaseUrl}/app/admin/companies` : '';
+  const adminPositionsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/positions` : '';
   const stat2Url = appBaseUrl ? `${appBaseUrl}/app/stat2` : '';
   const canUseSeekerJobsWebApp = isValidTelegramWebAppUrl(seekerJobsUrl);
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
@@ -1331,6 +1347,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUsePricingWebApp = isValidTelegramWebAppUrl(pricingTmaUrl);
   const canUseAdminWebApp = isValidTelegramWebAppUrl(adminUrl);
   const canUseAdminCompaniesWebApp = isValidTelegramWebAppUrl(adminCompaniesUrl);
+  const canUseAdminPositionsWebApp = isValidTelegramWebAppUrl(adminPositionsUrl);
   const canUseStat2WebApp = isValidTelegramWebAppUrl(stat2Url);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const startKeyboard = {
@@ -1548,6 +1565,37 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     );
   };
 
+  const startPositionApplyScenario = async (ctx, positionId) => {
+    const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
+    if (chat?.type !== 'private') {
+      await ctx.reply('Этот сценарий доступен только в личном чате с ботом.');
+      return;
+    }
+    if (!models.Positions) {
+      await ctx.reply('Сервис вакансий временно недоступен. Попробуйте позже.');
+      return;
+    }
+    const position = await models.Positions.findByPk(positionId);
+    if (!position || position.IsArchived) {
+      await ctx.reply('Вакансия не найдена или уже архивирована.');
+      return;
+    }
+    const website = String(position.CompanyWebsite || '').trim();
+    const lines = [
+      `Вакансия: ${position.Title}`,
+      `Компания: ${position.CompanyName}`,
+      ...(website ? [`Сайт компании: ${website}`] : []),
+      '',
+      String(position.Description || '').trim(),
+      '',
+      'Чтобы откликнуться, отправьте резюме файлом (PDF или изображение).',
+    ];
+    hireAgentStateByChatId.set(chat.id, { step: 'awaiting_cv_for_position', positionId: position.Id });
+    await ctx.reply(lines.join('\n'), {
+      disable_web_page_preview: true,
+    });
+  };
+
   const tryRemoveLegacyKeyboard = async (ctx) => {
     const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
     if (chat?.type !== 'private') return;
@@ -1608,6 +1656,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.start(async (ctx) => {
     const payload = parseStartPayload(ctx);
+    const positionIdFromStart = parseStartPositionId(payload);
+    if (positionIdFromStart) {
+      await startPositionApplyScenario(ctx, positionIdFromStart);
+      return;
+    }
     if (payload === 'jobsearch') {
       await openJobSearchFromBot(ctx);
       return;
@@ -1801,7 +1854,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     if (ctx.chat?.type !== 'private') return next();
     const chatId = ctx.chat.id;
     const st = hireAgentStateByChatId.get(chatId);
-    if (st?.step !== 'awaiting_cv') return next();
+    const isHireAgentCvFlow = st?.step === 'awaiting_cv';
+    const isPositionCvFlow = st?.step === 'awaiting_cv_for_position';
+    if (!isHireAgentCvFlow && !isPositionCvFlow) return next();
     const resumeSource = pickResumeSourceFromMessage(ctx.message);
     if (!resumeSource) {
       await ctx.reply('Не удалось распознать файл резюме. Отправьте PDF или изображение еще раз.');
@@ -1851,7 +1906,31 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       );
 
       await withTypingTelegram(ctx.telegram, chatId, 800 + Math.floor(Math.random() * 400));
-      if (hireAgentSimulationVisible) {
+      if (isPositionCvFlow) {
+        const positionId = String(st?.positionId || '').trim();
+        if (positionId && models.UserApplications) {
+          await models.UserApplications.create({
+            UserId: user.Id,
+            PositionId: positionId,
+            DateTime: Sequelize.literal('GETUTCDATE()'),
+          });
+        }
+        hireAgentStateByChatId.set(chatId, { step: 'idle' });
+        if (canUseSeekerJobsWebApp) {
+          await ctx.reply(
+            'Резюме принято. Спасибо за отклик! Пока мы обрабатываем вашу заявку, вы можете посмотреть другие доступные вакансии.',
+            {
+              reply_markup: {
+                inline_keyboard: [[{ text: 'Открыть поиск вакансий', web_app: { url: seekerJobsUrl } }]],
+              },
+            }
+          );
+        } else {
+          await ctx.reply(
+            'Резюме принято. Спасибо за отклик! Пока мы обрабатываем вашу заявку, вы можете посмотреть другие доступные вакансии.'
+          );
+        }
+      } else if (hireAgentSimulationVisible) {
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_confirm' });
         await ctx.reply(
           'Готово. Я сохранил ваше резюме и нашёл 263 вакансии с полной удалёнкой (100%), которые вам подходят.\n\n' +
@@ -1972,6 +2051,35 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.hears(/^\/admin-companies(?:@\w+)?$/, async (ctx) => {
     await openAdminCompanies(ctx);
+  });
+
+  const openAdminPositions = async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Admin positions page is available only in private chat.');
+      return;
+    }
+    const adminIds = config.botAdminTelegramIds;
+    if (adminIds.size > 0 && (!ctx.from?.id || !adminIds.has(ctx.from.id))) {
+      await ctx.reply('Unauthorized.');
+      return;
+    }
+    if (canUseAdminPositionsWebApp) {
+      await ctx.reply('Open admin positions:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Admin Positions', web_app: { url: adminPositionsUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Admin positions page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  };
+
+  bot.command('admin_positions', async (ctx) => {
+    await openAdminPositions(ctx);
+  });
+
+  bot.hears(/^\/admin-positions(?:@\w+)?$/, async (ctx) => {
+    await openAdminPositions(ctx);
   });
 
   bot.command('stat', async (ctx) => {
@@ -2243,6 +2351,9 @@ async function main() {
   });
   app.get('/app/admin/companies', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'admin-companies.html'));
+  });
+  app.get('/app/admin/positions', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'admin-positions.html'));
   });
   app.get('/app/admin', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'admin.html'));
@@ -3129,6 +3240,36 @@ async function main() {
     }
   });
 
+  const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const toUuidOrUndefined = (value) => {
+    const v = String(value || '').trim().toLowerCase();
+    if (!v) return undefined;
+    return UUID_V4_RE.test(v) ? v : undefined;
+  };
+
+  app.get('/api/app/admin/positions', adminMiniAppAuth, async (_req, res) => {
+    try {
+      const rows = await models.Positions.findAll({
+        order: [['DateCreated', 'DESC']],
+        limit: 1000,
+      });
+      const botUsername = String(runtimeBotUsername || '').trim();
+      const withLinks = rows.map((row) => {
+        const applyLink = botUsername
+          ? `https://t.me/${botUsername}?start=apply_${row.Id}`
+          : '';
+        return {
+          ...row.toJSON(),
+          applyLink,
+        };
+      });
+      res.json(withLinks);
+    } catch (err) {
+      console.error('GET /api/app/admin/positions:', err);
+      res.status(500).json({ error: 'Failed to load admin positions' });
+    }
+  });
+
   app.get('/api/app/admin/users', async (req, res) => {
     try {
       const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '100'), 10) || 100));
@@ -3155,6 +3296,97 @@ async function main() {
     } catch (err) {
       console.error('GET /api/app/admin/users:', err);
       res.status(500).json({ error: 'Failed to load users' });
+    }
+  });
+
+  app.post('/api/app/admin/positions', adminMiniAppAuth, async (req, res) => {
+    try {
+      const title = toStringOrUndefined(req.body.title, 255);
+      const description = req.body.description == null ? '' : String(req.body.description).trim();
+      const companyName = toStringOrUndefined(req.body.companyName, 255);
+      const companyWebsite = req.body.companyWebsite == null ? null : toValidUrlOrUndefined(req.body.companyWebsite);
+      const isArchived = toBoolOrUndefined(req.body.isArchived);
+      if (!title || !description || !companyName) {
+        return res.status(400).json({ error: 'title, description, companyName are required' });
+      }
+      if (req.body.companyWebsite != null && !companyWebsite) {
+        return res.status(400).json({ error: 'companyWebsite must be a valid URL' });
+      }
+      const row = await models.Positions.create({
+        Title: title,
+        Description: description,
+        CompanyName: companyName,
+        CompanyWebsite: companyWebsite,
+        DateCreated: Sequelize.literal('GETUTCDATE()'),
+        IsArchived: isArchived ?? false,
+      });
+      res.status(201).json(row);
+    } catch (err) {
+      console.error('POST /api/app/admin/positions:', err);
+      res.status(500).json({ error: 'Failed to create position' });
+    }
+  });
+
+  app.patch('/api/app/admin/positions/:id', adminMiniAppAuth, async (req, res) => {
+    try {
+      const id = toUuidOrUndefined(req.params.id);
+      if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+      const row = await models.Positions.findByPk(id);
+      if (!row) return res.status(404).json({ error: 'Position not found' });
+
+      const updates = {};
+      if (Object.prototype.hasOwnProperty.call(req.body, 'title')) {
+        const title = toStringOrUndefined(req.body.title, 255);
+        if (!title) return res.status(400).json({ error: 'title must be a non-empty string' });
+        updates.Title = title;
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body, 'description')) {
+        const description = req.body.description == null ? '' : String(req.body.description).trim();
+        if (!description) return res.status(400).json({ error: 'description must be a non-empty string' });
+        updates.Description = description;
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body, 'companyName')) {
+        const companyName = toStringOrUndefined(req.body.companyName, 255);
+        if (!companyName) return res.status(400).json({ error: 'companyName must be a non-empty string' });
+        updates.CompanyName = companyName;
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body, 'companyWebsite')) {
+        if (req.body.companyWebsite == null || String(req.body.companyWebsite).trim() === '') {
+          updates.CompanyWebsite = null;
+        } else {
+          const companyWebsite = toValidUrlOrUndefined(req.body.companyWebsite);
+          if (!companyWebsite) return res.status(400).json({ error: 'companyWebsite must be a valid URL' });
+          updates.CompanyWebsite = companyWebsite;
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body, 'isArchived')) {
+        const isArchived = toBoolOrUndefined(req.body.isArchived);
+        if (isArchived === undefined) return res.status(400).json({ error: 'isArchived must be boolean' });
+        updates.IsArchived = isArchived;
+      }
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'No valid fields to update' });
+      }
+
+      await row.update(updates);
+      return res.json(row);
+    } catch (err) {
+      console.error('PATCH /api/app/admin/positions/:id:', err);
+      return res.status(500).json({ error: 'Failed to update position' });
+    }
+  });
+
+  app.delete('/api/app/admin/positions/:id', adminMiniAppAuth, async (req, res) => {
+    try {
+      const id = toUuidOrUndefined(req.params.id);
+      if (!id) return res.status(400).json({ error: 'Invalid id' });
+      const deleted = await models.Positions.destroy({ where: { Id: id } });
+      if (!deleted) return res.status(404).json({ error: 'Position not found' });
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('DELETE /api/app/admin/positions/:id:', err);
+      return res.status(500).json({ error: 'Failed to delete position' });
     }
   });
 

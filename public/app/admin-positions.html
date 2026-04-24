@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Positions</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --danger: #dc5b6a;
+        --border: #273357;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+      h1, h2 { margin: 0 0 12px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      input, textarea, button { width: 100%; border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 10px; font: inherit; }
+      textarea { resize: vertical; min-height: 100px; }
+      button { cursor: pointer; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+      .ghost-btn { background: #0f1730; border: 1px solid var(--border); }
+      .danger { background: var(--danger); border-color: var(--danger); }
+      .muted { color: var(--muted); }
+      .row { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+      .row-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+      .row-actions button { width: auto; }
+      a { color: #9ec5ff; word-break: break-all; }
+      .checkbox { display: inline-flex; gap: 8px; align-items: center; margin-top: 8px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Админ: Custom вакансии</h1>
+
+      <section class="card">
+        <h2 id="formTitle">Добавить вакансию</h2>
+        <div class="grid">
+          <input id="titleInput" placeholder="Название вакансии" />
+          <input id="companyNameInput" placeholder="Название компании" />
+        </div>
+        <div class="grid" style="margin-top:8px">
+          <input id="companyWebsiteInput" placeholder="Сайт компании (https://...)" />
+          <label class="checkbox"><input id="isArchivedInput" type="checkbox" /> Архивирована</label>
+        </div>
+        <div style="margin-top:8px">
+          <textarea id="descriptionInput" placeholder="Описание вакансии"></textarea>
+        </div>
+        <div class="row-actions" style="margin-top:8px">
+          <button id="saveBtn">Сохранить</button>
+          <button id="cancelEditBtn" class="ghost-btn" style="display:none">Отменить редактирование</button>
+        </div>
+        <p id="status" class="muted"></p>
+      </section>
+
+      <section class="card">
+        <h2>Список вакансий</h2>
+        <div id="list"></div>
+      </section>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+      let editingId = null;
+
+      async function api(path, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        if (tg?.initData) headers['x-init-data'] = tg.initData;
+        const response = await fetch(path, { ...options, headers });
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+      }
+
+      function esc(value) {
+        return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function resetForm() {
+        editingId = null;
+        document.getElementById('formTitle').textContent = 'Добавить вакансию';
+        document.getElementById('titleInput').value = '';
+        document.getElementById('companyNameInput').value = '';
+        document.getElementById('companyWebsiteInput').value = '';
+        document.getElementById('descriptionInput').value = '';
+        document.getElementById('isArchivedInput').checked = false;
+        document.getElementById('cancelEditBtn').style.display = 'none';
+      }
+
+      function startEdit(row) {
+        editingId = row.Id;
+        document.getElementById('formTitle').textContent = `Редактировать вакансию`;
+        document.getElementById('titleInput').value = row.Title || '';
+        document.getElementById('companyNameInput').value = row.CompanyName || '';
+        document.getElementById('companyWebsiteInput').value = row.CompanyWebsite || '';
+        document.getElementById('descriptionInput').value = row.Description || '';
+        document.getElementById('isArchivedInput').checked = !!row.IsArchived;
+        document.getElementById('cancelEditBtn').style.display = 'inline-block';
+      }
+
+      async function loadRows() {
+        const rows = await api('/api/app/admin/positions');
+        const list = document.getElementById('list');
+        if (!rows.length) {
+          list.innerHTML = '<p class="muted">Пока нет вакансий.</p>';
+          return;
+        }
+        list.innerHTML = rows.map((row) => `
+          <article class="row">
+            <strong>${esc(row.Title)}</strong>
+            <div class="muted">${esc(row.CompanyName)}${row.IsArchived ? ' · Архив' : ''}</div>
+            ${row.CompanyWebsite ? `<div><a href="${esc(row.CompanyWebsite)}" target="_blank" rel="noopener noreferrer">${esc(row.CompanyWebsite)}</a></div>` : ''}
+            <div style="margin-top:8px; white-space:pre-wrap">${esc(row.Description || '')}</div>
+            <div style="margin-top:8px"><span class="muted">Apply link:</span> ${row.applyLink ? `<a href="${esc(row.applyLink)}" target="_blank" rel="noopener noreferrer">${esc(row.applyLink)}</a>` : '<span class="muted">недоступно</span>'}</div>
+            <div class="row-actions">
+              <button data-copy="${row.Id}" ${row.applyLink ? '' : 'disabled'}>Копировать apply link</button>
+              <button data-edit="${row.Id}">Редактировать</button>
+              <button class="danger" data-delete="${row.Id}">Удалить</button>
+            </div>
+          </article>
+        `).join('');
+
+        for (const btn of list.querySelectorAll('[data-edit]')) {
+          btn.addEventListener('click', () => {
+            const id = String(btn.getAttribute('data-edit') || '');
+            const row = rows.find((x) => String(x.Id) === id);
+            if (row) startEdit(row);
+          });
+        }
+        for (const btn of list.querySelectorAll('[data-delete]')) {
+          btn.addEventListener('click', async () => {
+            const id = String(btn.getAttribute('data-delete') || '');
+            if (!confirm('Удалить вакансию?')) return;
+            await api(`/api/app/admin/positions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            if (editingId === id) resetForm();
+            await loadRows();
+          });
+        }
+        for (const btn of list.querySelectorAll('[data-copy]')) {
+          btn.addEventListener('click', async () => {
+            const id = String(btn.getAttribute('data-copy') || '');
+            const row = rows.find((x) => String(x.Id) === id);
+            const link = String(row?.applyLink || '').trim();
+            if (!link) return;
+            await navigator.clipboard.writeText(link);
+          });
+        }
+      }
+
+      document.getElementById('saveBtn').addEventListener('click', async () => {
+        const status = document.getElementById('status');
+        status.textContent = 'Сохраняю...';
+        try {
+          const payload = {
+            title: document.getElementById('titleInput').value.trim(),
+            companyName: document.getElementById('companyNameInput').value.trim(),
+            companyWebsite: document.getElementById('companyWebsiteInput').value.trim(),
+            description: document.getElementById('descriptionInput').value.trim(),
+            isArchived: document.getElementById('isArchivedInput').checked,
+          };
+          if (!payload.title || !payload.companyName || !payload.description) {
+            throw new Error('Заполните название, компанию и описание');
+          }
+          if (!payload.companyWebsite) delete payload.companyWebsite;
+
+          if (editingId) {
+            await api(`/api/app/admin/positions/${encodeURIComponent(editingId)}`, {
+              method: 'PATCH',
+              body: JSON.stringify(payload),
+            });
+          } else {
+            await api('/api/app/admin/positions', {
+              method: 'POST',
+              body: JSON.stringify(payload),
+            });
+          }
+          resetForm();
+          await loadRows();
+          status.textContent = 'Сохранено';
+        } catch (err) {
+          status.textContent = `Ошибка: ${err.message}`;
+        }
+      });
+
+      document.getElementById('cancelEditBtn').addEventListener('click', () => {
+        resetForm();
+      });
+
+      resetForm();
+      loadRows().catch((err) => {
+        document.getElementById('status').textContent = `Ошибка: ${err.message}`;
+      });
+    </script>
+  </body>
+</html>
