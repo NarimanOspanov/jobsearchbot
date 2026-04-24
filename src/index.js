@@ -1582,6 +1582,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     const website = String(position.CompanyWebsite || '').trim();
     const externalApplyUrl = String(position.ExternalApplyURL || '').trim();
+    const companyName = String(position.CompanyName || '').trim();
+    const externalApplyButtonText = companyName
+      ? `Откликнуться на сайте ${companyName}`
+      : 'Откликнуться на сайте работодателя';
     const lines = [
       `Вакансия: ${position.Title}`,
       `Компания: ${position.CompanyName}`,
@@ -1593,7 +1597,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       await ctx.reply(lines.join('\n'), {
         disable_web_page_preview: true,
         reply_markup: {
-          inline_keyboard: [[{ text: 'Откликнуться', url: externalApplyUrl }]],
+          inline_keyboard: [[{ text: externalApplyButtonText, url: externalApplyUrl }]],
         },
       });
       return;
