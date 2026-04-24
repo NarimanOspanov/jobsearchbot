@@ -126,6 +126,72 @@
         font-size: 12px;
         margin-bottom: 8px;
       }
+      .paywall-intro {
+        margin: 0 0 12px;
+      }
+      .paywall-card {
+        margin-top: 0;
+        border-radius: 12px;
+        border: 1px solid rgba(79, 124, 255, 0.55);
+        background: #101a33;
+      }
+      .paywall-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .paywall-plan-name {
+        font-size: 28px;
+        font-weight: 800;
+        line-height: 1.1;
+      }
+      .paywall-plan-price {
+        font-size: 18px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .paywall-badge {
+        border-radius: 999px;
+        background: rgba(79, 124, 255, 0.22);
+        color: #cfe0ff;
+        border: 1px solid rgba(79, 124, 255, 0.55);
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .paywall-feature-list {
+        display: grid;
+        gap: 4px;
+        margin: 0 0 12px;
+        padding: 0;
+        list-style: none;
+      }
+      .paywall-feature-list li::before {
+        content: "✓";
+        color: #47d16a;
+        font-weight: 700;
+        margin-right: 8px;
+      }
+      .paywall-primary-btn {
+        width: 100%;
+        padding: 11px 12px;
+        font-weight: 700;
+        background: #4f7cff;
+        border-color: #4f7cff;
+        color: #ffffff;
+      }
+      .paywall-secondary-stack {
+        margin-top: 10px;
+        display: grid;
+        gap: 10px;
+      }
+      .paywall-secondary-stack .ghost-btn {
+        width: 100%;
+        text-align: center;
+      }
       .skills-picker {
         position: relative;
         min-width: 280px;
@@ -417,18 +483,14 @@
           <button id="paymentRequiredClose" type="button" class="ghost-btn">Закрыть</button>
         </div>
         <div class="modal-body">
-          <p class="muted">
-            Основные варианты:
-            <br />1) Купить Premium
-            <br />2) Пригласить друга (+бонус)
+          <p class="paywall-intro">
+            <span class="muted">ОТКРОЙТЕ БОЛЬШЕ ВАКАНСИЙ</span><br />
+            <strong style="font-size:32px;line-height:1.05">Вы достигли бесплатного лимита</strong>
           </p>
           <div id="paymentPlansList" class="row" style="display:grid;gap:8px"></div>
-          <div class="row" style="margin-top:10px">
-            <button id="inviteFriendBtn" type="button" class="ghost-btn">Пригласить друга (+бонус)</button>
-          </div>
-          <div class="secondary-cta-box">
-            <div class="secondary-cta-title">Альтернатива: следить за вакансиями в канале</div>
-            <button id="openChannelAlternativeBtn" type="button" class="ghost-btn">Открыть канал с вакансиями</button>
+          <div class="paywall-secondary-stack">
+            <button id="inviteFriendBtn" type="button" class="ghost-btn">Пригласить друга - получить бесплатные просмотры</button>
+            <button id="openChannelAlternativeBtn" type="button" class="ghost-btn">Следить за вакансиями в Telegram-канале</button>
           </div>
           <p id="paymentRequiredMsg" class="muted"></p>
         </div>
@@ -1052,22 +1114,26 @@
         if (!plans.length) {
           list.innerHTML = '<div class="muted">Сейчас нет доступных тарифов.</div>';
         } else {
-          list.innerHTML = plans
-            .map((plan) => {
-              const code = String(plan?.code || '').trim().toLowerCase();
-              const usdText = toUsdText(plan?.priceUsd);
-              const priceLabel = usdText
-                ? `${Number(plan?.priceInStars || 0)} ⭐ (~${usdText})`
-                : `${Number(plan?.priceInStars || 0)} ⭐`;
-              const title = `${esc(plan?.name || code || 'Тариф')} · ${Number(plan?.jobOpenMonthlyLimit || 0)} открытий/мес · ${priceLabel}`;
-              const description = String(plan?.description || '').trim();
-              return `<div class="resume-upload-box" style="margin-top:0">
-                <div style="font-weight:600;margin-bottom:6px">${title}</div>
-                ${description ? `<div class="muted" style="margin-bottom:8px">${esc(description)}</div>` : ''}
-                <button type="button" data-plan-code="${attrEsc(code)}">Купить ${esc(plan?.name || code || 'тариф')}</button>
-              </div>`;
-            })
-            .join('');
+          const plan = plans[0];
+          const code = String(plan?.code || '').trim().toLowerCase();
+          const monthlyLimit = Number(plan?.jobOpenMonthlyLimit || 0);
+          const durationDays = Number(plan?.durationDays || 30);
+          const stars = Number(plan?.priceInStars || 0);
+          const usdText = toUsdText(plan?.priceUsd);
+          const priceLabel = usdText ? `~${usdText} / месяц · ⭐ ${stars} Stars` : `⭐ ${stars} Stars`;
+          list.innerHTML = `<div class="resume-upload-box paywall-card">
+            <div class="paywall-top">
+              <div class="paywall-plan-name">${esc(plan?.name || 'Премиум')}</div>
+              <div class="paywall-badge">Самый популярный</div>
+            </div>
+            <div class="paywall-plan-price">${esc(priceLabel)}</div>
+            <ul class="paywall-feature-list">
+              <li>${monthlyLimit} просмотров вакансий в месяц</li>
+              <li>AI-генерация CV и cover letter</li>
+              <li>Доступ на ${durationDays} дней</li>
+            </ul>
+            <button type="button" class="paywall-primary-btn" data-plan-code="${attrEsc(code)}">Получить Премиум</button>
+          </div>`;
           list.querySelectorAll('[data-plan-code]').forEach((btn) => {
             btn.addEventListener('click', () => {
               const planCode = String(btn.getAttribute('data-plan-code') || '').trim();
