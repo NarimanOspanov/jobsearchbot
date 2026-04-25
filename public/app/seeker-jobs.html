@@ -210,6 +210,22 @@
         width: 100%;
         text-align: center;
       }
+      .paywall-text-link {
+        display: inline-block;
+        margin-top: -2px;
+        text-align: center;
+        font-size: 14px;
+        color: var(--muted);
+        text-decoration: none;
+        border: 0;
+        background: transparent;
+        padding: 0;
+      }
+      .paywall-text-link:hover {
+        color: var(--text);
+        text-decoration: underline;
+        background: transparent;
+      }
       .skills-picker {
         position: relative;
         min-width: 280px;
@@ -505,7 +521,7 @@
           <div id="paymentPlansList" class="row" style="display:grid;gap:8px"></div>
           <div class="paywall-secondary-stack">
             <button id="inviteFriendBtn" type="button" class="ghost-btn">Пригласить друга</button>
-            <button id="openChannelAlternativeBtn" type="button" class="ghost-btn">Следить за вакансиями в Telegram-канале</button>
+            <button id="openChannelAlternativeBtn" type="button" class="paywall-text-link">Следить за вакансиями в Telegram-канале бесплатно</button>
           </div>
           <p id="paymentRequiredMsg" class="muted"></p>
         </div>
