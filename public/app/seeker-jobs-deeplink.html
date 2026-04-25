@@ -129,6 +129,21 @@
       .paywall-intro {
         margin: 0 0 12px;
       }
+      #paymentRequiredClose {
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1;
+      }
+      #paymentRequiredClose:hover {
+        color: var(--text);
+        background: transparent;
+      }
       .paywall-card {
         margin-top: 0;
         border-radius: 12px;
@@ -480,16 +495,15 @@
       <div class="modal-card">
         <div class="modal-head">
           <strong>Получи премиум пакет или пригласи друга для продолжения</strong>
-          <button id="paymentRequiredClose" type="button" class="ghost-btn">Закрыть</button>
+          <button id="paymentRequiredClose" type="button" aria-label="Закрыть">×</button>
         </div>
         <div class="modal-body">
           <p class="paywall-intro">
-            <span class="muted">ОТКРОЙТЕ БОЛЬШЕ ВАКАНСИЙ</span><br />
-            <strong style="font-size:32px;line-height:1.05">Вы достигли бесплатного лимита</strong>
+            Для продолжения, перейли на премиум план или пригласи друга
           </p>
           <div id="paymentPlansList" class="row" style="display:grid;gap:8px"></div>
           <div class="paywall-secondary-stack">
-            <button id="inviteFriendBtn" type="button" class="ghost-btn">Пригласить друга - получить бесплатные просмотры</button>
+            <button id="inviteFriendBtn" type="button" class="ghost-btn">Пригласить друга</button>
             <button id="openChannelAlternativeBtn" type="button" class="ghost-btn">Следить за вакансиями в Telegram-канале</button>
           </div>
           <p id="paymentRequiredMsg" class="muted"></p>
@@ -1116,21 +1130,17 @@
         } else {
           const plan = plans[0];
           const code = String(plan?.code || '').trim().toLowerCase();
-          const monthlyLimit = Number(plan?.jobOpenMonthlyLimit || 0);
-          const durationDays = Number(plan?.durationDays || 30);
           const stars = Number(plan?.priceInStars || 0);
           const usdText = toUsdText(plan?.priceUsd);
           const priceLabel = usdText ? `~${usdText} / месяц · ⭐ ${stars} Stars` : `⭐ ${stars} Stars`;
           list.innerHTML = `<div class="resume-upload-box paywall-card">
             <div class="paywall-top">
               <div class="paywall-plan-name">${esc(plan?.name || 'Премиум')}</div>
-              <div class="paywall-badge">Самый популярный</div>
             </div>
             <div class="paywall-plan-price">${esc(priceLabel)}</div>
             <ul class="paywall-feature-list">
-              <li>${monthlyLimit} просмотров вакансий в месяц</li>
-              <li>AI-генерация CV и cover letter</li>
-              <li>Доступ на ${durationDays} дней</li>
+              <li>Доступ к вакансиям</li>
+              <li>Автогенерация резюме и cover letter</li>
             </ul>
             <button type="button" class="paywall-primary-btn" data-plan-code="${attrEsc(code)}">Получить Премиум</button>
           </div>`;
