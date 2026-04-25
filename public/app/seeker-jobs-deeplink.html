@@ -337,6 +337,17 @@
         color: var(--text);
         border-color: var(--accent);
       }
+      .search-title-skill {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      #rolesFilterRow,
+      #searchInFilterRow,
+      #sourceFilterRow,
+      #syncBtn {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -345,14 +356,14 @@
 
       <div class="layout">
         <section class="card layout-col">
-          <h2>Поиск вакансий</h2>
+          <h2>Поиск вакансий <span id="searchTitleSkill" class="search-title-skill"></span></h2>
           <div class="row date-range-row">
             <span class="date-range">
               <label>С <input id="fromDate" type="date" /></label>
               <label>По <input id="toDate" type="date" /></label>
             </span>
           </div>
-          <div class="row date-range-row">
+          <div id="rolesFilterRow" class="row date-range-row">
             <label>Роли</label>
             <div class="skills-picker">
               <button id="skillPickerBtn" type="button" class="skills-picker-btn">Все роли</button>
@@ -363,7 +374,7 @@
               <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="Что это значит?" aria-label="Что значит Топ-совпадения?">?</button>
             </span>
           </div>
-          <div class="row date-range-row">
+          <div id="searchInFilterRow" class="row date-range-row">
             <label>Искать в</label>
             <div class="skills-picker">
               <button id="sourcePickerBtn" type="button" class="skills-picker-btn">Все источники</button>
@@ -1374,7 +1385,28 @@
           btn.textContent = `Выбрано ролей: ${ids.length}`;
         }
         renderSyncButtonLabel();
+        renderSearchTitleSkill(effectiveCsv);
         updateHighlyRelevantFilterState();
+      }
+      function renderSearchTitleSkill(skillIdsCsv) {
+        const title = document.getElementById('searchTitleSkill');
+        if (!title) return;
+        const ids = [...new Set(String(skillIdsCsv || '').split(',').map((id) => id.trim()).filter(Boolean))];
+        if (!ids.length) {
+          title.textContent = '';
+          return;
+        }
+        const idSet = new Set(ids);
+        const selected = skills.filter((s) => idSet.has(String(s.id)));
+        const labels = selected
+          .map((s) => skillDisplayLine(s))
+          .map((s) => String(s || '').trim())
+          .filter(Boolean);
+        if (!labels.length) {
+          title.textContent = '';
+          return;
+        }
+        title.textContent = `для ${labels.join(', ')}`;
       }
       function renderSyncButtonLabel() {
         const btn = document.getElementById('syncBtn');
