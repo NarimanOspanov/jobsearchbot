@@ -1798,9 +1798,9 @@
         } catch (err) {
           const rawMessage = String(err?.message || '');
           if (rawMessage.includes('gold_required')) {
-            const payload = parseErrorPayload(rawMessage);
-            openPaymentRequiredModal(payload || {});
-            setMsg('jobMsg', 'AI-инструменты доступны в Premium или при наличии открытий.', true);
+            // Deeplink: allow users to always attempt generation from job details
+            // without forcing a paywall modal on click.
+            setMsg('jobMsg', 'Не удалось сгенерировать материалы. Попробуйте снова.', true);
             return;
           }
           throw err;
