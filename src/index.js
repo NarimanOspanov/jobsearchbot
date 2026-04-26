@@ -498,22 +498,6 @@ async function getMissingRequiredChannelsForUser(telegram, telegramUserId) {
         missing.push(ch);
         continue;
       }
-      if (models.RequiredChannelUsers) {
-        try {
-          await models.RequiredChannelUsers.findOrCreate({
-            where: { ChannelId: String(ch.ChannelId), UserId: String(telegramUserId) },
-            defaults: {
-              ChannelId: String(ch.ChannelId),
-              UserId: String(telegramUserId),
-              DateTime: new Date(),
-            },
-          });
-        } catch (e) {
-          if (e?.name !== 'SequelizeUniqueConstraintError') {
-            console.warn('RequiredChannelUsers upsert error:', e?.message || e);
-          }
-        }
-      }
     } catch (err) {
       // If Telegram API check fails, require subscription to avoid bypasses.
       console.warn('getChatMember check error:', ch.ChannelId, err?.message || err);
@@ -521,6 +505,31 @@ async function getMissingRequiredChannelsForUser(telegram, telegramUserId) {
     }
   }
   return missing;
+}
+
+async function ensureRequiredChannelUserRecords(telegramUserId) {
+  if (!telegramUserId || !models.RequiredChannels || !models.RequiredChannelUsers) return;
+  const channels = await models.RequiredChannels.findAll({
+    where: { IsActive: true },
+    order: [['SortOrder', 'ASC'], ['Id', 'ASC']],
+  });
+  if (!channels || channels.length === 0) return;
+  for (const ch of channels) {
+    try {
+      await models.RequiredChannelUsers.findOrCreate({
+        where: { ChannelId: String(ch.ChannelId), UserId: String(telegramUserId) },
+        defaults: {
+          ChannelId: String(ch.ChannelId),
+          UserId: String(telegramUserId),
+          DateTime: new Date(),
+        },
+      });
+    } catch (e) {
+      if (e?.name !== 'SequelizeUniqueConstraintError') {
+        console.warn('RequiredChannelUsers upsert error:', e?.message || e);
+      }
+    }
+  }
 }
 
 function serializeRequiredChannels(channels) {
@@ -2942,6 +2951,7 @@ async function main() {
 
       let grantedBonusOpens = 0;
       if (channelsState.ok) {
+        await ensureRequiredChannelUserRecords(req.miniAppUser.id);
         grantedBonusOpens = await ensureChannelSubscribeBonus(user.Id);
       }
       const monetization = await buildMonetizationStatus(user.Id);
