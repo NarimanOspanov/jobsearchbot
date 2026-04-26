@@ -150,6 +150,70 @@
       #subscribeRequiredModal .modal-card {
         width: min(420px, 100%);
       }
+      #resumeRequiredModal .modal-card {
+        width: min(420px, 100%);
+      }
+      #resumeRequiredModal .modal-head {
+        justify-content: flex-end;
+      }
+      #resumeRequiredClose {
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1;
+      }
+      #resumeRequiredClose:hover {
+        color: var(--text);
+        background: transparent;
+      }
+      .resume-required-title {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1;
+      }
+      .resume-required-subtitle {
+        margin: 4px 0 0;
+      }
+      .resume-file-input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .resume-file-picker {
+        margin-top: 10px;
+        border: 1px dashed rgba(158, 176, 209, 0.45);
+        border-radius: 10px;
+        min-height: 86px;
+        padding: 12px;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        background: #10182d;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .resume-file-picker:hover {
+        border-color: rgba(158, 176, 209, 0.7);
+        color: var(--text);
+      }
+      .resume-file-picker-name {
+        margin-top: 6px;
+        font-size: 12px;
+      }
+      #uploadResumeBtn {
+        width: 100%;
+        margin-top: 10px;
+      }
+      .resume-upload-note {
+        margin-top: 8px;
+      }
       #subscribeRequiredModal .modal-head {
         justify-content: flex-end;
       }
@@ -543,18 +607,23 @@
     <div id="resumeRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-head">
-          <strong>Нужно основное резюме</strong>
-          <button id="resumeRequiredClose" type="button" class="ghost-btn">Закрыть</button>
+          <button id="resumeRequiredClose" type="button" aria-label="Закрыть">×</button>
         </div>
         <div class="modal-body">
-          <p class="muted">Чтобы сгенерировать адаптированные CV и cover letter, сначала загрузите основное резюме.</p>
+          <h3 class="resume-required-title">Загрузите ваше резюме</h3>
+          <p class="muted resume-required-subtitle">Нужно для генерации резюме и сопроводительного письма под эту вакансию.</p>
           <div class="resume-upload-box">
-            <input id="resumeFileInput" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
-            <div class="row" style="margin-top:8px">
-              <button id="uploadResumeBtn" type="button">Загрузить резюме</button>
-              <span id="uploadResumeLoader" class="loader" aria-hidden="true"></span>
-            </div>
+            <input id="resumeFileInput" class="resume-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
+            <label for="resumeFileInput" id="resumeFilePickerLabel" class="resume-file-picker">
+              <div>
+                <div>Нажмите, чтобы выбрать файл</div>
+                <div class="resume-file-picker-name">PDF/JPG/PNG/WEBP - до 15 MB</div>
+              </div>
+            </label>
+            <button id="uploadResumeBtn" type="button" disabled>Загрузить и продолжить</button>
+            <span id="uploadResumeLoader" class="loader" aria-hidden="true"></span>
             <p id="resumeUploadMsg" class="muted"></p>
+            <p class="muted resume-upload-note">Загружается один раз - дальше генерация будет быстрее.</p>
           </div>
         </div>
       </div>
@@ -1169,11 +1238,29 @@
       }
       function openResumeRequiredModal() {
         isResumeRequiredModalOpen = true;
+        refreshResumeFileUi();
         document.getElementById('resumeRequiredModal').classList.add('on');
       }
       function closeResumeRequiredModal() {
         isResumeRequiredModalOpen = false;
         document.getElementById('resumeRequiredModal').classList.remove('on');
+      }
+      function refreshResumeFileUi() {
+        const input = document.getElementById('resumeFileInput');
+        const uploadBtn = document.getElementById('uploadResumeBtn');
+        const picker = document.getElementById('resumeFilePickerLabel');
+        const file = input?.files?.[0] || null;
+        if (!file) {
+          if (uploadBtn) uploadBtn.disabled = true;
+          if (picker) {
+            picker.innerHTML = `<div><div>Нажмите, чтобы выбрать файл</div><div class="resume-file-picker-name">PDF/JPG/PNG/WEBP - до 15 MB</div></div>`;
+          }
+          return;
+        }
+        if (uploadBtn) uploadBtn.disabled = false;
+        if (picker) {
+          picker.innerHTML = `<div><div>Файл выбран</div><div class="resume-file-picker-name">${esc(file.name)}</div></div>`;
+        }
       }
       function openSubscribeRequiredModal(payload, jobId) {
         pendingSubscribeJobId = Number(jobId) || null;
@@ -2021,6 +2108,10 @@
             }
           })
           .catch((err) => setMsg('resumeUploadMsg', err.message, true));
+      });
+      document.getElementById('resumeFileInput').addEventListener('change', () => {
+        refreshResumeFileUi();
+        setMsg('resumeUploadMsg', '');
       });
       document.getElementById('resumeRequiredClose').addEventListener('click', () => {
         continueGenerateAfterResumeUpload = false;
