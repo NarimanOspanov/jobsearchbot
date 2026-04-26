@@ -1909,7 +1909,7 @@
         if (!selectedJob) throw new Error('Сначала откройте вакансию.');
         if (!currentResumeUrl) {
           continueGenerateAfterResumeUpload = true;
-          setMsg('resumeUploadMsg', 'Чтобы продолжить, загрузите основное резюме.');
+          setMsg('resumeUploadMsg', '');
           openResumeRequiredModal();
           return;
         }
