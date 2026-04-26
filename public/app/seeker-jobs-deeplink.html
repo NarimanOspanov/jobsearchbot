@@ -147,6 +147,61 @@
       #paymentRequiredModal .modal-head {
         justify-content: flex-end;
       }
+      #subscribeRequiredModal .modal-card {
+        width: min(420px, 100%);
+      }
+      #subscribeRequiredModal .modal-head {
+        justify-content: flex-end;
+      }
+      #subscribeRequiredClose {
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1;
+      }
+      #subscribeRequiredClose:hover {
+        color: var(--text);
+        background: transparent;
+      }
+      .subscribe-required-body {
+        text-align: center;
+      }
+      .subscribe-required-icon {
+        width: 56px;
+        height: 56px;
+        margin: 4px auto 12px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        font-size: 26px;
+        background: #2ea7e0;
+        color: #fff;
+      }
+      .subscribe-required-title {
+        margin: 0;
+        font-size: 32px;
+        line-height: 1;
+      }
+      .subscribe-required-actions {
+        margin-top: 12px;
+        display: grid;
+        gap: 10px;
+      }
+      #openRequiredChannelBtn {
+        width: 100%;
+        background: #2ea7e0;
+        border-color: #2ea7e0;
+        color: #fff;
+        font-weight: 700;
+      }
+      #verifySubscriptionBtn {
+        width: 100%;
+      }
       .paywall-card {
         margin-top: 0;
         border-radius: 12px;
@@ -507,14 +562,16 @@
     <div id="subscribeRequiredModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-head">
-          <strong>Требуется подписка</strong>
-          <button id="subscribeRequiredClose" type="button" class="ghost-btn">Закрыть</button>
+          <button id="subscribeRequiredClose" type="button" aria-label="Закрыть">×</button>
         </div>
-        <div class="modal-body">
-          <p class="muted">Вы достигли бесплатного лимита просмотров деталей вакансий. Подпишитесь на обязательные каналы, чтобы продолжить.</p>
-          <div id="subscribeChannelsList" class="row" style="display:grid;gap:8px"></div>
-          <div class="row" style="margin-top:10px">
-            <button id="verifySubscriptionBtn" type="button">Я подписался - проверить снова</button>
+        <div class="modal-body subscribe-required-body">
+          <div class="subscribe-required-icon">✈</div>
+          <h3 class="subscribe-required-title">Подпишитесь на канал</h3>
+          <p class="muted">Чтобы продолжить, подпишитесь на наш Telegram-канал с актуальными вакансиями.</p>
+          <div id="subscribeChannelsList" class="muted"></div>
+          <div class="subscribe-required-actions">
+            <button id="openRequiredChannelBtn" type="button">Открыть канал</button>
+            <button id="verifySubscriptionBtn" type="button" class="ghost-btn">Я подписался — проверить снова</button>
             <span id="verifySubscriptionLoader" class="loader" aria-hidden="true"></span>
           </div>
           <p id="subscribeGateMsg" class="muted"></p>
@@ -1122,18 +1179,18 @@
         pendingSubscribeJobId = Number(jobId) || null;
         isSubscribeRequiredModalOpen = true;
         const channels = Array.isArray(payload?.channels) ? payload.channels : [];
+        const openBtn = document.getElementById('openRequiredChannelBtn');
         const list = document.getElementById('subscribeChannelsList');
-        if (channels.length === 0) {
-          list.innerHTML = '<div class="muted">Обязательные каналы не настроены. Обратитесь к администратору.</div>';
+        const firstChannel = channels[0];
+        const firstUrl = String(firstChannel?.joinUrl || '').trim();
+        if (!firstUrl) {
+          openBtn.dataset.url = '';
+          openBtn.disabled = true;
+          list.textContent = 'Канал пока не настроен. Обратитесь к администратору.';
         } else {
-          list.innerHTML = channels
-            .map((ch, i) => {
-              const url = String(ch?.joinUrl || '').trim();
-              const label = url ? `Открыть канал ${i + 1}` : `У канала ${i + 1} нет ссылки`;
-              if (!url) return `<span class="muted">${esc(label)}</span>`;
-              return `<a href="${attrEsc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
-            })
-            .join('');
+          openBtn.dataset.url = firstUrl;
+          openBtn.disabled = false;
+          list.textContent = '';
         }
         setMsg('subscribeGateMsg', '');
         document.getElementById('subscribeRequiredModal').classList.add('on');
@@ -2013,6 +2070,16 @@
         } finally {
           onLoading('verifySubscriptionLoader', false);
         }
+      });
+      document.getElementById('openRequiredChannelBtn').addEventListener('click', () => {
+        const btn = document.getElementById('openRequiredChannelBtn');
+        const url = String(btn?.dataset?.url || '').trim();
+        if (!url) {
+          setMsg('subscribeGateMsg', 'Ссылка на канал недоступна.', true);
+          return;
+        }
+        if (openTelegramLinkAndCloseMiniApp(url)) return;
+        window.open(url, '_blank', 'noopener,noreferrer');
       });
       document.getElementById('insightModalClose').addEventListener('click', hideInsight);
       document.getElementById('insightModal').addEventListener('click', (event) => {
