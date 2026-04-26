@@ -951,6 +951,8 @@ Rules:
 - Include only skills clearly supported by the resume text.
 - Do not invent skills or ids.
 - If unsure, leave the skill out.
+- Return only the 2-3 most relevant skills (by strongest evidence in resume text).
+- Never return more than 3 skill ids.
 - Return [] when no skill is confidently supported.
 
 Allowed skills catalog:
@@ -968,7 +970,9 @@ ${text}`;
 
   const jsonText = extractFirstJsonArray(raw);
   const parsed = JSON.parse(jsonText);
-  return normalizeSkillIds(parsed).filter((id) => allowedIds.has(id));
+  return normalizeSkillIds(parsed)
+    .filter((id) => allowedIds.has(id))
+    .slice(0, 3);
 }
 
 function runResumeEnrichmentInBackground({ userId, resumeUrl, includeSkills = false }) {
