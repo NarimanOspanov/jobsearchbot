@@ -1421,14 +1421,7 @@
         const tgApp = window.Telegram?.WebApp;
         if (!tgApp?.openTelegramLink) return false;
         tgApp.openTelegramLink(url);
-        // On iOS, explicitly collapse the mini app after navigation.
-        setTimeout(() => {
-          try {
-            tgApp.close?.();
-          } catch {
-            // Ignore close failures to avoid breaking navigation.
-          }
-        }, 220);
+        // Keep the Mini App session alive so the user can return with Back.
         return true;
       }
 

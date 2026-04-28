@@ -97,14 +97,7 @@
         const tgApp = window.Telegram?.WebApp;
         if (!tgApp?.openTelegramLink) return false;
         tgApp.openTelegramLink(url);
-        // iOS can keep the mini app open; collapse it explicitly.
-        setTimeout(() => {
-          try {
-            tgApp.close?.();
-          } catch {
-            // Ignore close errors; link opening already happened.
-          }
-        }, 220);
+        // Keep the Mini App session alive so the user can return with Back.
         return true;
       }
 
