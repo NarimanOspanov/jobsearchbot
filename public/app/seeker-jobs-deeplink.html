@@ -1161,6 +1161,7 @@
         const el = document.getElementById('showOnlyHighlyRelevant');
         const wrap = document.getElementById('highlyRelevantFilterWrap');
         if (!el || !wrap) return;
+        const wasVisible = wrap.classList.contains('is-visible');
         if (!hasSelectedSkills()) {
           el.checked = false;
           el.disabled = false;
@@ -1172,6 +1173,10 @@
         wrap.classList.add('is-visible');
         wrap.setAttribute('aria-hidden', 'false');
         el.disabled = isSyncing;
+        if (!wasVisible && !isTruthyQueryParam(q().showOnlyHighlyRelevant)) {
+          el.checked = true;
+          setQ({ showOnlyHighlyRelevant: 'true' });
+        }
       }
       function syncHighlyRelevantCheckboxFromQuery() {
         const el = document.getElementById('showOnlyHighlyRelevant');
