@@ -2185,10 +2185,15 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           improvementsText,
         ].join('\n');
         await sendLongTelegramText(ctx.telegram, chatId, feedbackMessage);
-        await sendLongTelegramText(
-          ctx.telegram,
-          chatId,
-          `Улучшенная ATS-friendly версия резюме:\n\n${review.rewrittenResume}`
+        const enhancedResumePdf = await markdownToPdfBuffer(review.rewrittenResume);
+        await ctx.replyWithDocument(
+          {
+            source: enhancedResumePdf,
+            filename: `enhanced-resume-${chatId}-${Date.now()}.pdf`,
+          },
+          {
+            caption: 'Готово! Ниже улучшенная ATS-friendly версия вашего резюме в PDF.',
+          }
         );
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
       } else if (isPositionCvFlow) {
