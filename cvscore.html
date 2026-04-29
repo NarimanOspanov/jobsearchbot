@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>CV Score Report</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c26;
+    --border: #2a2a38;
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --accent3: #43e97b;
+    --text: #f0f0f8;
+    --muted: #8888aa;
+    --radius: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+    padding-bottom: 32px;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    padding: 28px 20px 24px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: -60px; left: 50%; transform: translateX(-50%);
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(108,99,255,0.25) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-label {
+    font-size: 11px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+    font-family: 'Syne', sans-serif;
+  }
+  .candidate-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 4px;
+  }
+  .candidate-title {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  /* ── Score ring ── */
+  .score-ring-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+  .ring-container {
+    position: relative;
+    width: 120px;
+    height: 120px;
+  }
+  .ring-container svg {
+    transform: rotate(-90deg);
+  }
+  .ring-bg { fill: none; stroke: var(--surface2); stroke-width: 10; }
+  .ring-fill {
+    fill: none;
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .ring-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .ring-score {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .ring-max {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .grade-badge {
+    display: inline-block;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 4px 14px;
+    border-radius: 20px;
+    background: rgba(108,99,255,0.2);
+    border: 1px solid rgba(108,99,255,0.5);
+    color: var(--accent);
+  }
+
+  /* ── Content ── */
+  .content { padding: 0 16px; margin-top: 16px; }
+
+  /* ── Roast card ── */
+  .roast-card {
+    background: linear-gradient(135deg, rgba(255,101,132,0.12), rgba(255,101,132,0.05));
+    border: 1px solid rgba(255,101,132,0.25);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .roast-emoji { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+  .roast-text {
+    font-size: 14px;
+    color: #ffb3c1;
+    font-style: italic;
+    line-height: 1.5;
+  }
+
+  /* ── Summary card ── */
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: #c8c8e8;
+    line-height: 1.7;
+  }
+
+  /* ── Section title ── */
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 20px 0 10px;
+  }
+
+  /* ── Category bars ── */
+  .category-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .cat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .cat-name {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .cat-score {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .bar-track {
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+  }
+  .cat-feedback {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* ── Lists ── */
+  .list-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .list-item {
+    display: flex;
+    gap: 12px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .list-item:last-child { border-bottom: none; }
+  .list-icon { flex-shrink: 0; font-size: 16px; }
+
+  /* ── Score color ── */
+  .score-color-high   { color: var(--accent3); }
+  .score-color-mid    { color: #ffd166; }
+  .score-color-low    { color: var(--accent2); }
+
+  /* ── Loading ── */
+  #loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    gap: 16px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .spinner {
+    width: 44px; height: 44px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #error-state {
+    display: none;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+  }
+  #error-state .error-emoji { font-size: 48px; margin-bottom: 16px; }
+  #error-state p { font-size: 14px; line-height: 1.7; }
+
+  #report { display: none; }
+
+  .fade-in {
+    animation: fadeIn 0.5s ease forwards;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <span>Loading your report…</span>
+</div>
+
+<div id="error-state">
+  <div class="error-emoji">🤔</div>
+  <p id="error-msg">No CV analysis found.<br>Please send your CV to the bot first.</p>
+</div>
+
+<div id="report">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-label">CV Analysis Report</div>
+    <div class="candidate-name" id="cand-name">—</div>
+    <div class="candidate-title" id="cand-title">—</div>
+    <div class="score-ring-wrap">
+      <div class="ring-container">
+        <svg viewBox="0 0 120 120" width="120" height="120">
+          <circle class="ring-bg" cx="60" cy="60" r="50"/>
+          <circle class="ring-fill" id="ring-fill" cx="60" cy="60" r="50"
+                  stroke-dasharray="314" stroke-dashoffset="314"/>
+        </svg>
+        <div class="ring-label">
+          <span class="ring-score" id="ring-score">0</span>
+          <span class="ring-max">/100</span>
+        </div>
+      </div>
+    </div>
+    <span class="grade-badge" id="grade-badge">—</span>
+  </div>
+
+  <!-- Body -->
+  <div class="content fade-in">
+
+    <!-- Roast -->
+    <div class="roast-card">
+      <span class="roast-emoji">🔥</span>
+      <span class="roast-text" id="roast-text">—</span>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary-card" id="summary-text">—</div>
+
+    <!-- Categories -->
+    <div class="section-title">Score Breakdown</div>
+    <div id="categories-container"></div>
+
+    <!-- Strengths -->
+    <div class="section-title">✅ Strengths</div>
+    <div class="list-card" id="strengths-list"></div>
+
+    <!-- Fixes -->
+    <div class="section-title">⚡ Critical Fixes</div>
+    <div class="list-card" id="fixes-list"></div>
+
+  </div>
+</div>
+
+<script>
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    tg.setHeaderColor('#0a0a0f');
+    tg.setBackgroundColor('#0a0a0f');
+  }
+
+  const uid = new URLSearchParams(location.search).get('uid')
+           || tg?.initDataUnsafe?.user?.id;
+
+  function scoreColor(s) {
+    if (s >= 75) return 'var(--accent3)';
+    if (s >= 50) return '#ffd166';
+    return 'var(--accent2)';
+  }
+
+  function barColor(s) {
+    if (s >= 75) return 'linear-gradient(90deg, #43e97b, #38f9d7)';
+    if (s >= 50) return 'linear-gradient(90deg, #f7971e, #ffd200)';
+    return 'linear-gradient(90deg, #ff6584, #ff8e53)';
+  }
+
+  function ringGradient(s) {
+    if (s >= 75) return '#43e97b';
+    if (s >= 50) return '#ffd166';
+    return '#ff6584';
+  }
+
+  async function loadReport() {
+    if (!uid) {
+      showError('Could not identify user.<br>Please open this from the bot.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/cvscore-result?uid=${uid}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showError(data.error || 'No result found. Send your CV to the bot first.');
+        return;
+      }
+      const data = await res.json();
+      renderReport(data);
+    } catch (e) {
+      showError('Network error. Please try again.');
+    }
+  }
+
+  function showError(msg) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('error-msg').innerHTML = msg;
+    document.getElementById('error-state').style.display = 'block';
+  }
+
+  function renderReport(d) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('report').style.display = 'block';
+
+    // Header
+    document.getElementById('cand-name').textContent = d.name || 'Candidate';
+    document.getElementById('cand-title').textContent = d.title || '';
+    document.getElementById('grade-badge').textContent = `Grade: ${d.grade}`;
+    document.getElementById('roast-text').textContent = d.roast || '';
+    document.getElementById('summary-text').textContent = d.summary || '';
+
+    // Ring animation
+    const score = d.ats_score || 0;
+    const circumference = 314;
+    const offset = circumference - (score / 100) * circumference;
+    const fill = document.getElementById('ring-fill');
+    fill.style.stroke = ringGradient(score);
+    document.getElementById('ring-score').textContent = score;
+    document.getElementById('ring-score').style.color = ringGradient(score);
+    setTimeout(() => { fill.style.strokeDashoffset = offset; }, 100);
+
+    // Categories
+    const catContainer = document.getElementById('categories-container');
+    catContainer.innerHTML = '';
+    (d.categories || []).forEach((cat, i) => {
+      const pct = Math.round((cat.score / cat.max) * 100);
+      const el = document.createElement('div');
+      el.className = 'category-item';
+      el.innerHTML = `
+        <div class="cat-header">
+          <span class="cat-name">${cat.name}</span>
+          <span class="cat-score" style="color:${scoreColor(pct)}">${cat.score}<span style="color:var(--muted);font-size:11px">/${cat.max}</span></span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" id="bar-${i}" style="background:${barColor(pct)}"></div>
+        </div>
+        <div class="cat-feedback">${cat.feedback}</div>
+      `;
+      catContainer.appendChild(el);
+      setTimeout(() => {
+        document.getElementById(`bar-${i}`).style.width = `${pct}%`;
+      }, 200 + i * 80);
+    });
+
+    // Strengths
+    const strengths = document.getElementById('strengths-list');
+    strengths.innerHTML = (d.strengths || []).map(s =>
+      `<div class="list-item"><span class="list-icon">💚</span><span>${s}</span></div>`
+    ).join('');
+
+    // Fixes
+    const fixes = document.getElementById('fixes-list');
+    fixes.innerHTML = (d.critical_fixes || []).map(f =>
+      `<div class="list-item"><span class="list-icon">🔧</span><span>${f}</span></div>`
+    ).join('');
+  }
+
+  loadReport();
+</script>
+</body>
+</html>

@@ -87,6 +87,7 @@ const HIRE_AGENT_FAKE_QUEUE = [
 ];
 const resumeStorage = createResumeStorage(config);
 const genAI = config.geminiApiKey ? new GoogleGenAI({ apiKey: config.geminiApiKey }) : null;
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const HIRE_AGENT_SIMULATION_CONFIG_KEY = 'hireAgentSimulationVisible';
 // Configs key: free job-details opens before channel subscription gate starts (0 = disabled).
 const JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY = 'JobDetailsOpensBeforeSubscribeGate';
@@ -100,6 +101,7 @@ const screenlySkillsCache = {
   skills: [],
 };
 let runtimeBotTelegram = null;
+const cvScoreResultByUserId = new Map();
 const adminNotificationRunControl = {
   activeRunId: null,
   stopRequestedRunIds: new Set(),
@@ -591,8 +593,12 @@ function checkEnvLoaded() {
     token ? `${token.slice(0, 8)}...${token.slice(-4)} (length ${token.length})` : 'MISSING'
   );
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN must be set.');
-  if (!config.geminiApiKey) {
-    console.warn('GEMINI_API_KEY is missing; tailored resume API will fail.');
+  if (!config.geminiApiKey && !config.anthropicApiKey) {
+    console.warn('Both GEMINI_API_KEY and ANTHROPIC_API_KEY are missing; AI resume features will fail.');
+  } else if (!config.geminiApiKey) {
+    console.warn('GEMINI_API_KEY is missing; some AI features will fallback to Anthropic only.');
+  } else if (!config.anthropicApiKey) {
+    console.warn('ANTHROPIC_API_KEY is missing; /cvscore will fallback to Gemini.');
   }
   if (!config.azureStorageConnectionString) {
     console.warn('AZURE_STORAGE_CONNECTION_STRING is missing; resume uploads in /hireagent will fail.');
@@ -700,9 +706,12 @@ Output plain text only (no markdown, no code fences, no explanations).`;
 }
 
 async function reviewResumeWithAI({ resumeText }) {
-  if (!genAI) throw new Error('GEMINI_API_KEY is not configured');
   const sourceText = String(resumeText || '').trim();
   if (!sourceText) throw new Error('Resume text is empty');
+  if (config.anthropicApiKey) {
+    return reviewResumeWithAnthropic({ resumeText: sourceText });
+  }
+  if (!genAI) throw new Error('Neither ANTHROPIC_API_KEY nor GEMINI_API_KEY is configured');
   const prompt = `You are a senior HR expert and ATS resume reviewer.
 Task:
 1) Review the candidate resume text and provide concise expert feedback.
@@ -749,6 +758,82 @@ ${sourceText}`;
   if (score == null) throw new Error('AI review score is invalid');
   if (!summary) throw new Error('AI review summary is missing');
   if (!rewrittenResume) throw new Error('AI rewritten resume is empty');
+  return {
+    score,
+    summary,
+    strengths,
+    improvements,
+    rewrittenResume,
+  };
+}
+
+async function reviewResumeWithAnthropic({ resumeText }) {
+  const sourceText = String(resumeText || '').trim();
+  if (!sourceText) throw new Error('Resume text is empty');
+  if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY is not configured');
+  const systemPrompt = `You are a senior HR expert and ATS resume reviewer.
+Task:
+1) Review the candidate resume text and provide concise expert feedback.
+2) Return a new improved resume text that is clean, flat, structured, and ATS-friendly.
+
+Return strict JSON only (no markdown fences) with this exact schema:
+{
+  "score": number,
+  "summary": "string",
+  "strengths": ["string"],
+  "improvements": ["string"],
+  "rewrittenResume": "string"
+}
+
+Rules:
+- score must be integer 0..100
+- strengths: 3-6 bullet points
+- improvements: 3-6 bullet points
+- rewrittenResume must be plain text resume with clear sections and simple bullets
+- Use ONLY facts present in source resume. Do not invent companies, dates, titles, metrics, education, certificates, or skills.
+- Keep rewrittenResume ATS-friendly: no tables, no columns, no icons, no links formatting.
+- Preserve the same language as source resume.`;
+
+  const response = await fetch(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': config.anthropicApiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: config.anthropicCvScoreModel,
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: `Source resume text:\n${sourceText}` }],
+    }),
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Anthropic CV review failed: ${response.status} ${errText}`);
+  }
+
+  const payload = await response.json();
+  const raw = Array.isArray(payload?.content)
+    ? payload.content.find((item) => item?.type === 'text')?.text || ''
+    : '';
+  if (!raw.trim()) throw new Error('Anthropic response is empty');
+
+  const jsonText = extractFirstJsonObject(raw);
+  const parsed = JSON.parse(jsonText);
+  const scoreRaw = Number.parseInt(String(parsed?.score ?? ''), 10);
+  const score = Number.isFinite(scoreRaw) ? Math.min(100, Math.max(0, scoreRaw)) : null;
+  const summary = String(parsed?.summary || '').trim();
+  const strengths = Array.isArray(parsed?.strengths)
+    ? parsed.strengths.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
+    : [];
+  const improvements = Array.isArray(parsed?.improvements)
+    ? parsed.improvements.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
+    : [];
+  const rewrittenResume = String(parsed?.rewrittenResume || '').trim();
+  if (score == null) throw new Error('Anthropic review score is invalid');
+  if (!summary) throw new Error('Anthropic review summary is missing');
+  if (!rewrittenResume) throw new Error('Anthropic rewritten resume is empty');
   return {
     score,
     summary,
@@ -1451,6 +1536,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const adminPositionsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/positions` : '';
   const adminNotificationsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/notifications` : '';
   const stat2Url = appBaseUrl ? `${appBaseUrl}/app/stat2` : '';
+  const cvScoreUrl = appBaseUrl ? `${appBaseUrl}/app/cvscore` : '';
   const canUseSeekerJobsWebApp = isValidTelegramWebAppUrl(seekerJobsUrl);
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
   const canUseProfileWebApp = isValidTelegramWebAppUrl(profileUrl);
@@ -1461,6 +1547,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseAdminPositionsWebApp = isValidTelegramWebAppUrl(adminPositionsUrl);
   const canUseAdminNotificationsWebApp = isValidTelegramWebAppUrl(adminNotificationsUrl);
   const canUseStat2WebApp = isValidTelegramWebAppUrl(stat2Url);
+  const canUseCvScoreWebApp = isValidTelegramWebAppUrl(cvScoreUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const notSubscribedImagePath = join(__dirname, '..', 'not_subscribed.png');
   const subscribedImagePath = join(__dirname, '..', 'subscribed.png');
@@ -2185,6 +2272,44 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           improvementsText,
         ].join('\n');
         await sendLongTelegramText(ctx.telegram, chatId, feedbackMessage);
+        const cvScoreResult = {
+          name: `${ctx.from?.first_name || ''} ${ctx.from?.last_name || ''}`.trim() || 'Candidate',
+          title: 'Resume Review',
+          ats_score: review.score,
+          grade:
+            review.score >= 90 ? 'A+'
+              : review.score >= 80 ? 'A'
+                : review.score >= 70 ? 'B'
+                  : review.score >= 60 ? 'C'
+                    : review.score >= 50 ? 'D'
+                      : 'F',
+          summary: review.summary,
+          categories: [
+            {
+              name: 'ATS & Keywords',
+              score: review.score,
+              max: 100,
+              feedback: review.improvements[0] || 'Improve keyword relevance and role-specific terms.',
+            },
+            {
+              name: 'Structure & Clarity',
+              score: review.score,
+              max: 100,
+              feedback: review.improvements[1] || 'Keep sections concise with measurable outcomes.',
+            },
+          ],
+          strengths: review.strengths,
+          critical_fixes: review.improvements,
+          roast: review.summary,
+        };
+        cvScoreResultByUserId.set(String(chatId), cvScoreResult);
+        if (canUseCvScoreWebApp) {
+          await ctx.reply('Открыть полный отчет CV Score:', {
+            reply_markup: {
+              inline_keyboard: [[{ text: '📊 Open Full Report', web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
+            },
+          });
+        }
         const enhancedResumePdf = await markdownToPdfBuffer(review.rewrittenResume);
         await ctx.replyWithDocument(
           {
@@ -2693,9 +2818,19 @@ async function main() {
   app.get('/app/stat2', (_req, res) => {
     res.sendFile(join(__dirname, '..', 'public', 'app', 'stat2.html'));
   });
+  app.get('/app/cvscore', (_req, res) => {
+    res.sendFile(join(__dirname, '..', 'public', 'app', 'cvscore.html'));
+  });
 
   let runtimeBotUsername = '';
   app.get('/api/app/bot-info', (_req, res) => res.json({ botUsername: runtimeBotUsername }));
+  app.get('/api/cvscore-result', (req, res) => {
+    const uidRaw = String(req.query.uid || '').trim();
+    if (!uidRaw) return res.status(400).json({ error: 'Missing uid' });
+    const result = cvScoreResultByUserId.get(uidRaw);
+    if (!result) return res.status(404).json({ error: 'No result found. Please send your CV first.' });
+    return res.json(result);
+  });
 
   app.get('/api/admin/job-import-stats', async (req, res) => {
     try {

@@ -38,6 +38,8 @@ export const config = {
   telegramBotToken: getEnv('TELEGRAM_BOT_TOKEN'),
   geminiApiKey: getEnv('GEMINI_API_KEY'),
   geminiTextModel: getEnv('GEMINI_TEXT_MODEL') || 'gemini-2.5-flash',
+  anthropicApiKey: getEnv('ANTHROPIC_API_KEY'),
+  anthropicCvScoreModel: getEnv('ANTHROPIC_CVSCORE_MODEL') || 'claude-sonnet-4-20250514',
   botAdminTelegramIds: parseBotAdminTelegramIds(getEnv('BOT_ADMIN_TELEGRAM_IDS')),
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',
