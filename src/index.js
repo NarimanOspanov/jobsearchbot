@@ -1369,8 +1369,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     inline_keyboard: [
       [
         canUseSeekerJobsWebApp
-          ? { text: 'Получить доступ', web_app: { url: seekerJobsUrl } }
-          : { text: 'Получить доступ', callback_data: 'start_open_jobsearch' },
+          ? { text: 'Открыть вакансии', web_app: { url: seekerJobsUrl } }
+          : { text: 'Открыть вакансии', callback_data: 'start_open_jobsearch' },
       ],
     ],
   };
