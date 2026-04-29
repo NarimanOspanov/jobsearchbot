@@ -57,6 +57,17 @@ async function withTypingTelegram(telegram, chatId, ms) {
   }
 }
 
+async function runWithTyping(telegram, chatId, work) {
+  const pulse = () => telegram.sendChatAction(chatId, 'typing').catch(() => { });
+  pulse();
+  const id = setInterval(pulse, 4000);
+  try {
+    return await work();
+  } finally {
+    clearInterval(id);
+  }
+}
+
 /** @type {Map<number, { step: string }>} */
 const hireAgentStateByChatId = new Map();
 /** @type {Set<number>} */
@@ -686,6 +697,88 @@ Output plain text only (no markdown, no code fences, no explanations).`;
     throw new Error('AI cover letter must contain at least 3 sentences');
   }
   return sentenceCandidates.slice(0, 4).join(' ');
+}
+
+async function reviewResumeWithAI({ resumeText }) {
+  if (!genAI) throw new Error('GEMINI_API_KEY is not configured');
+  const sourceText = String(resumeText || '').trim();
+  if (!sourceText) throw new Error('Resume text is empty');
+  const prompt = `You are a senior HR expert and ATS resume reviewer.
+Task:
+1) Review the candidate resume text and provide concise expert feedback.
+2) Return a new improved resume text that is clean, flat, structured, and ATS-friendly.
+
+Return strict JSON only (no markdown fences) with this exact schema:
+{
+  "score": number,
+  "summary": "string",
+  "strengths": ["string"],
+  "improvements": ["string"],
+  "rewrittenResume": "string"
+}
+
+Rules:
+- score must be integer 0..100
+- strengths: 3-6 bullet points
+- improvements: 3-6 bullet points
+- rewrittenResume must be plain text resume with clear sections and simple bullets
+- Use ONLY facts present in source resume. Do not invent companies, dates, titles, metrics, education, certificates, or skills.
+- Keep rewrittenResume ATS-friendly: no tables, no columns, no icons, no links formatting.
+- Preserve the same language as source resume.
+
+Source resume text:
+${sourceText}`;
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const raw = response.text?.trim();
+  if (!raw) throw new Error('AI response is empty');
+  const jsonText = extractFirstJsonObject(raw);
+  const parsed = JSON.parse(jsonText);
+  const scoreRaw = Number.parseInt(String(parsed?.score ?? ''), 10);
+  const score = Number.isFinite(scoreRaw) ? Math.min(100, Math.max(0, scoreRaw)) : null;
+  const summary = String(parsed?.summary || '').trim();
+  const strengths = Array.isArray(parsed?.strengths)
+    ? parsed.strengths.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
+    : [];
+  const improvements = Array.isArray(parsed?.improvements)
+    ? parsed.improvements.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
+    : [];
+  const rewrittenResume = String(parsed?.rewrittenResume || '').trim();
+  if (score == null) throw new Error('AI review score is invalid');
+  if (!summary) throw new Error('AI review summary is missing');
+  if (!rewrittenResume) throw new Error('AI rewritten resume is empty');
+  return {
+    score,
+    summary,
+    strengths,
+    improvements,
+    rewrittenResume,
+  };
+}
+
+async function sendLongTelegramText(telegram, chatId, text, chunkSize = 3500) {
+  const value = String(text || '').trim();
+  if (!value) return;
+  if (value.length <= chunkSize) {
+    await telegram.sendMessage(chatId, value);
+    return;
+  }
+  let start = 0;
+  while (start < value.length) {
+    let end = Math.min(start + chunkSize, value.length);
+    if (end < value.length) {
+      const slice = value.slice(start, end);
+      const lastBreak = Math.max(slice.lastIndexOf('\n'), slice.lastIndexOf('. '));
+      if (lastBreak > Math.floor(chunkSize * 0.5)) {
+        end = start + lastBreak + 1;
+      }
+    }
+    const part = value.slice(start, end).trim();
+    if (part) await telegram.sendMessage(chatId, part);
+    start = end;
+  }
 }
 
 async function markdownToPdfBuffer(markdownText) {
@@ -1911,6 +2004,19 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await startHireAgentScenario(ctx);
   });
 
+  bot.command('cvscore', async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Эта команда доступна только в личном чате с ботом.');
+      return;
+    }
+    const chatId = ctx.chat.id;
+    hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
+    await ctx.reply(
+      'Отправьте ваше резюме файлом (PDF/TXT).\n' +
+      'Я оценю CV как HR-эксперт, дам комментарии и верну улучшенную ATS-friendly версию.'
+    );
+  });
+
   bot.action('start_hireagent', async (ctx) => {
     try {
       await ctx.answerCbQuery();
@@ -1991,7 +2097,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const st = hireAgentStateByChatId.get(chatId);
     const isHireAgentCvFlow = st?.step === 'awaiting_cv';
     const isPositionCvFlow = st?.step === 'awaiting_cv_for_position';
-    if (!isHireAgentCvFlow && !isPositionCvFlow) return next();
+    const isCvReviewFlow = st?.step === 'awaiting_cv_review';
+    if (!isHireAgentCvFlow && !isPositionCvFlow && !isCvReviewFlow) return next();
     const resumeSource = pickResumeSourceFromMessage(ctx.message);
     if (!resumeSource) {
       await ctx.reply('Не удалось распознать файл резюме. Отправьте PDF или изображение еще раз.');
@@ -2041,7 +2148,50 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       );
 
       await withTypingTelegram(ctx.telegram, chatId, 800 + Math.floor(Math.random() * 400));
-      if (isPositionCvFlow) {
+      if (isCvReviewFlow) {
+        const mime = String(resumeSource.mimeType || '').toLowerCase();
+        const canExtractText =
+          mime.includes('pdf') ||
+          mime.includes('text/') ||
+          String(resumeSource.fileName || '').toLowerCase().endsWith('.pdf') ||
+          String(resumeSource.fileName || '').toLowerCase().endsWith('.txt');
+        if (!canExtractText) {
+          hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
+          await ctx.reply('Для CV score сейчас поддерживаются PDF/TXT файлы. Пожалуйста, отправьте резюме в PDF.');
+          return;
+        }
+        await ctx.reply('Провожу HR-анализ и улучшаю структуру резюме…');
+        const review = await runWithTyping(ctx.telegram, chatId, async () => {
+          const resumeText = await extractResumeTextFromUrl(resumeUrl);
+          return reviewResumeWithAI({ resumeText });
+        });
+        const strengthsText =
+          review.strengths.length > 0
+            ? review.strengths.map((item) => `- ${item}`).join('\n')
+            : '- Сильные стороны не определены.';
+        const improvementsText =
+          review.improvements.length > 0
+            ? review.improvements.map((item) => `- ${item}`).join('\n')
+            : '- Рекомендации не определены.';
+        const feedbackMessage = [
+          `CV score: ${review.score}/100`,
+          '',
+          `Summary: ${review.summary}`,
+          '',
+          'Сильные стороны:',
+          strengthsText,
+          '',
+          'Что улучшить:',
+          improvementsText,
+        ].join('\n');
+        await sendLongTelegramText(ctx.telegram, chatId, feedbackMessage);
+        await sendLongTelegramText(
+          ctx.telegram,
+          chatId,
+          `Улучшенная ATS-friendly версия резюме:\n\n${review.rewrittenResume}`
+        );
+        hireAgentStateByChatId.set(chatId, { step: 'idle' });
+      } else if (isPositionCvFlow) {
         const positionId = String(st?.positionId || '').trim();
         if (positionId && models.UserApplications) {
           await models.UserApplications.create({
@@ -2087,10 +2237,15 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       }
     } catch (err) {
       console.error('hireagent resume upload failed:', err);
-      await ctx.reply(
-        'Не удалось сохранить резюме. Проверьте настройки Azure Storage (AZURE_STORAGE_CONNECTION_STRING) и попробуйте снова.'
-      );
-      hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv' });
+      if (isCvReviewFlow) {
+        await ctx.reply('Не удалось обработать резюме для CV score. Попробуйте еще раз через минуту.');
+        hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
+      } else {
+        await ctx.reply(
+          'Не удалось сохранить резюме. Проверьте настройки Azure Storage (AZURE_STORAGE_CONNECTION_STRING) и попробуйте снова.'
+        );
+        hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv' });
+      }
     }
   });
 
@@ -4064,6 +4219,7 @@ async function main() {
   try {
     await bot.telegram.setMyCommands([
       { command: 'start', description: 'Вакансии на удалёнку' },
+      { command: 'cvscore', description: 'Проверка и улучшение резюме' },
       { command: 'companies', description: 'Компании с удалёнкой' },
       { command: 'referrals', description: 'Реферальная программа' },
       { command: 'news', description: 'Новости про релокацию, удалёнку и ИИ' },
