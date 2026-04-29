@@ -1392,13 +1392,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   const buildStartRequiredChannelsKeyboard = (channels) => {
     const serialized = serializeRequiredChannels(channels);
-    const channelButtons = serialized
-      .map((ch, idx) => {
-        const joinUrl = String(ch.joinUrl || '').trim();
-        if (!joinUrl) return null;
-        return [{ text: `Подписаться на канал ${idx + 1}`, url: joinUrl }];
-      })
-      .filter(Boolean);
+    const firstJoinUrl = String(serialized[0]?.joinUrl || '').trim();
+    const channelButtons = firstJoinUrl ? [[{ text: '✈️ Подписаться на канал', url: firstJoinUrl }]] : [];
     return {
       inline_keyboard: [
         ...channelButtons,
@@ -1408,11 +1403,14 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   };
 
   const sendStartRequiredChannelsGate = async (ctx, channels) => {
-    const bonusOpens = Math.max(0, await getConfigInt(CHANNEL_SUBSCRIBE_BONUS_OPENS_CONFIG_KEY, 20));
     const lines = [
-      'Перед доступом к вакансиям подпишитесь на обязательный канал.',
-      'После подписки нажмите кнопку «✅ Я подписался».',
-      bonusOpens > 0 ? `За подтвержденную подписку получите +${bonusOpens} открытий вакансий.` : '',
+      'Почти готово!',
+      'Один шаг — и вакансии открыты',
+      '',
+      '1) Подпишитесь на наш канал — там свежие вакансии каждый день',
+      '2) Нажмите «Я подписался» ниже',
+      '',
+      'Отписаться можно в любой момент, если не понравится',
     ].filter(Boolean);
     const replyMarkup = buildStartRequiredChannelsKeyboard(channels);
     if (existsSync(notSubscribedImagePath)) {
