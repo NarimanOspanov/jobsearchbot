@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Notifications</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --danger: #dc5b6a;
+        --border: #273357;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+      h1, h2 { margin: 0 0 12px; }
+      .muted { color: var(--muted); }
+      .row { display: grid; gap: 8px; margin-bottom: 10px; }
+      .row.inline { grid-template-columns: 1fr auto; align-items: center; }
+      .mode-row { display: flex; gap: 14px; align-items: center; margin-bottom: 10px; }
+      input, textarea, button { width: 100%; border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 10px; font: inherit; }
+      textarea { resize: vertical; min-height: 110px; }
+      button { cursor: pointer; background: var(--accent); border-color: var(--accent); font-weight: 600; width: auto; }
+      button.danger { background: var(--danger); border-color: var(--danger); }
+      button.secondary { background: transparent; border-color: var(--border); color: var(--text); }
+      .suggestions { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+      .suggestion { padding: 8px 10px; border-bottom: 1px solid var(--border); cursor: pointer; background: #101935; }
+      .suggestion:last-child { border-bottom: none; }
+      .suggestion:hover { background: #16244a; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; border-bottom: 1px solid var(--border); padding: 8px 6px; vertical-align: top; font-size: 13px; }
+      th { color: var(--muted); font-weight: 600; }
+      .status-pill { display: inline-block; border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Admin: Push Notifications</h1>
+
+      <section class="card">
+        <h2>Send Notification</h2>
+        <div class="mode-row">
+          <label><input type="radio" name="receiverMode" value="single" checked /> One user</label>
+          <label><input type="radio" name="receiverMode" value="all" /> All users</label>
+        </div>
+        <div id="singleUserWrap" class="row">
+          <input id="userSearchInput" placeholder="Search by username, name, or chatId" />
+          <div id="userSuggestions" class="suggestions" style="display:none"></div>
+          <div id="selectedUser" class="muted">No user selected</div>
+        </div>
+        <div class="row">
+          <textarea id="messageInput" maxlength="4000" placeholder="Notification text"></textarea>
+        </div>
+        <div class="row inline">
+          <div id="sendStatus" class="muted"></div>
+          <button id="sendBtn" type="button">Send</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Current Bulk Send</h2>
+        <div id="runStatus" class="muted">No active bulk run.</div>
+        <div style="margin-top:10px">
+          <button id="stopRunBtn" class="danger" type="button" disabled>Stop bulk sending</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>History</h2>
+        <div class="row inline">
+          <div id="historyMeta" class="muted">Loading...</div>
+          <button id="refreshHistoryBtn" class="secondary" type="button">Refresh</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Id</th>
+              <th>Initiator chatId</th>
+              <th>Text</th>
+              <th>Receiver</th>
+              <th>Status</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </section>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+
+      const POLL_MS = 1500;
+      let selectedUser = null;
+      let userSearchToken = 0;
+      let pollTimer = null;
+      let currentRun = null;
+
+      async function api(path, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        if (tg?.initData) headers['x-init-data'] = tg.initData;
+        const response = await fetch(path, { ...options, headers });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || 'Request failed');
+        }
+        return response.json();
+      }
+
+      function esc(value) {
+        return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function mode() {
+        const active = document.querySelector('input[name="receiverMode"]:checked');
+        return active ? active.value : 'single';
+      }
+
+      function setModeUi() {
+        document.getElementById('singleUserWrap').style.display = mode() === 'single' ? '' : 'none';
+      }
+
+      function renderSelectedUser() {
+        const el = document.getElementById('selectedUser');
+        if (!selectedUser) {
+          el.textContent = 'No user selected';
+          return;
+        }
+        const parts = [
+          selectedUser.firstName || '',
+          selectedUser.lastName || '',
+          selectedUser.telegramUserName ? `@${String(selectedUser.telegramUserName).replace(/^@/, '')}` : '',
+          `chatId: ${selectedUser.telegramChatId}`,
+        ].filter(Boolean);
+        el.textContent = parts.join(' | ');
+      }
+
+      async function searchUsers(query) {
+        const token = ++userSearchToken;
+        const list = document.getElementById('userSuggestions');
+        if (!query || query.length < 2) {
+          list.style.display = 'none';
+          list.innerHTML = '';
+          return;
+        }
+        try {
+          const rows = await api(`/api/app/admin/users/search?q=${encodeURIComponent(query)}&limit=10`);
+          if (token !== userSearchToken) return;
+          if (!rows.length) {
+            list.innerHTML = '<div class="suggestion muted">No matches</div>';
+            list.style.display = '';
+            return;
+          }
+          list.innerHTML = rows.map((row) => {
+            const fullName = [row.firstName, row.lastName].filter(Boolean).join(' ').trim();
+            const uname = row.telegramUserName ? `@${String(row.telegramUserName).replace(/^@/, '')}` : '';
+            const label = [fullName, uname, `chatId: ${row.telegramChatId}`].filter(Boolean).join(' | ');
+            return `<div class="suggestion" data-chat-id="${esc(row.telegramChatId)}" data-username="${esc(row.telegramUserName || '')}" data-first-name="${esc(row.firstName || '')}" data-last-name="${esc(row.lastName || '')}">${esc(label)}</div>`;
+          }).join('');
+          list.style.display = '';
+          for (const item of list.querySelectorAll('.suggestion[data-chat-id]')) {
+            item.addEventListener('click', () => {
+              selectedUser = {
+                telegramChatId: item.getAttribute('data-chat-id'),
+                telegramUserName: item.getAttribute('data-username') || null,
+                firstName: item.getAttribute('data-first-name') || null,
+                lastName: item.getAttribute('data-last-name') || null,
+              };
+              document.getElementById('userSearchInput').value = item.textContent || '';
+              list.style.display = 'none';
+              renderSelectedUser();
+            });
+          }
+        } catch (err) {
+          list.innerHTML = `<div class="suggestion muted">Failed: ${esc(err.message)}</div>`;
+          list.style.display = '';
+        }
+      }
+
+      function renderRun(run) {
+        currentRun = run || null;
+        const el = document.getElementById('runStatus');
+        const stopBtn = document.getElementById('stopRunBtn');
+        if (!run) {
+          el.textContent = 'No active bulk run.';
+          stopBtn.disabled = true;
+          return;
+        }
+        el.innerHTML =
+          `Run: <b>${esc(run.id)}</b><br>` +
+          `Status: <span class="status-pill">${esc(run.status)}</span><br>` +
+          `Progress: ${Number(run.processed || 0)} / ${Number(run.total || 0)} | sent: ${Number(run.sent || 0)} | failed: ${Number(run.failed || 0)}`;
+        stopBtn.disabled = !['running', 'stopping'].includes(String(run.status || ''));
+      }
+
+      async function loadCurrentRun() {
+        const payload = await api('/api/app/admin/notifications/runs/current');
+        renderRun(payload.run || null);
+      }
+
+      async function loadHistory() {
+        const payload = await api('/api/app/admin/notifications/history?limit=100&offset=0');
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        document.getElementById('historyMeta').textContent = `Total: ${Number(payload.total || rows.length)}`;
+        const body = document.getElementById('historyBody');
+        if (!rows.length) {
+          body.innerHTML = '<tr><td colspan="6" class="muted">No messages yet.</td></tr>';
+          return;
+        }
+        body.innerHTML = rows.map((row) => `
+          <tr>
+            <td>${esc(row.id)}</td>
+            <td>${esc(row.initiatorChatId)}</td>
+            <td style="white-space:pre-wrap;word-break:break-word;max-width:320px">${esc(row.text)}</td>
+            <td>${esc(row.receiverLabel || (row.receiverType === 'all' ? 'All users' : row.receiverChatId || '-'))}</td>
+            <td><span class="status-pill">${esc(row.status)}</span>${row.error ? `<div class="muted">${esc(row.error)}</div>` : ''}</td>
+            <td>${row.createdAt ? esc(new Date(row.createdAt).toLocaleString()) : '-'}</td>
+          </tr>
+        `).join('');
+      }
+
+      async function sendNotification() {
+        const sendStatus = document.getElementById('sendStatus');
+        const message = String(document.getElementById('messageInput').value || '').trim();
+        if (!message) throw new Error('Message is required');
+        const m = mode();
+        const payload = { mode: m, text: message };
+        if (m === 'single') {
+          if (!selectedUser?.telegramChatId) throw new Error('Select a user first');
+          payload.receiverChatId = selectedUser.telegramChatId;
+        }
+        sendStatus.textContent = 'Sending...';
+        const response = await api('/api/app/admin/notifications/send', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        if (response.run) {
+          renderRun(response.run);
+        }
+        sendStatus.textContent = 'Sent';
+        await Promise.all([loadCurrentRun(), loadHistory()]);
+      }
+
+      function startPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(async () => {
+          try {
+            await loadCurrentRun();
+            if (currentRun && ['running', 'stopping'].includes(String(currentRun.status || ''))) {
+              await loadHistory();
+            }
+          } catch {
+            // keep polling quietly
+          }
+        }, POLL_MS);
+      }
+
+      document.getElementById('userSearchInput').addEventListener('input', (event) => {
+        selectedUser = null;
+        renderSelectedUser();
+        searchUsers(String(event.target.value || '').trim()).catch(() => {});
+      });
+
+      document.getElementById('sendBtn').addEventListener('click', async () => {
+        try {
+          await sendNotification();
+        } catch (err) {
+          document.getElementById('sendStatus').textContent = `Failed: ${err.message}`;
+        }
+      });
+
+      document.getElementById('stopRunBtn').addEventListener('click', async () => {
+        try {
+          if (!currentRun?.id) return;
+          await api(`/api/app/admin/notifications/${encodeURIComponent(currentRun.id)}/stop`, { method: 'POST' });
+          await loadCurrentRun();
+          await loadHistory();
+        } catch (err) {
+          document.getElementById('sendStatus').textContent = `Failed to stop: ${err.message}`;
+        }
+      });
+
+      document.getElementById('refreshHistoryBtn').addEventListener('click', () => {
+        loadHistory().catch((err) => {
+          document.getElementById('sendStatus').textContent = `Failed: ${err.message}`;
+        });
+      });
+
+      for (const radio of document.querySelectorAll('input[name="receiverMode"]')) {
+        radio.addEventListener('change', setModeUi);
+      }
+
+      setModeUi();
+      renderSelectedUser();
+      Promise.all([loadCurrentRun(), loadHistory()]).catch((err) => {
+        document.getElementById('sendStatus').textContent = `Failed: ${err.message}`;
+      });
+      startPolling();
+    </script>
+  </body>
+</html>

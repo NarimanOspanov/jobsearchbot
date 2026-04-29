@@ -13,6 +13,8 @@ import defineUserBonusOpen from './UserBonusOpen.js';
 import defineReferral from './Referral.js';
 import definePosition from './Position.js';
 import defineUserApplication from './UserApplication.js';
+import defineAdminNotification from './AdminNotification.js';
+import defineAdminNotificationRun from './AdminNotificationRun.js';
 
 /**
  * Initialize only the User model for empty bot runtime.
@@ -33,6 +35,8 @@ export function initModels(sequelize) {
   const Referral = defineReferral(sequelize);
   const Position = definePosition(sequelize);
   const UserApplication = defineUserApplication(sequelize);
+  const AdminNotification = defineAdminNotification(sequelize);
+  const AdminNotificationRun = defineAdminNotificationRun(sequelize);
 
   User.hasMany(Application, { foreignKey: 'UserId' });
   Application.belongsTo(User, { foreignKey: 'UserId' });
@@ -60,7 +64,6 @@ export function initModels(sequelize) {
   UserApplication.belongsTo(User, { foreignKey: 'UserId' });
   Position.hasMany(UserApplication, { foreignKey: 'PositionId' });
   UserApplication.belongsTo(Position, { foreignKey: 'PositionId' });
-
   return {
     User,
     Application,
@@ -92,5 +95,9 @@ export function initModels(sequelize) {
     Positions: Position,
     UserApplication,
     UserApplications: UserApplication,
+    AdminNotification,
+    AdminNotifications: AdminNotification,
+    AdminNotificationRun,
+    AdminNotificationRuns: AdminNotificationRun,
   };
 }
