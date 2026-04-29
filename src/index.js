@@ -2107,6 +2107,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   });
 
   bot.command('companies', async (ctx) => {
+    const canProceedToCompanies = await enforceStartRequiredChannelsGate(ctx);
+    if (!canProceedToCompanies) return;
     if (canUseCompaniesWebApp) {
       await ctx.reply('Открыть компании с удалёнкой:', {
         reply_markup: {
