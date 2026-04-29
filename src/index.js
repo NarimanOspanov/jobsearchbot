@@ -1406,6 +1406,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const lines = [
       '<b>Подпишись на канал, для старта</b>',
       '',
+      '',
       'Мы фильтруем <b>10 000+ вакансий в день</b> — это требует серьёзных ресурсов. Подписка на канал помогает нам покрывать часть расходов, чтобы сервис оставался максимально доступным для вас.',
     ].filter(Boolean);
     const replyMarkup = buildStartRequiredChannelsKeyboard(channels);
