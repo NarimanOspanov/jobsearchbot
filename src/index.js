@@ -3696,6 +3696,7 @@ async function main() {
       for (const user of users) {
         const chatId = toChatId(user.TelegramChatId);
         if (!chatId) continue;
+        if (chatId < 0) continue;
         if (seen.has(chatId)) continue;
         seen.add(chatId);
         recipients.push(chatId);
