@@ -1363,6 +1363,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseAdminPositionsWebApp = isValidTelegramWebAppUrl(adminPositionsUrl);
   const canUseStat2WebApp = isValidTelegramWebAppUrl(stat2Url);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
+  const notSubscribedImagePath = join(__dirname, '..', 'not_subscribed.png');
+  const subscribedImagePath = join(__dirname, '..', 'subscribed.png');
   const startKeyboard = {
     inline_keyboard: [
       [
@@ -1371,6 +1373,71 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           : { text: 'Получить доступ', callback_data: 'start_open_jobsearch' },
       ],
     ],
+  };
+  const START_REQUIRED_CHANNEL_CONFIRM_CALLBACK = 'start_confirm_required_channels';
+
+  const sendStartIntro = async (ctx) => {
+    if (existsSync(startAvatarPath)) {
+      await ctx.replyWithPhoto(
+        { source: startAvatarPath },
+        {
+          caption: START_INTRO_MESSAGE,
+          reply_markup: startKeyboard,
+        }
+      );
+      return;
+    }
+    await ctx.reply(START_INTRO_MESSAGE, { reply_markup: startKeyboard });
+  };
+
+  const buildStartRequiredChannelsKeyboard = (channels) => {
+    const serialized = serializeRequiredChannels(channels);
+    const channelButtons = serialized
+      .map((ch, idx) => {
+        const joinUrl = String(ch.joinUrl || '').trim();
+        if (!joinUrl) return null;
+        return [{ text: `Подписаться на канал ${idx + 1}`, url: joinUrl }];
+      })
+      .filter(Boolean);
+    return {
+      inline_keyboard: [
+        ...channelButtons,
+        [{ text: '✅ Я подписался', callback_data: START_REQUIRED_CHANNEL_CONFIRM_CALLBACK }],
+      ],
+    };
+  };
+
+  const sendStartRequiredChannelsGate = async (ctx, channels) => {
+    const bonusOpens = Math.max(0, await getConfigInt(CHANNEL_SUBSCRIBE_BONUS_OPENS_CONFIG_KEY, 20));
+    const lines = [
+      'Перед доступом к вакансиям подпишитесь на обязательный канал.',
+      'После подписки нажмите кнопку «✅ Я подписался».',
+      bonusOpens > 0 ? `За подтвержденную подписку получите +${bonusOpens} открытий вакансий.` : '',
+    ].filter(Boolean);
+    const replyMarkup = buildStartRequiredChannelsKeyboard(channels);
+    if (existsSync(notSubscribedImagePath)) {
+      await ctx.replyWithPhoto(
+        { source: notSubscribedImagePath },
+        {
+          caption: lines.join('\n'),
+          reply_markup: replyMarkup,
+        }
+      );
+      return;
+    }
+    await ctx.reply(lines.join('\n'), { reply_markup: replyMarkup });
+  };
+
+  const enforceStartRequiredChannelsGate = async (ctx) => {
+    const telegramUserId = Number(ctx.from?.id || ctx.chat?.id || 0);
+    if (!telegramUserId) return true;
+    const channelsState = await getRequiredChannelsState(telegramUserId);
+    if (channelsState.ok) {
+      await ensureRequiredChannelUserRecords(telegramUserId);
+      return true;
+    }
+    await sendStartRequiredChannelsGate(ctx, channelsState.channels);
+    return false;
   };
 
   const formatUserDisplayName = (user) => {
@@ -1690,6 +1757,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   bot.start(async (ctx) => {
     const payload = parseStartPayload(ctx);
     const positionIdFromStart = parseStartPositionId(payload);
+    const canProceedToVacancies = await enforceStartRequiredChannelsGate(ctx);
+    if (!canProceedToVacancies) return;
     if (positionIdFromStart) {
       await startPositionApplyScenario(ctx, positionIdFromStart);
       return;
@@ -1716,17 +1785,48 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       ctx.from?.last_name ?? null
     );
     await processReferralOnStart(ctx, invitedUser, payload);
-    if (existsSync(startAvatarPath)) {
-      await ctx.replyWithPhoto(
-        { source: startAvatarPath },
-        {
-          caption: START_INTRO_MESSAGE,
-          reply_markup: startKeyboard,
-        }
-      );
+    await sendStartIntro(ctx);
+  });
+
+  bot.action(START_REQUIRED_CHANNEL_CONFIRM_CALLBACK, async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    const telegramUserId = Number(ctx.from?.id || ctx.chat?.id || 0);
+    if (!telegramUserId) {
+      await ctx.reply('Не удалось определить пользователя. Откройте /start еще раз.');
       return;
     }
-    await ctx.reply(START_INTRO_MESSAGE, { reply_markup: startKeyboard });
+    const channelsState = await getRequiredChannelsState(telegramUserId);
+    if (!channelsState.ok) {
+      await sendStartRequiredChannelsGate(ctx, channelsState.channels);
+      return;
+    }
+    await ensureRequiredChannelUserRecords(telegramUserId);
+    let grantedBonus = 0;
+    try {
+      const { user } = await ensureUserByTelegramId(
+        telegramUserId,
+        ctx.from?.username ?? null,
+        ctx.from?.first_name ?? null,
+        ctx.from?.last_name ?? null
+      );
+      grantedBonus = await ensureChannelSubscribeBonus(user?.Id);
+    } catch (err) {
+      console.warn('Failed to grant start subscription bonus:', err?.message || err);
+    }
+    const successLines = [
+      'Спасибо! Подписка подтверждена.',
+      grantedBonus > 0 ? `Начислено +${grantedBonus} открытий вакансий.` : 'Доступ к вакансиям открыт.',
+    ];
+    if (existsSync(subscribedImagePath)) {
+      await ctx.replyWithPhoto({ source: subscribedImagePath }, { caption: successLines.join('\n') });
+    } else {
+      await ctx.reply(successLines.join('\n'));
+    }
+    await sendStartIntro(ctx);
   });
 
   const openJobSearchFromBot = async (ctx) => {
