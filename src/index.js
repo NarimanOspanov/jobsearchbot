@@ -1404,13 +1404,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   const sendStartRequiredChannelsGate = async (ctx, channels) => {
     const lines = [
-      'Почти готово!',
-      'Один шаг — и вакансии открыты',
+      'Подпишись на канал, плиз',
       '',
-      '1) Подпишитесь на наш канал — там свежие вакансии каждый день',
-      '2) Нажмите «Я подписался» ниже',
-      '',
-      'Отписаться можно в любой момент, если не понравится',
+      'Мы фильтруем 10 000+ вакансий в день — это требует серьёзных ресурсов. Подписка на канал помогает нам покрывать часть расходов, чтобы сервис оставался максимально доступным для вас.',
     ].filter(Boolean);
     const replyMarkup = buildStartRequiredChannelsKeyboard(channels);
     if (existsSync(notSubscribedImagePath)) {
