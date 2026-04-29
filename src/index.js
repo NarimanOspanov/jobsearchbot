@@ -1404,9 +1404,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   const sendStartRequiredChannelsGate = async (ctx, channels) => {
     const lines = [
-      'Подпишись на канал, плиз',
+      '<b>Подпишись на канал, для старта</b>',
       '',
-      'Мы фильтруем 10 000+ вакансий в день — это требует серьёзных ресурсов. Подписка на канал помогает нам покрывать часть расходов, чтобы сервис оставался максимально доступным для вас.',
+      'Мы фильтруем <b>10 000+ вакансий в день</b> — это требует серьёзных ресурсов. Подписка на канал помогает нам покрывать часть расходов, чтобы сервис оставался максимально доступным для вас.',
     ].filter(Boolean);
     const replyMarkup = buildStartRequiredChannelsKeyboard(channels);
     if (existsSync(notSubscribedImagePath)) {
@@ -1414,12 +1414,13 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         { source: notSubscribedImagePath },
         {
           caption: lines.join('\n'),
+          parse_mode: 'HTML',
           reply_markup: replyMarkup,
         }
       );
       return;
     }
-    await ctx.reply(lines.join('\n'), { reply_markup: replyMarkup });
+    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML', reply_markup: replyMarkup });
   };
 
   const enforceStartRequiredChannelsGate = async (ctx) => {
