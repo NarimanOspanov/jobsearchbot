@@ -2953,6 +2953,150 @@ async function main() {
     }
   });
 
+  app.get('/api/app/admin/stat2/details', adminMiniAppAuth, async (req, res) => {
+    try {
+      const metric = String(req.query.metric || '').trim();
+      const limitRaw = Number.parseInt(String(req.query.limit || '100'), 10);
+      const limit = Number.isSafeInteger(limitRaw) ? Math.min(200, Math.max(1, limitRaw)) : 100;
+
+      const buildUserLabel = (user) => {
+        const firstName = String(user?.FirstName || '').trim();
+        const lastName = String(user?.LastName || '').trim();
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+        const username = String(user?.TelegramUserName || '').trim();
+        if (fullName && username) return `${fullName} (@${username})`;
+        if (fullName) return fullName;
+        if (username) return `@${username}`;
+        return `User ${user?.Id ?? '-'}`;
+      };
+
+      if (metric === 'usersJoined') {
+        const rows = models.Users
+          ? await models.Users.findAll({
+            attributes: ['Id', 'FirstName', 'LastName', 'TelegramUserName', 'DateJoined'],
+            order: [['DateJoined', 'DESC'], ['Id', 'DESC']],
+            limit,
+            raw: true,
+          })
+          : [];
+        const items = rows.map((row) => ({
+          user: buildUserLabel(row),
+          datetime: row?.DateJoined || null,
+        }));
+        return res.json({ success: true, metric, items });
+      }
+
+      if (metric === 'usersJoinedByInvite') {
+        const rows = models.Referrals
+          ? await models.Referrals.findAll({
+            attributes: ['ReferrerUserId', 'ReferredUserId', 'ReferredAt'],
+            order: [['ReferredAt', 'DESC']],
+            limit,
+            raw: true,
+          })
+          : [];
+        const userIds = Array.from(
+          new Set(
+            rows.flatMap((row) => [Number(row?.ReferrerUserId), Number(row?.ReferredUserId)])
+              .filter((id) => Number.isSafeInteger(id) && id > 0)
+          )
+        );
+        const users = userIds.length > 0 && models.Users
+          ? await models.Users.findAll({
+            attributes: ['Id', 'FirstName', 'LastName', 'TelegramUserName'],
+            where: { Id: { [Sequelize.Op.in]: userIds } },
+            raw: true,
+          })
+          : [];
+        const userById = new Map(users.map((user) => [Number(user.Id), user]));
+        const items = rows.map((row) => {
+          const referred = userById.get(Number(row?.ReferredUserId));
+          const referrer = userById.get(Number(row?.ReferrerUserId));
+          return {
+            user: referred ? buildUserLabel(referred) : `User ${row?.ReferredUserId ?? '-'}`,
+            datetime: row?.ReferredAt || null,
+            invitedBy: referrer ? buildUserLabel(referrer) : `User ${row?.ReferrerUserId ?? '-'}`,
+          };
+        });
+        return res.json({ success: true, metric, items });
+      }
+
+      if (metric === 'payments') {
+        const rows = models.TelegramPayments
+          ? await models.TelegramPayments.findAll({
+            attributes: ['UserId', 'PaidAt'],
+            order: [['PaidAt', 'DESC'], ['Id', 'DESC']],
+            limit,
+            raw: true,
+          })
+          : [];
+        const userIds = Array.from(
+          new Set(
+            rows
+              .map((row) => Number(row?.UserId))
+              .filter((id) => Number.isSafeInteger(id) && id > 0)
+          )
+        );
+        const users = userIds.length > 0 && models.Users
+          ? await models.Users.findAll({
+            attributes: ['Id', 'FirstName', 'LastName', 'TelegramUserName'],
+            where: { Id: { [Sequelize.Op.in]: userIds } },
+            raw: true,
+          })
+          : [];
+        const userById = new Map(users.map((user) => [Number(user.Id), user]));
+        const items = rows.map((row) => {
+          const user = userById.get(Number(row?.UserId));
+          return {
+            user: user ? buildUserLabel(user) : `User ${row?.UserId ?? '-'}`,
+            datetime: row?.PaidAt || null,
+          };
+        });
+        return res.json({ success: true, metric, items });
+      }
+
+      if (metric === 'requiredChannelUsers') {
+        const rows = models.RequiredChannelUsers
+          ? await models.RequiredChannelUsers.findAll({
+            attributes: ['UserId', 'DateTime'],
+            order: [['DateTime', 'DESC'], ['Id', 'DESC']],
+            limit,
+            raw: true,
+          })
+          : [];
+        const telegramIds = Array.from(
+          new Set(
+            rows
+              .map((row) => Number.parseInt(String(row?.UserId || ''), 10))
+              .filter((id) => Number.isSafeInteger(id) && id > 0)
+          )
+        );
+        const users = telegramIds.length > 0 && models.Users
+          ? await models.Users.findAll({
+            attributes: ['TelegramChatId', 'FirstName', 'LastName', 'TelegramUserName'],
+            where: { TelegramChatId: { [Sequelize.Op.in]: telegramIds } },
+            raw: true,
+          })
+          : [];
+        const userByTelegramId = new Map(users.map((user) => [Number(user.TelegramChatId), user]));
+        const items = rows.map((row) => {
+          const telegramId = Number.parseInt(String(row?.UserId || ''), 10);
+          const user = userByTelegramId.get(telegramId);
+          return {
+            user: user ? buildUserLabel(user) : `Telegram ${row?.UserId ?? '-'}`,
+            datetime: row?.DateTime || null,
+          };
+        });
+        return res.json({ success: true, metric, items });
+      }
+
+      return res.status(400).json({ error: 'Unknown metric' });
+    } catch (err) {
+      console.error('GET /api/app/admin/stat2/details:', err);
+      return res.status(500).json({ error: 'Failed to load stat2 details' });
+    }
+  });
+
   app.get('/api/admin/skills', async (_req, res) => {
     try {
       const skills = await fetchScreenlySkillsCatalog();

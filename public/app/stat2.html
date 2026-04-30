@@ -74,6 +74,64 @@
         font-weight: 700;
         line-height: 1;
       }
+      .metric-card {
+        cursor: pointer;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+      }
+      .metric-card:hover {
+        transform: translateY(-1px);
+        border-color: var(--accent);
+      }
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 10, 20, 0.75);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 16px;
+      }
+      .modal {
+        width: min(980px, 100%);
+        max-height: 85vh;
+        overflow: hidden;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+      }
+      .modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .modal-body {
+        overflow: auto;
+        padding: 8px 12px 14px;
+      }
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .table th,
+      .table td {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(158, 176, 209, 0.2);
+        font-size: 13px;
+      }
+      .table th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
       #chartWrap {
         min-height: 320px;
       }
@@ -119,19 +177,19 @@
       </section>
 
       <section class="metrics">
-        <article class="card">
+        <article class="card metric-card" data-metric="usersJoined" data-title="Users joined (last 100)">
           <div class="metric-title">Users joined</div>
           <div id="usersJoined" class="metric-value">-</div>
         </article>
-        <article class="card">
+        <article class="card metric-card" data-metric="usersJoinedByInvite" data-title="Users joined by invite (last 100)">
           <div class="metric-title">Users joined by invite</div>
           <div id="usersJoinedByInvite" class="metric-value">-</div>
         </article>
-        <article class="card">
+        <article class="card metric-card" data-metric="payments" data-title="Payments (last 100)">
           <div class="metric-title">Payments</div>
           <div id="payments" class="metric-value">-</div>
         </article>
-        <article class="card">
+        <article class="card metric-card" data-metric="requiredChannelUsers" data-title="Required channel users (last 100)">
           <div class="metric-title">Required channel users</div>
           <div id="requiredChannelUsers" class="metric-value">-</div>
         </article>
@@ -140,6 +198,17 @@
       <section id="chartWrap" class="card">
         <canvas id="trendChart"></canvas>
       </section>
+    </div>
+    <div id="metricModalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal">
+        <div class="modal-head">
+          <h3 id="metricModalTitle">Details</h3>
+          <button id="metricModalClose" type="button">Close</button>
+        </div>
+        <div id="metricModalBody" class="modal-body">
+          <p class="muted">Loading...</p>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -151,6 +220,9 @@
       const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
       const chartCanvas = document.getElementById('trendChart');
       let trendChart = null;
+      const metricModalBackdrop = document.getElementById('metricModalBackdrop');
+      const metricModalTitle = document.getElementById('metricModalTitle');
+      const metricModalBody = document.getElementById('metricModalBody');
 
       function toInt(value, fallback) {
         const parsed = Number.parseInt(String(value || ''), 10);
@@ -195,6 +267,60 @@
       function setMetric(id, value) {
         const el = document.getElementById(id);
         el.textContent = Number(value || 0).toLocaleString('en-US');
+      }
+
+      function formatDateTime(value) {
+        if (!value) return '-';
+        const dt = new Date(value);
+        if (Number.isNaN(dt.getTime())) return String(value);
+        return dt.toLocaleString('en-GB', { hour12: false });
+      }
+
+      function openModal() {
+        metricModalBackdrop.style.display = 'flex';
+      }
+
+      function closeModal() {
+        metricModalBackdrop.style.display = 'none';
+      }
+
+      function renderMetricDetailsTable(metric, items) {
+        if (!Array.isArray(items) || items.length === 0) {
+          metricModalBody.innerHTML = '<p class="muted">No records found.</p>';
+          return;
+        }
+        const withInvitedBy = metric === 'usersJoinedByInvite';
+        const rows = items.map((item) => `
+          <tr>
+            <td>${item?.user || '-'}</td>
+            <td class="mono">${formatDateTime(item?.datetime)}</td>
+            ${withInvitedBy ? `<td>${item?.invitedBy || '-'}</td>` : ''}
+          </tr>
+        `).join('');
+        metricModalBody.innerHTML = `
+          <table class="table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>DateTime</th>
+                ${withInvitedBy ? '<th>Invited by</th>' : ''}
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      }
+
+      async function openMetricDetails(metric, title) {
+        metricModalTitle.textContent = title || 'Details';
+        metricModalBody.innerHTML = '<p class="muted">Loading...</p>';
+        openModal();
+        try {
+          const payload = await api(`/api/app/admin/stat2/details?metric=${encodeURIComponent(metric)}&limit=100`);
+          renderMetricDetailsTable(metric, Array.isArray(payload?.items) ? payload.items : []);
+        } catch (err) {
+          metricModalBody.innerHTML = `<p class="bad">Failed to load details: ${err?.message || 'Unknown error'}</p>`;
+        }
       }
 
       function renderTotals(totals) {
@@ -261,6 +387,21 @@
       periodSel.value = String(toInt(periodFromUrl, 7));
       document.getElementById('reloadBtn').addEventListener('click', load);
       periodSel.addEventListener('change', load);
+      document.getElementById('metricModalClose').addEventListener('click', closeModal);
+      metricModalBackdrop.addEventListener('click', (event) => {
+        if (event.target === metricModalBackdrop) closeModal();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeModal();
+      });
+      document.querySelectorAll('.metric-card[data-metric]').forEach((card) => {
+        card.addEventListener('click', () => {
+          const metric = String(card.dataset.metric || '').trim();
+          const title = String(card.dataset.title || 'Details').trim();
+          if (!metric) return;
+          openMetricDetails(metric, title);
+        });
+      });
       load();
     </script>
   </body>
