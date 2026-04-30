@@ -564,14 +564,14 @@
         <div class="modal-body">
           <div id="jobInfo" class="muted">Выберите вакансию, чтобы продолжить.</div>
           <div id="jobActions" style="display:none">
-            <div class="row">
+            <div id="genRow" class="row">
               <button id="genBtn">Сгенерировать CV и Cover Letter под вакансию</button>
               <span id="jobLoader" class="loader" aria-hidden="true"></span>
             </div>
             <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
             <label>Сопроводительное письмо</label>
             <textarea id="coverPreview" readonly></textarea>
-            <label>Отметить как
+            <label id="statusRow">Отметить как
               <select id="statusSel">
                 <option value="new">новая</option>
                 <option value="applied">откликнулся</option>
@@ -1093,6 +1093,7 @@
         return `${roleName}: ${name}`;
       }
       function renderJobSkillsHtml(skillsValue) {
+        if (!isBotAdminUser) return '';
         const list = Array.isArray(skillsValue) ? skillsValue : [];
         const primary = list.filter((s) => s.isHighlyRelevant === true);
         const secondary = list.filter((s) => s.isHighlyRelevant !== true);
@@ -1786,14 +1787,12 @@
           return;
         }
         body.innerHTML = positions.map((p) => {
-          const app = appByScreenlyId(p.id);
           return `<div class="job-card" data-open-job="${p.id}">
             <div class="job-card-head">
               <div>
                 <div class="job-card-title">${esc(p.title)}</div>
                 <div class="job-card-sub">${esc(p.company)} · ${esc(p.location)}</div>
               </div>
-              <span class="job-status-pill">${esc(app?.Status || 'new')}</span>
             </div>
             <div class="job-card-meta">
               <span>Опубликовано: ${esc(formatPostedDate(p.publishedAt) || '—')}</span>
@@ -1846,12 +1845,14 @@
         selectedApplication = appByScreenlyId(job.id);
         document.getElementById('jobInfo').classList.remove('muted');
         document.getElementById('jobActions').style.display = 'block';
-        document.getElementById('jobNotesBlock').style.display = 'block';
+        document.getElementById('jobNotesBlock').style.display = 'none';
+        document.getElementById('genRow').style.display = 'none';
+        document.getElementById('statusRow').style.display = 'none';
         hideInsight();
         const sumHtml = String(job.shortSummary || '').trim()
           ? `<div class="skills-block" style="margin-top:10px"><h4>Кратко</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
           : '';
-        const remoteHtml = (String(job.source || '').trim().toLowerCase() !== 'hirehi' && String(job.remoteReasoning || '').trim())
+        const remoteHtml = (isBotAdminUser && String(job.source || '').trim().toLowerCase() !== 'hirehi' && String(job.remoteReasoning || '').trim())
           ? `<div class="skills-block"><h4>Удаленка</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Почему AI считает эту вакансию удаленной?</button></div>`
           : '';
         const applyTypeDisplay = String(getApplyTypeDisplay(job) || '').trim();
