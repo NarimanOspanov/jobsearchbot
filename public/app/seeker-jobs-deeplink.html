@@ -116,6 +116,29 @@
       .date-range-row { margin-top: 8px; }
       .pager { display: inline-flex; align-items: center; gap: 8px; }
       .ghost-btn { background: #0f1730; border: 1px solid var(--border); }
+      .advanced-search-sticky {
+        position: fixed;
+        top: calc(env(safe-area-inset-top, 0px) + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1200;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.22s ease;
+      }
+      #advancedSearchBtn {
+        background: rgba(15, 23, 48, 0.92);
+        border: 1px solid rgba(39, 51, 87, 0.95);
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 600;
+        padding: 6px 10px;
+        border-radius: 999px;
+        backdrop-filter: blur(4px);
+      }
+      #advancedSearchBtn:hover {
+        border-color: var(--accent);
+      }
       .secondary-cta-box {
         margin-top: 12px;
         padding-top: 10px;
@@ -498,6 +521,9 @@
   <!-- /Yandex.Metrika counter -->
   </head>
   <body>
+    <div class="advanced-search-sticky">
+      <button id="advancedSearchBtn" type="button">Открыть</button>
+    </div>
     <div class="wrap">
       <p id="globalMsg" class="muted"></p>
 
@@ -540,7 +566,6 @@
           </div>
           <div class="row date-range-row">
             <button id="syncBtn">Искать</button>
-            <button id="advancedSearchBtn" type="button" class="ghost-btn">Расширенный поиск</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
             <span class="pager">
               <button id="prevPageBtn" type="button" class="ghost-btn">Назад</button>
@@ -682,6 +707,7 @@
       const urlParams = new URLSearchParams(window.location.search);
       const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
       const initialLocationSearch = String(window.location.search || '');
+      const advancedSearchStickyEl = document.querySelector('.advanced-search-sticky');
 
       /**
        * Signed init payload for miniAppAuth.
@@ -1152,6 +1178,13 @@
           if (el) el.disabled = on || lockedFilters.has(id);
         });
         updateHighlyRelevantFilterState();
+      }
+      function updateAdvancedSearchStickyVisibility() {
+        if (!advancedSearchStickyEl) return;
+        const y = Math.max(0, window.scrollY || window.pageYOffset || 0);
+        const alpha = Math.min(1, y / 80);
+        advancedSearchStickyEl.style.opacity = String(alpha);
+        advancedSearchStickyEl.style.pointerEvents = alpha <= 0.02 ? 'none' : 'auto';
       }
       function updateSourceFilterVisibility() {
         const row = document.getElementById('sourceFilterRow');
@@ -2106,6 +2139,8 @@
           setMsg('dashMsg', err?.message || 'Не удалось открыть расширенный поиск.', true);
         }
       });
+      window.addEventListener('scroll', updateAdvancedSearchStickyVisibility, { passive: true });
+      updateAdvancedSearchStickyVisibility();
       document.getElementById('uploadResumeBtn').addEventListener('click', () => {
         uploadMainResumeFromUi()
           .then((ok) => {
