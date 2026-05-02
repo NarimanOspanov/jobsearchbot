@@ -157,7 +157,7 @@
     <div class="wrap">
       <section class="card">
         <h1>Stat2</h1>
-        <p class="muted" style="margin:8px 0 0;">Users, invites, payments and required channel users by period.</p>
+        <p class="muted" style="margin:8px 0 0;">Users, invites, payments, required channel joins, and job detail opens by period.</p>
       </section>
 
       <section class="card">
@@ -192,6 +192,10 @@
         <article class="card metric-card" data-metric="requiredChannelUsers" data-title="Required channel users (last 100)">
           <div class="metric-title">Required channel users</div>
           <div id="requiredChannelUsers" class="metric-value">-</div>
+        </article>
+        <article class="card metric-card" data-metric="jobDetailsOpens" data-title="Job details opens by user (top 100 in period)">
+          <div class="metric-title">Job details opens</div>
+          <div id="jobDetailsOpens" class="metric-value">-</div>
         </article>
       </section>
 
@@ -269,6 +273,10 @@
         el.textContent = Number(value || 0).toLocaleString('en-US');
       }
 
+      function esc(v) {
+        return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
       function formatDateTime(value) {
         if (!value) return '-';
         const dt = new Date(value);
@@ -290,20 +298,39 @@
           return;
         }
         const withInvitedBy = metric === 'usersJoinedByInvite';
-        const rows = items.map((item) => `
-          <tr>
-            <td>${item?.user || '-'}</td>
-            <td class="mono">${formatDateTime(item?.datetime)}</td>
-            ${withInvitedBy ? `<td>${item?.invitedBy || '-'}</td>` : ''}
-          </tr>
-        `).join('');
+        const isJobDetailsOpens = metric === 'jobDetailsOpens';
+        const rows = items.map((item) => {
+          if (isJobDetailsOpens) {
+            const userId = item?.userId ?? '-';
+            const username = esc(item?.telegramUserName || '');
+            const chatId = esc(item?.telegramChatId ?? '');
+            const opens = Number(item?.numberOfJobDetailsOpens || 0).toLocaleString('en-US');
+            return `
+              <tr>
+                <td class="mono">${esc(userId)}</td>
+                <td>${username || '<span class="muted">—</span>'}</td>
+                <td class="mono">${chatId || '<span class="muted">—</span>'}</td>
+                <td class="mono">${opens}</td>
+              </tr>
+            `;
+          }
+          return `
+            <tr>
+              <td>${esc(item?.user || '-')}</td>
+              <td class="mono">${formatDateTime(item?.datetime)}</td>
+              ${withInvitedBy ? `<td>${esc(item?.invitedBy || '-')}</td>` : ''}
+            </tr>
+          `;
+        }).join('');
         metricModalBody.innerHTML = `
           <table class="table">
             <thead>
               <tr>
-                <th>User</th>
-                <th>DateTime</th>
-                ${withInvitedBy ? '<th>Invited by</th>' : ''}
+                ${
+                  isJobDetailsOpens
+                    ? '<th>UserId</th><th>telegramUserName</th><th>TelegramChatId</th><th>NumberOfJobDetailsOpens</th>'
+                    : `<th>User</th><th>DateTime</th>${withInvitedBy ? '<th>Invited by</th>' : ''}`
+                }
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -316,7 +343,11 @@
         metricModalBody.innerHTML = '<p class="muted">Loading...</p>';
         openModal();
         try {
-          const payload = await api(`/api/app/admin/stat2/details?metric=${encodeURIComponent(metric)}&limit=100`);
+          const period = toInt(document.getElementById('periodSel').value, 7);
+          const periodParam = metric === 'jobDetailsOpens' ? `&period=${encodeURIComponent(period)}` : '';
+          const payload = await api(
+            `/api/app/admin/stat2/details?metric=${encodeURIComponent(metric)}&limit=100${periodParam}`
+          );
           renderMetricDetailsTable(metric, Array.isArray(payload?.items) ? payload.items : []);
         } catch (err) {
           metricModalBody.innerHTML = `<p class="bad">Failed to load details: ${err?.message || 'Unknown error'}</p>`;
@@ -328,6 +359,7 @@
         setMetric('usersJoinedByInvite', totals?.usersJoinedByInvite || 0);
         setMetric('payments', totals?.payments || 0);
         setMetric('requiredChannelUsers', totals?.requiredChannelUsers || 0);
+        setMetric('jobDetailsOpens', totals?.jobDetailsOpens || 0);
       }
 
       function renderChart(series) {
@@ -336,6 +368,7 @@
         const usersJoinedByInvite = series.map((row) => Number(row?.usersJoinedByInvite || 0));
         const payments = series.map((row) => Number(row?.payments || 0));
         const requiredChannelUsers = series.map((row) => Number(row?.requiredChannelUsers || 0));
+        const jobDetailsOpens = series.map((row) => Number(row?.jobDetailsOpens || 0));
         if (trendChart) trendChart.destroy();
         trendChart = new Chart(chartCanvas, {
           type: 'line',
@@ -346,6 +379,7 @@
               { label: 'Users joined by invite', data: usersJoinedByInvite, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.2)', tension: 0.2 },
               { label: 'Payments', data: payments, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.2 },
               { label: 'Required channel users', data: requiredChannelUsers, borderColor: '#e879f9', backgroundColor: 'rgba(232,121,249,0.2)', tension: 0.2 },
+              { label: 'Job details opens', data: jobDetailsOpens, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.2)', tension: 0.2 },
             ],
           },
           options: {

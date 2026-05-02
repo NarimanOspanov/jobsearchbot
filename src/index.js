@@ -2875,6 +2875,7 @@ async function main() {
           usersJoinedByInvite: 0,
           payments: 0,
           requiredChannelUsers: 0,
+          jobDetailsOpens: 0,
         });
       }
       const usersJoinedRowsPromise = models.Users
@@ -2905,11 +2906,19 @@ async function main() {
           raw: true,
         })
         : Promise.resolve([]);
-      const [usersJoinedRows, invitedRows, paymentsRows, requiredRows] = await Promise.all([
+      const jobDetailsOpensRowsPromise = models.JobDetailsOpens
+        ? models.JobDetailsOpens.findAll({
+          attributes: ['CreatedAt'],
+          where: { CreatedAt: { [Sequelize.Op.gte]: since } },
+          raw: true,
+        })
+        : Promise.resolve([]);
+      const [usersJoinedRows, invitedRows, paymentsRows, requiredRows, jobDetailsOpensRows] = await Promise.all([
         usersJoinedRowsPromise,
         invitedRowsPromise,
         paymentsRowsPromise,
         requiredRowsPromise,
+        jobDetailsOpensRowsPromise,
       ]);
       for (const row of usersJoinedRows) {
         const key = toUtcDateKey(row?.DateJoined);
@@ -2933,18 +2942,24 @@ async function main() {
         requiredUserPerDaySet.add(dedupeKey);
         byDay.get(key).requiredChannelUsers += 1;
       }
+      for (const row of jobDetailsOpensRows) {
+        const key = toUtcDateKey(row?.CreatedAt);
+        if (key && byDay.has(key)) byDay.get(key).jobDetailsOpens += 1;
+      }
       const series = Array.from(byDay.values());
       const totals = series.reduce((acc, row) => {
         acc.usersJoined += row.usersJoined;
         acc.usersJoinedByInvite += row.usersJoinedByInvite;
         acc.payments += row.payments;
         acc.requiredChannelUsers += row.requiredChannelUsers;
+        acc.jobDetailsOpens += row.jobDetailsOpens;
         return acc;
       }, {
         usersJoined: 0,
         usersJoinedByInvite: 0,
         payments: 0,
         requiredChannelUsers: 0,
+        jobDetailsOpens: 0,
       });
       return res.json({ success: true, period, since: since.toISOString(), totals, series });
     } catch (err) {
@@ -3088,6 +3103,43 @@ async function main() {
           };
         });
         return res.json({ success: true, metric, items });
+      }
+
+      if (metric === 'jobDetailsOpens') {
+        const periodRaw = String(req.query.period || '7').trim();
+        const period = /^\d+$/.test(periodRaw)
+          ? Math.min(365, Math.max(1, Number.parseInt(periodRaw, 10)))
+          : 7;
+        const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
+        if (!models.JobDetailsOpens || !models.Users) {
+          return res.json({ success: true, metric, period, since: since.toISOString(), items: [] });
+        }
+        const rows = await sequelize.query(
+          `
+          SELECT
+            u.Id AS userId,
+            u.TelegramUserName AS telegramUserName,
+            u.TelegramChatId AS telegramChatId,
+            COUNT(*) AS numberOfJobDetailsOpens
+          FROM dbo.JobDetailsOpens AS jdo
+          INNER JOIN dbo.Users AS u ON u.Id = jdo.UserId
+          WHERE jdo.CreatedAt >= :since
+          GROUP BY u.Id, u.TelegramUserName, u.TelegramChatId
+          ORDER BY numberOfJobDetailsOpens DESC
+          OFFSET 0 ROWS FETCH NEXT :limit ROWS ONLY
+          `,
+          {
+            replacements: { since, limit },
+            type: Sequelize.QueryTypes.SELECT,
+          }
+        );
+        const items = (Array.isArray(rows) ? rows : []).map((row) => ({
+          userId: row?.userId ?? null,
+          telegramUserName: row?.telegramUserName ?? null,
+          telegramChatId: row?.telegramChatId ?? null,
+          numberOfJobDetailsOpens: Number(row?.numberOfJobDetailsOpens || 0),
+        }));
+        return res.json({ success: true, metric, period, since: since.toISOString(), items });
       }
 
       return res.status(400).json({ error: 'Unknown metric' });
