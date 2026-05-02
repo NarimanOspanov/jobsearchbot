@@ -299,7 +299,8 @@
         }
         const withInvitedBy = metric === 'usersJoinedByInvite';
         const isJobDetailsOpens = metric === 'jobDetailsOpens';
-        const rows = items.map((item) => {
+        const rows = items.map((item, idx) => {
+          const n = idx + 1;
           if (isJobDetailsOpens) {
             const userId = item?.userId ?? '-';
             const username = esc(item?.telegramUserName || '');
@@ -307,6 +308,7 @@
             const opens = Number(item?.numberOfJobDetailsOpens || 0).toLocaleString('en-US');
             return `
               <tr>
+                <td class="mono">${n}</td>
                 <td class="mono">${esc(userId)}</td>
                 <td>${username || '<span class="muted">—</span>'}</td>
                 <td class="mono">${chatId || '<span class="muted">—</span>'}</td>
@@ -316,6 +318,7 @@
           }
           return `
             <tr>
+              <td class="mono">${n}</td>
               <td>${esc(item?.user || '-')}</td>
               <td class="mono">${formatDateTime(item?.datetime)}</td>
               ${withInvitedBy ? `<td>${esc(item?.invitedBy || '-')}</td>` : ''}
@@ -328,8 +331,8 @@
               <tr>
                 ${
                   isJobDetailsOpens
-                    ? '<th>UserId</th><th>telegramUserName</th><th>TelegramChatId</th><th>NumberOfJobDetailsOpens</th>'
-                    : `<th>User</th><th>DateTime</th>${withInvitedBy ? '<th>Invited by</th>' : ''}`
+                    ? '<th>#</th><th>UserId</th><th>telegramUserName</th><th>TelegramChatId</th><th>NumberOfJobDetailsOpens</th>'
+                    : `<th>#</th><th>User</th><th>DateTime</th>${withInvitedBy ? '<th>Invited by</th>' : ''}`
                 }
               </tr>
             </thead>
