@@ -94,7 +94,7 @@ const JOB_DETAILS_SUBSCRIBE_GATE_CONFIG_KEY = 'JobDetailsOpensBeforeSubscribeGat
 const FREE_JOB_OPENS_MONTHLY_LIMIT_CONFIG_KEY = 'FreeJobOpensMonthlyLimit';
 const CHANNEL_SUBSCRIBE_BONUS_OPENS_CONFIG_KEY = 'ChannelSubscribeBonusOpens';
 const REFERRAL_BONUS_OPENS_CONFIG_KEY = 'ReferralBonusOpens';
-const SCREENLY_SKILLS_URL = 'https://screenly.work/api/all-skills';
+const SCREENLY_SKILLS_URL = 'https://anyhires.com/api/all-skills';
 const DIGITAL_NOMADS_CHANNEL_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
 const screenlySkillsCache = {
   expiresAt: 0,
@@ -2550,7 +2550,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     await ctx.reply('Открыть статистику импорта вакансий:', {
       reply_markup: {
-        inline_keyboard: [[{ text: 'Открыть статистику', url: 'https://screenly.work/JobStat?period=1' }]],
+        inline_keyboard: [[{ text: 'Открыть статистику', url: 'https://anyhires.com/JobStat?period=1' }]],
       },
     });
   });
@@ -2838,7 +2838,7 @@ async function main() {
       const period = /^\d+$/.test(periodRaw)
         ? Math.min(365, Math.max(1, Number.parseInt(periodRaw, 10)))
         : 7;
-      const url = `https://screenly.work/api/global-remote-positions/job-import-stats?period=${encodeURIComponent(period)}`;
+      const url = `https://anyhires.com/api/global-remote-positions/job-import-stats?period=${encodeURIComponent(period)}`;
       const response = await fetch(url);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -3234,11 +3234,11 @@ async function main() {
       }
       upstreamParams.set('page', String(page));
       upstreamParams.set('pageSize', String(pageSize));
-      const url = `https://screenly.work/api/global-remote-positions?${upstreamParams.toString()}`;
+      const url = `https://anyhires.com/api/global-remote-positions?${upstreamParams.toString()}`;
       const response = await fetch(url);
       if (!response.ok) {
         const txt = await response.text();
-        return res.status(response.status).json({ error: txt || 'Failed to load positions from Screenly' });
+        return res.status(response.status).json({ error: txt || 'Failed to load positions from upstream' });
       }
       const payload = await response.json();
       if (
