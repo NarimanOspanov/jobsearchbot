@@ -68,13 +68,18 @@
       .job-card-title { font-weight: 600; line-height: 1.35; }
       .job-card-sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
       .job-card-meta { margin-top: 8px; color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 10px; }
-      .job-status-pill {
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 2px 8px;
-        font-size: 12px;
-        color: var(--muted);
-        white-space: nowrap;
+      .pager-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 32px;
+        padding: 0;
+      }
+      .pager-icon-btn svg {
+        width: 20px;
+        height: 20px;
+        fill: currentColor;
       }
       .artifacts a { color: #8ab4ff; display: inline-block; margin-right: 10px; text-decoration: underline; font-weight: 600; }
       a { color: #9ec5ff; text-decoration: underline; font-weight: 600; }
@@ -531,9 +536,13 @@
             <button id="syncBtn">Поиск</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
             <span class="pager">
-              <button id="prevPageBtn" type="button" class="ghost-btn">Назад</button>
+              <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Предыдущая страница">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+              </button>
               <span id="pageInfo" class="muted">Страница 1</span>
-              <button id="nextPageBtn" type="button" class="ghost-btn">Далее</button>
+              <button id="nextPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Следующая страница">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+              </button>
             </span>
           </div>
           <p id="dashMsg" class="muted"></p>
@@ -1075,6 +1084,7 @@
         return `${roleName}: ${name}`;
       }
       function renderJobSkillsHtml(skillsValue) {
+        if (!isBotAdminUser) return '';
         const list = Array.isArray(skillsValue) ? skillsValue : [];
         const primary = list.filter((s) => s.isHighlyRelevant === true);
         const secondary = list.filter((s) => s.isHighlyRelevant !== true);
@@ -1726,14 +1736,12 @@
           return;
         }
         body.innerHTML = positions.map((p) => {
-          const app = appByScreenlyId(p.id);
           return `<div class="job-card" data-open-job="${p.id}">
             <div class="job-card-head">
               <div>
                 <div class="job-card-title">${esc(p.title)}</div>
                 <div class="job-card-sub">${esc(p.company)} · ${esc(p.location)}</div>
               </div>
-              <span class="job-status-pill">${esc(app?.Status || 'new')}</span>
             </div>
             <div class="job-card-meta">
               <span>Опубликовано: ${esc(formatPostedDate(p.publishedAt) || '—')}</span>
@@ -1798,15 +1806,19 @@
         selectedJob = job;
         selectedApplication = appByScreenlyId(job.id);
         document.getElementById('jobInfo').classList.remove('muted');
-        document.getElementById('jobActions').style.display = 'block';
-        document.getElementById('jobNotesBlock').style.display = 'block';
+        const showAdminJobModal = isBotAdminUser;
+        document.getElementById('jobActions').style.display = showAdminJobModal ? 'block' : 'none';
+        document.getElementById('jobNotesBlock').style.display = showAdminJobModal ? 'block' : 'none';
         hideInsight();
         const sumHtml = String(job.shortSummary || '').trim()
           ? `<div class="skills-block" style="margin-top:10px"><h4>Кратко</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
           : '';
-        const remoteHtml = (String(job.source || '').trim().toLowerCase() !== 'hirehi' && String(job.remoteReasoning || '').trim())
-          ? `<div class="skills-block"><h4>Удаленка</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Почему AI считает эту вакансию удаленной?</button></div>`
-          : '';
+        const remoteHtml =
+          isBotAdminUser &&
+          String(job.source || '').trim().toLowerCase() !== 'hirehi' &&
+          String(job.remoteReasoning || '').trim()
+            ? `<div class="skills-block"><h4>Удаленка</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Почему AI считает эту вакансию удаленной?</button></div>`
+            : '';
         const applyTypeDisplay = String(getApplyTypeDisplay(job) || '').trim();
         const applyCtaSuffix = applyTypeDisplay && applyTypeDisplay !== '—' ? ` (${esc(applyTypeDisplay)})` : '';
         const adminJobIdHtml = isBotAdminUser
@@ -1822,8 +1834,10 @@
           sumHtml +
           renderJobSkillsHtml(job.skills) +
           `</div>`;
-        document.getElementById('statusSel').value = selectedApplication?.Status || 'new';
-        document.getElementById('notesText').value = selectedApplication?.Notes || '';
+        if (showAdminJobModal) {
+          document.getElementById('statusSel').value = selectedApplication?.Status || 'new';
+          document.getElementById('notesText').value = selectedApplication?.Notes || '';
+        }
         setMsg('jobMsg', '');
         renderArtifacts();
         bindJobDetailInteractions(job);
