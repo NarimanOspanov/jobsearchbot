@@ -576,7 +576,7 @@
               <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Предыдущая страница">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
               </button>
-              <span id="pageInfo" class="muted">Страница 1</span>
+              <span id="pageInfo" class="muted pager-summary"></span>
               <button id="nextPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Следующая страница">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
               </button>
@@ -1236,11 +1236,42 @@
         if (!el || !hasSelectedSkills()) return;
         el.checked = isTruthyQueryParam(q().showOnlyHighlyRelevant);
       }
+      /** Compact range label: «12–24 из 328»; tooltip repeats detail for clarity. */
+      function pagerSummaryText(pi) {
+        const page = Number(pi.page) || 1;
+        const pageSize = Number(pi.pageSize) || 100;
+        const count = Number(pi.count) || 0;
+        const total = Number(pi.totalRows) || 0;
+        if (total === 0 && count === 0) return 'Ничего не найдено';
+        if (count === 0) return total > 0 ? `Нет записей на странице · всего ${total}` : 'Ничего не найдено';
+        const from = (page - 1) * pageSize + 1;
+        const to = Math.min(from + count - 1, total > 0 ? total : from + count - 1);
+        const totalShown = total > 0 ? String(total) : '…';
+        return `${from}\u2013${to} из ${totalShown}`;
+      }
+      function pagerSummaryTitle(pi) {
+        const page = Number(pi.page) || 1;
+        const pageSize = Number(pi.pageSize) || 100;
+        const count = Number(pi.count) || 0;
+        const total = Number(pi.totalRows) || 0;
+        if (count === 0) return '';
+        const from = (page - 1) * pageSize + 1;
+        const to = Math.min(from + count - 1, total > 0 ? total : from + count - 1);
+        if (total > 0) {
+          return `Страница ${page}. На этой странице ${count} из ${pageSize} максимум. Всего по фильтру: ${total}.`;
+        }
+        return `Страница ${page}. Показаны позиции с ${from}-й по ${to}-ю.`;
+      }
       function updatePagerUi() {
         const info = document.getElementById('pageInfo');
         const prev = document.getElementById('prevPageBtn');
         const next = document.getElementById('nextPageBtn');
-        if (info) info.textContent = `Страница ${pageInfo.page} · ${pageInfo.count} на странице · Всего ${pageInfo.totalRows}`;
+        if (info) {
+          info.textContent = pagerSummaryText(pageInfo);
+          const tip = pagerSummaryTitle(pageInfo);
+          if (tip) info.setAttribute('title', tip);
+          else info.removeAttribute('title');
+        }
         if (prev) prev.disabled = isSyncing || pageInfo.page <= 1;
         if (next) next.disabled = isSyncing || !pageInfo.hasMore;
       }
