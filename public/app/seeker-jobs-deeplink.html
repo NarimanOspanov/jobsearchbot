@@ -448,6 +448,9 @@
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
       }
+      #jobModal .modal-head {
+        justify-content: flex-end;
+      }
       .modal-body {
         padding: 12px;
         overflow: auto;
@@ -592,7 +595,6 @@
     <div id="jobModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-head">
-          <strong>Детали вакансии</strong>
           <button id="jobModalClose" type="button" class="ghost-btn" aria-label="Закрыть">×</button>
         </div>
         <div class="modal-body">
@@ -1924,7 +1926,7 @@
         if (statusRow) statusRow.style.display = showAdminJobModal ? '' : 'none';
         hideInsight();
         const sumHtml = String(job.shortSummary || '').trim()
-          ? `<div class="skills-block" style="margin-top:10px"><h4>Кратко</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
+          ? `<div class="skills-block" style="margin-top:10px"><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
           : '';
         const remoteHtml = (isBotAdminUser && String(job.source || '').trim().toLowerCase() !== 'hirehi' && String(job.remoteReasoning || '').trim())
           ? `<div class="skills-block"><h4>Удаленка</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Почему AI считает эту вакансию удаленной?</button></div>`
