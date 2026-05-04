@@ -45,6 +45,8 @@ export const config = {
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',
   webhookUrl: getEnv('WEBHOOK_URL') || defaultWebhookUrl,
+  /** Base URL for tailored CV microservice (POST `${base}/generate`). */
+  generateTailoredUrl: getEnv('GENERATE_TAILORED_URL').replace(/\/$/, ''),
   // MSSQL (Azure SQL) – override with DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT
   db: {
     host: process.env.DB_HOST || 'localhost',

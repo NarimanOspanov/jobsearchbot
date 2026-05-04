@@ -3351,17 +3351,38 @@ async function main() {
         });
       }
 
-      const markdown = await generateTailoredResumeMarkdown({ jobTitle, jobDescription, mainResumeText });
-      const pdfBuffer = await markdownToPdfBuffer(markdown);
-      const tailoredCvUrl = await resumeStorage.uploadTailoredResumeBuffer({
-        seekerId,
-        screenlyJobId,
-        fileName: `tailored-cv-${screenlyJobId}.pdf`,
-        mimeType: 'application/pdf',
-        buffer: pdfBuffer,
+      const generateBase = String(config.generateTailoredUrl || '').trim().replace(/\/$/, '');
+      if (!generateBase) {
+        return res.status(503).json({ error: 'GENERATE_TAILORED_URL is not configured' });
+      }
+      const upstreamRes = await fetch(`${generateBase}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          seekerId,
+          screenlyJobId,
+          existingCvText: mainResumeText,
+          jobRequirements: jobDescription,
+        }),
       });
-
-      return res.status(200).json({ tailoredCvUrl, markdown });
+      const upstreamRaw = await upstreamRes.text();
+      let upstreamJson = {};
+      try {
+        upstreamJson = upstreamRaw ? JSON.parse(upstreamRaw) : {};
+      } catch {
+        upstreamJson = {};
+      }
+      if (!upstreamRes.ok) {
+        const msg = upstreamJson?.error || upstreamRaw || upstreamRes.statusText || 'Upstream error';
+        return res.status(upstreamRes.status >= 400 && upstreamRes.status < 600 ? upstreamRes.status : 502).json({
+          error: String(msg).slice(0, 500),
+        });
+      }
+      const tailoredCvUrl = upstreamJson?.url != null ? String(upstreamJson.url).trim() : '';
+      if (!tailoredCvUrl) {
+        return res.status(502).json({ error: 'Tailored CV service returned no url' });
+      }
+      return res.status(200).json({ tailoredCvUrl });
     } catch (err) {
       console.error('POST /api/tailored-resume/upload:', err);
       return res.status(500).json({ error: 'Failed to generate/upload tailored resume' });
