@@ -537,6 +537,7 @@
           </div>
           <div class="row date-range-row">
             <button id="syncBtn">Поиск</button>
+            <button id="clearFiltersBtn" type="button" class="ghost-btn">Сбросить фильтры</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
             <span class="pager">
               <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Предыдущая страница">
@@ -1141,7 +1142,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourceSel', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourceSel', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -2007,6 +2008,42 @@
         setQ({ from: finalFrom, to: finalTo });
       }
 
+      function clearFiltersToLastWeek() {
+        const now = new Date();
+        const to = clampDateToBounds(localIsoDate(now));
+        const fromDate = new Date(now);
+        fromDate.setDate(fromDate.getDate() - 7);
+        const from = clampDateToBounds(localIsoDate(fromDate));
+        const finalFrom = from > to ? to : from;
+
+        const fromInput = document.getElementById('fromDate');
+        const toInput = document.getElementById('toDate');
+        fromInput.value = finalFrom;
+        toInput.value = to;
+
+        bootDeepLinkSkillIdsCsv = '';
+        applySelectedSkillIdsCsv('');
+        applySelectedApplyTypesCsv('');
+
+        const sourceSel = document.getElementById('sourceSel');
+        if (sourceSel) sourceSel.value = '';
+
+        const highlyRelevantCheckbox = document.getElementById('showOnlyHighlyRelevant');
+        if (highlyRelevantCheckbox) highlyRelevantCheckbox.checked = false;
+
+        setQ({
+          from: finalFrom,
+          to,
+          skillIds: '',
+          applyTypes: '',
+          source: '',
+          sourceIds: '',
+          showOnlyHighlyRelevant: '',
+          page: '1',
+          jobId: '',
+        });
+      }
+
       async function boot() {
         hydrateStateToInputs();
         renderSourcePickerOptions();
@@ -2056,6 +2093,10 @@
       document.getElementById('syncBtn').addEventListener('click', () =>
         syncJobs({ trackSearchClick: true }).catch((e) => setMsg('dashMsg', e.message, true))
       );
+      document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+        clearFiltersToLastWeek();
+        syncJobs({ trackSearchClick: true }).catch((e) => setMsg('dashMsg', e.message, true));
+      });
       document.getElementById('prevPageBtn').addEventListener('click', () => {
         const cur = q();
         const nextPage = Math.max(1, (Number.parseInt(String(cur.page || '1'), 10) || 1) - 1);
