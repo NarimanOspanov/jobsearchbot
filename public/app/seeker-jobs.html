@@ -2076,6 +2076,13 @@
       });
       document.getElementById('skillPickerMenu').addEventListener('change', () => {
         bootDeepLinkSkillIdsCsv = '';
+        const selectedSkillIds = getSelectedSkillIdsCsv();
+        const hasSkills = Boolean(selectedSkillIds.trim());
+        setQ({
+          skillIds: selectedSkillIds,
+          showOnlyHighlyRelevant: hasSkills ? q().showOnlyHighlyRelevant : '',
+          page: '1',
+        });
         renderSkillPickerSummary();
       });
       document.getElementById('sourcePickerBtn').addEventListener('click', () => {
