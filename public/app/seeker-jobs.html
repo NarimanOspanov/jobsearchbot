@@ -565,7 +565,7 @@
           <div id="jobInfo" class="muted">Выберите вакансию, чтобы продолжить.</div>
           <div id="jobActions" style="display:none">
             <div class="row">
-              <button id="genBtn">Сгенерировать CV и Cover Letter под вакансию</button>
+              <button id="genBtn">✨ Сгенерировать CV и Cover Letter</button>
               <span id="jobLoader" class="loader" aria-hidden="true"></span>
             </div>
             <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
@@ -1887,7 +1887,7 @@
           return;
         }
         links.innerHTML = selectedApplication.TailoredCVURL
-          ? `<a href="${esc(selectedApplication.TailoredCVURL)}" download target="_blank" rel="noopener noreferrer">Скачать адаптированное CV</a>`
+          ? `<a href="${esc(selectedApplication.TailoredCVURL)}" download target="_blank" rel="noopener noreferrer" class="ghost-btn" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;padding:6px 12px">⬇ Скачать CV под вакансию</a>`
           : '';
         cover.value = selectedApplication.CoverLetter || '';
       }
