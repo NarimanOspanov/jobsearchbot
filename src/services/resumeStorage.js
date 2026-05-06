@@ -1,4 +1,5 @@
 import { BlobServiceClient } from '@azure/storage-blob';
+import { config } from '../config.js';
 
 function sanitizeSegment(value) {
   return String(value || 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -62,3 +63,5 @@ export function createResumeStorage(config) {
 
   return { uploadResumeBuffer, uploadTailoredResumeBuffer };
 }
+
+export const resumeStorage = createResumeStorage(config);
