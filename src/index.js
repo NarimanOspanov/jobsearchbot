@@ -2248,8 +2248,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           return;
         }
         await ctx.reply('Провожу HR-анализ и улучшаю структуру резюме…');
+        let resumeText = '';
         const review = await runWithTyping(ctx.telegram, chatId, async () => {
-          const resumeText = await extractResumeTextFromUrl(resumeUrl);
+          resumeText = await extractResumeTextFromUrl(resumeUrl);
           return reviewResumeWithAI({ resumeText });
         });
         const strengthsText =
@@ -2310,16 +2311,21 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
             },
           });
         }
-        const enhancedResumePdf = await markdownToPdfBuffer(review.rewrittenResume);
-        await ctx.replyWithDocument(
-          {
-            source: enhancedResumePdf,
-            filename: `enhanced-resume-${chatId}-${Date.now()}.pdf`,
+        const enhancedCvRes = await fetch('https://tailered-cv.onrender.com/generate-from-review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resumeText, review }),
+        });
+        if (!enhancedCvRes.ok) {
+          const errBody = await enhancedCvRes.json().catch(() => ({}));
+          throw new Error(errBody.error || 'Failed to generate enhanced CV');
+        }
+        const { url: enhancedCvUrl } = await enhancedCvRes.json();
+        await ctx.reply('Готово! Вот ваша улучшенная ATS-friendly версия резюме:', {
+          reply_markup: {
+            inline_keyboard: [[{ text: '⬇ Скачать улучшенное резюме', url: enhancedCvUrl }]],
           },
-          {
-            caption: 'Готово! Ниже улучшенная ATS-friendly версия вашего резюме в PDF.',
-          }
-        );
+        });
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
       } else if (isPositionCvFlow) {
         const positionId = String(st?.positionId || '').trim();
