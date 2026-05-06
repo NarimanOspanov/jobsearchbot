@@ -508,6 +508,38 @@
         font-weight: 600;
         color: var(--muted);
       }
+      .apply-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        padding: 10px 18px;
+        border-radius: 10px;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 700;
+        font-size: 15px;
+        text-decoration: none;
+        border: none;
+        transition: background 0.15s, transform 0.1s;
+      }
+      .apply-cta:hover {
+        background: #3a68ff;
+        color: #fff;
+        text-decoration: none;
+        transform: translateY(-1px);
+      }
+      .apply-cta:active {
+        transform: scale(0.98);
+      }
+      .apply-cta-source {
+        font-size: 12px;
+        font-weight: 500;
+        opacity: 0.82;
+        background: rgba(255,255,255,0.15);
+        border-radius: 6px;
+        padding: 2px 7px;
+      }
       #rolesFilterRow,
       #searchInFilterRow,
       #sourceFilterRow,
@@ -1932,7 +1964,9 @@
           ? `<div class="skills-block"><h4>Удаленка</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Почему AI считает эту вакансию удаленной?</button></div>`
           : '';
         const applyTypeDisplay = String(getApplyTypeDisplay(job) || '').trim();
-        const applyCtaSuffix = applyTypeDisplay && applyTypeDisplay !== '—' ? ` (${esc(applyTypeDisplay)})` : '';
+        const applySourceBadge = applyTypeDisplay && applyTypeDisplay !== '—'
+          ? `<span class="apply-cta-source">${esc(applyTypeDisplay)}</span>`
+          : '';
         const adminJobIdHtml = isBotAdminUser
           ? `<div class="sub" style="margin-top:4px">ID: #${esc(job.id)}</div>`
           : '';
@@ -1941,7 +1975,7 @@
           `<div><strong>${esc(job.title)}</strong></div>` +
           `<div class="sub">${esc(job.company)} · ${esc(job.location)}</div>` +
           adminJobIdHtml +
-          `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Откликнуться${applyCtaSuffix}</a></div>` +
+          `<div><a class="apply-cta" href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Откликнуться ${applySourceBadge}</a></div>` +
           remoteHtml +
           sumHtml +
           renderJobSkillsHtml(job.skills) +

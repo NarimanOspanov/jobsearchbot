@@ -19,30 +19,35 @@ async function extractTextFromPDF(buffer) {
 
 async function scoreCV(cvText) {
   const systemPrompt = `You are a senior technical recruiter with 15+ years of experience in tech hiring.
+
+LANGUAGE RULE (highest priority): Detect the primary language of the CV. Write every human-readable text field — summary, category names, category feedback, strengths, critical_fixes, and roast — in that same language. For example, if the CV is in Russian, all those fields must be in Russian; if Spanish, in Spanish; if English, in English. Never mix languages.
+
 Analyze the provided CV and return ONLY valid JSON (no markdown, no preamble) in this exact shape:
 
 {
+  "language": "English",
   "name": "Candidate full name or 'Unknown'",
   "title": "Their target role inferred from CV",
   "ats_score": 72,
   "grade": "B",
-  "summary": "2-3 sentence honest executive summary of the candidate",
+  "summary": "2-3 sentence honest executive summary of the candidate (in CV language)",
   "categories": [
-    { "name": "ATS & Keywords", "score": 60, "max": 100, "feedback": "One sharp sentence." },
-    { "name": "Impact & Metrics", "score": 30, "max": 100, "feedback": "One sharp sentence." },
-    { "name": "Structure & Clarity", "score": 80, "max": 100, "feedback": "One sharp sentence." },
-    { "name": "Experience Relevance", "score": 75, "max": 100, "feedback": "One sharp sentence." },
-    { "name": "Education & Certs", "score": 90, "max": 100, "feedback": "One sharp sentence." }
+    { "name": "ATS & Keywords (translated)", "score": 60, "max": 100, "feedback": "One sharp sentence (in CV language)." },
+    { "name": "Impact & Metrics (translated)", "score": 30, "max": 100, "feedback": "One sharp sentence (in CV language)." },
+    { "name": "Structure & Clarity (translated)", "score": 80, "max": 100, "feedback": "One sharp sentence (in CV language)." },
+    { "name": "Experience Relevance (translated)", "score": 75, "max": 100, "feedback": "One sharp sentence (in CV language)." },
+    { "name": "Education & Certs (translated)", "score": 90, "max": 100, "feedback": "One sharp sentence (in CV language)." }
   ],
-  "strengths": ["Strength 1", "Strength 2", "Strength 3"],
-  "critical_fixes": ["Fix 1", "Fix 2", "Fix 3"],
-  "roast": "One savage but constructive one-liner about the CV's biggest flaw."
+  "strengths": ["Strength 1 (in CV language)", "Strength 2", "Strength 3"],
+  "critical_fixes": ["Fix 1 (in CV language)", "Fix 2", "Fix 3"],
+  "roast": "One savage but constructive one-liner about the CV's biggest flaw (in CV language)."
 }
 
 Rules:
 - ats_score is the weighted average of category scores (round to integer)
 - grade: 90-100=A+, 80-89=A, 70-79=B, 60-69=C, 50-59=D, <50=F
-- Be honest, specific, and actionable. Never generic.`;
+- Be honest, specific, and actionable. Never generic.
+- The roast must sting but be fair — name the single most embarrassing flaw.`;
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -66,6 +71,26 @@ Rules:
   // Strip any accidental markdown fences
   const clean = raw.replace(/```json|```/g, '').trim();
   return JSON.parse(clean);
+}
+
+// ─── Localized UI strings for the Telegram preview message ──────────────────
+
+const L10N = {
+  ru: { done: 'Анализ готов', tap: 'Нажмите ниже, чтобы открыть полный отчёт 👇', report: '📊 Открыть полный отчёт' },
+  kk: { done: 'Талдау дайын', tap: 'Толық есепті ашу үшін төменге басыңыз 👇', report: '📊 Толық есепті ашу' },
+  de: { done: 'Analyse fertig', tap: 'Tippe unten für den vollständigen Bericht 👇', report: '📊 Vollständigen Bericht öffnen' },
+  es: { done: 'Análisis listo', tap: 'Toca abajo para ver el informe completo 👇', report: '📊 Ver informe completo' },
+  fr: { done: 'Analyse terminée', tap: 'Appuyez ci-dessous pour voir le rapport complet 👇', report: '📊 Ouvrir le rapport complet' },
+  pt: { done: 'Análise concluída', tap: 'Toque abaixo para ver o relatório completo 👇', report: '📊 Abrir relatório completo' },
+  ar: { done: 'اكتمل التحليل', tap: 'انقر أدناه لفتح التقرير الكامل 👇', report: '📊 فتح التقرير الكامل' },
+  zh: { done: '分析完成', tap: '点击下方查看完整报告 👇', report: '📊 查看完整报告' },
+  uk: { done: 'Аналіз готовий', tap: 'Натисніть нижче, щоб відкрити повний звіт 👇', report: '📊 Відкрити повний звіт' },
+};
+const L10N_DEFAULT = { done: 'Analysis complete', tap: 'Tap below to see the full report 👇', report: '📊 Open Full Report' };
+
+function l10n(language) {
+  const lang = String(language || '').trim().toLowerCase().slice(0, 2);
+  return L10N[lang] || L10N_DEFAULT;
 }
 
 // ─── Session store: userId → latest result (in-memory, fine for small bots) ─
@@ -163,18 +188,19 @@ async function processAndRespond(ctx, cvText, processingMsgId) {
     // Store result so TMA can fetch it
     resultCache.set(String(userId), result);
 
+    const t = l10n(result.language);
     // Edit the "analyzing..." message
     await ctx.telegram.editMessageText(
       ctx.chat.id, processingMsgId, undefined,
-      `✅ *Analysis complete!*\n\n` +
+      `✅ *${t.done}!*\n\n` +
       `👤 *${result.name}* · ${result.title}\n` +
       `🎯 ATS Score: *${result.ats_score}/100* (${result.grade})\n\n` +
       `💬 _${result.roast}_\n\n` +
-      `Tap below to see the full report 👇`,
+      t.tap,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [Markup.button.webApp('📊 Open Full Report', `${TMA_URL}?uid=${userId}`)]
+          [Markup.button.webApp(t.report, `${TMA_URL}?uid=${userId}`)]
         ])
       }
     );
