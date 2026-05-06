@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import express from 'express';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -110,6 +111,7 @@ const ABOUT_MESSAGE = [
 const resumeStorage = createResumeStorage(config);
 const HIRE_AGENT_SIMULATION_CONFIG_KEY = 'hireAgentSimulationVisible';
 const DIGITAL_NOMADS_CHANNEL_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
+const REFERRAL_BONUS_OPENS_CONFIG_KEY = 'ReferralBonusOpens';
 
 
 async function ensureHireAgentSimulationVisibleConfig() {
@@ -248,21 +250,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     await sendStartRequiredChannelsGate(ctx, channelsState.channels);
     return false;
-  };
-
-  const formatUserDisplayName = (user) => {
-    const fullName = [user?.FirstName, user?.LastName]
-      .map((part) => String(part || '').trim())
-      .filter(Boolean)
-      .join(' ');
-    return fullName || 'Не указано';
-  };
-
-  const formatUsername = (raw, { withAt = true } = {}) => {
-    const usernameRaw = String(raw || '').trim();
-    if (!usernameRaw) return 'нет';
-    if (!withAt) return usernameRaw.replace(/^@/, '');
-    return usernameRaw.startsWith('@') ? usernameRaw : `@${usernameRaw}`;
   };
 
   const notifyAdmins = async (ctx, message, errorLabel, telemetry = {}) => {
