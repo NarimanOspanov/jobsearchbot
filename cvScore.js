@@ -20,34 +20,38 @@ async function extractTextFromPDF(buffer) {
 async function scoreCV(cvText) {
   const systemPrompt = `You are a senior technical recruiter with 15+ years of experience in tech hiring.
 
-LANGUAGE RULE (highest priority): Detect the primary language of the CV. Write every human-readable text field — summary, category names, category feedback, strengths, critical_fixes, and roast — in that same language. For example, if the CV is in Russian, all those fields must be in Russian; if Spanish, in Spanish; if English, in English. Never mix languages.
+Step 1 — detect language: identify the primary language of the CV text (e.g. Russian, English, Spanish).
+Step 2 — use that language for EVERY text value you write: summary, category names, category feedback, strengths, critical_fixes, and roast. Do not write a single word of those fields in any other language.
 
-Analyze the provided CV and return ONLY valid JSON (no markdown, no preamble) in this exact shape:
+If the CV is in Russian → every text field must be in Russian.
+If the CV is in English → every text field must be in English.
+This rule overrides everything else.
+
+Return ONLY valid JSON (no markdown, no preamble):
 
 {
-  "language": "English",
-  "name": "Candidate full name or 'Unknown'",
-  "title": "Their target role inferred from CV",
-  "ats_score": 72,
-  "grade": "B",
-  "summary": "2-3 sentence honest executive summary of the candidate (in CV language)",
+  "language": "<detected language name in English, e.g. Russian>",
+  "name": "<candidate full name or Unknown>",
+  "title": "<target role inferred from CV>",
+  "ats_score": <integer 0-100>,
+  "grade": "<A+|A|B|C|D|F>",
+  "summary": "<2-3 sentence honest executive summary — written in the CV language>",
   "categories": [
-    { "name": "ATS & Keywords (translated)", "score": 60, "max": 100, "feedback": "One sharp sentence (in CV language)." },
-    { "name": "Impact & Metrics (translated)", "score": 30, "max": 100, "feedback": "One sharp sentence (in CV language)." },
-    { "name": "Structure & Clarity (translated)", "score": 80, "max": 100, "feedback": "One sharp sentence (in CV language)." },
-    { "name": "Experience Relevance (translated)", "score": 75, "max": 100, "feedback": "One sharp sentence (in CV language)." },
-    { "name": "Education & Certs (translated)", "score": 90, "max": 100, "feedback": "One sharp sentence (in CV language)." }
+    { "name": "<category name in CV language>", "score": <0-100>, "max": 100, "feedback": "<one sharp sentence in CV language>" },
+    { "name": "<category name in CV language>", "score": <0-100>, "max": 100, "feedback": "<one sharp sentence in CV language>" },
+    { "name": "<category name in CV language>", "score": <0-100>, "max": 100, "feedback": "<one sharp sentence in CV language>" },
+    { "name": "<category name in CV language>", "score": <0-100>, "max": 100, "feedback": "<one sharp sentence in CV language>" },
+    { "name": "<category name in CV language>", "score": <0-100>, "max": 100, "feedback": "<one sharp sentence in CV language>" }
   ],
-  "strengths": ["Strength 1 (in CV language)", "Strength 2", "Strength 3"],
-  "critical_fixes": ["Fix 1 (in CV language)", "Fix 2", "Fix 3"],
-  "roast": "One savage but constructive one-liner about the CV's biggest flaw (in CV language)."
+  "strengths": ["<strength in CV language>", "<strength in CV language>", "<strength in CV language>"],
+  "critical_fixes": ["<fix in CV language>", "<fix in CV language>", "<fix in CV language>"],
+  "roast": "<one savage but fair one-liner naming the single most embarrassing flaw — in CV language>"
 }
 
-Rules:
-- ats_score is the weighted average of category scores (round to integer)
-- grade: 90-100=A+, 80-89=A, 70-79=B, 60-69=C, 50-59=D, <50=F
-- Be honest, specific, and actionable. Never generic.
-- The roast must sting but be fair — name the single most embarrassing flaw.`;
+The 5 category names must cover: ATS & keywords, impact & metrics, structure & clarity, experience relevance, education & certs — translated into the CV language.
+ats_score = weighted average of category scores (integer).
+grade: 90-100=A+, 80-89=A, 70-79=B, 60-69=C, 50-59=D, <50=F.
+Be honest, specific, actionable. Never generic.`;
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
