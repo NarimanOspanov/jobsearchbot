@@ -81,7 +81,8 @@
         height: 20px;
         fill: currentColor;
       }
-      .artifacts a { color: #8ab4ff; display: inline-block; margin-right: 10px; text-decoration: underline; font-weight: 600; }
+      .artifacts a { color: #8ab4ff; display: inline-block; margin-right: 10px; text-decoration: none; font-weight: 600; }
+      .artifacts { min-height: 0; }
       a { color: #9ec5ff; text-decoration: underline; font-weight: 600; }
       a:hover { color: #c7ddff; }
       .loader {
@@ -564,21 +565,24 @@
         <div class="modal-body">
           <div id="jobInfo" class="muted">Выберите вакансию, чтобы продолжить.</div>
           <div id="jobActions" style="display:none">
-            <div class="row">
+            <div class="row" style="margin-bottom:12px">
               <button id="genBtn">✨ Сгенерировать CV и Cover Letter</button>
               <span id="jobLoader" class="loader" aria-hidden="true"></span>
             </div>
-            <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
-            <label>Сопроводительное письмо</label>
-            <textarea id="coverPreview" readonly></textarea>
-            <label>Отметить как
-              <select id="statusSel">
+            <div class="artifacts" id="artifactLinks" style="margin-bottom:16px"></div>
+            <div style="margin-bottom:16px">
+              <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600">Сопроводительное письмо</label>
+              <textarea id="coverPreview" readonly style="margin-bottom:0"></textarea>
+            </div>
+            <div style="margin-bottom:12px">
+              <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600">Отметить как</label>
+              <select id="statusSel" style="width:100%">
                 <option value="new">новая</option>
                 <option value="applied">откликнулся</option>
                 <option value="skipped">пропущена</option>
               </select>
-            </label>
-            <p id="jobMsg" class="muted"></p>
+            </div>
+            <p id="jobMsg" class="muted" style="margin-top:8px"></p>
           </div>
           <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
             <div class="skills-block">
