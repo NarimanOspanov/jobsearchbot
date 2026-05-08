@@ -902,15 +902,17 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         if (canUseCvScoreWebApp) {
           await ctx.reply('Открыть полный отчет CV Score:', {
             reply_markup: {
-              inline_keyboard: [[{ text: '📊 Открыть полный отчет по анализу резюме', web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
+              inline_keyboard: [[{ text: '📊 Открыть полный отчет', web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
             },
           });
         }
-        const enhancedCvRes = await fetch('https://tailered-cv.onrender.com/generate-from-review', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ resumeText, review }),
-        });
+        const enhancedCvRes = await runWithTyping(ctx.telegram, chatId, () =>
+          fetch('https://tailered-cv.onrender.com/generate-from-review', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resumeText, review }),
+          })
+        );
         if (!enhancedCvRes.ok) {
           const errBody = await enhancedCvRes.json().catch(() => ({}));
           throw new Error(errBody.error || 'Failed to generate enhanced CV');
