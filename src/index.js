@@ -868,26 +868,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           resumeText = await extractResumeTextFromUrl(resumeUrl);
           return reviewResumeWithAI({ resumeText });
         });
-        const strengthsText =
-          review.strengths.length > 0
-            ? review.strengths.map((item) => `- ${item}`).join('\n')
-            : '- Сильные стороны не определены.';
-        const improvementsText =
-          review.improvements.length > 0
-            ? review.improvements.map((item) => `- ${item}`).join('\n')
-            : '- Рекомендации не определены.';
-        const feedbackMessage = [
-          `CV score: ${review.score}/100`,
-          '',
-          `Summary: ${review.summary}`,
-          '',
-          'Сильные стороны:',
-          strengthsText,
-          '',
-          'Что улучшить:',
-          improvementsText,
-        ].join('\n');
-        await sendLongTelegramText(ctx.telegram, chatId, feedbackMessage);
         const cvScoreResult = {
           name: `${ctx.from?.first_name || ''} ${ctx.from?.last_name || ''}`.trim() || 'Candidate',
           title: 'Resume Review',
