@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Sequelize } from 'sequelize';
-import { adminMiniAppAuth } from '../../middleware/auth.js';
+import { adminMiniAppAuth, miniAppAuth } from '../../middleware/auth.js';
+import { config } from '../../config.js';
 import { models, sequelize } from '../../db.js';
 import { buildAdminUserContactProjection } from '../../services/userService.js';
 import { extractResumeTextFromUrl } from '../../services/resumeService.js';
@@ -291,10 +292,17 @@ export function createAdminRouter() {
     }
   });
 
-  router.get('/api/app/admin/users/:id/resume-text', adminMiniAppAuth, async (req, res) => {
+  router.get('/api/app/admin/users/:id/resume-text', miniAppAuth, async (req, res) => {
     try {
       const id = Number.parseInt(String(req.params.id), 10);
       if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
+      const telegramUserId = Number(req.miniAppUser?.id);
+      const adminIds = config.botAdminTelegramIds;
+      const isAdmin = Number.isSafeInteger(telegramUserId) && adminIds.size > 0 && adminIds.has(telegramUserId);
+      if (!isAdmin) {
+        const requester = await models.Users.findOne({ where: { TelegramChatId: telegramUserId }, attributes: ['Id'] });
+        if (!requester || Number(requester.Id) !== id) return res.status(403).json({ error: 'Forbidden' });
+      }
       const user = await models.Users.findByPk(id);
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (!user.ResumeURL) return res.status(404).json({ error: 'Resume URL is not set for this user' });

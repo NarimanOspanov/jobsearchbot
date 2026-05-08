@@ -1841,7 +1841,7 @@
         selectedApplication = appByScreenlyId(job.id);
         document.getElementById('jobInfo').classList.remove('muted');
         const showAdminJobModal = isBotAdminUser;
-        document.getElementById('jobActions').style.display = showAdminJobModal ? 'block' : 'none';
+        document.getElementById('jobActions').style.display = 'block';
         document.getElementById('jobNotesBlock').style.display = showAdminJobModal ? 'block' : 'none';
         hideInsight();
         const sumHtml = String(job.shortSummary || '').trim()
