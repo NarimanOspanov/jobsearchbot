@@ -922,7 +922,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         if (canUseCvScoreWebApp) {
           await ctx.reply('Открыть полный отчет CV Score:', {
             reply_markup: {
-              inline_keyboard: [[{ text: '📊 Open Full Report', web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
+              inline_keyboard: [[{ text: '📊 Открыть полный отчет по анализу резюме', web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
             },
           });
         }

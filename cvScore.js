@@ -196,11 +196,7 @@ async function processAndRespond(ctx, cvText, processingMsgId) {
     // Edit the "analyzing..." message
     await ctx.telegram.editMessageText(
       ctx.chat.id, processingMsgId, undefined,
-      `✅ *${t.done}!*\n\n` +
-      `👤 *${result.name}* · ${result.title}\n` +
-      `🎯 ATS Score: *${result.ats_score}/100* (${result.grade})\n\n` +
-      `💬 _${result.roast}_\n\n` +
-      t.tap,
+      `✅ *${t.done}!*`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
