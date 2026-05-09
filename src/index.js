@@ -862,68 +862,29 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           await ctx.reply('Для CV score сейчас поддерживаются PDF/TXT файлы. Пожалуйста, отправьте резюме в PDF.');
           return;
         }
-        await ctx.reply('Провожу HR-анализ и улучшаю структуру резюме…');
-        let resumeText = '';
-        const review = await runWithTyping(ctx.telegram, chatId, async () => {
-          resumeText = await extractResumeTextFromUrl(resumeUrl);
-          return reviewResumeWithAI({ resumeText });
-        });
-        const cvScoreResult = {
-          name: `${ctx.from?.first_name || ''} ${ctx.from?.last_name || ''}`.trim() || 'Candidate',
-          title: 'Resume Review',
-          ats_score: review.score,
-          grade:
-            review.score >= 90 ? 'A+'
-              : review.score >= 80 ? 'A'
-                : review.score >= 70 ? 'B'
-                  : review.score >= 60 ? 'C'
-                    : review.score >= 50 ? 'D'
-                      : 'F',
-          summary: review.summary,
-          categories: [
-            {
-              name: 'ATS & Keywords',
-              score: review.score,
-              max: 100,
-              feedback: review.improvements[0] || 'Improve keyword relevance and role-specific terms.',
-            },
-            {
-              name: 'Structure & Clarity',
-              score: review.score,
-              max: 100,
-              feedback: review.improvements[1] || 'Keep sections concise with measurable outcomes.',
-            },
-          ],
-          strengths: review.strengths,
-          critical_fixes: review.improvements,
-          roast: review.summary,
-        };
-        cvScoreResultByUserId.set(String(chatId), cvScoreResult);
-        if (canUseCvScoreWebApp) {
-          await ctx.reply('Открыть полный отчет CV Score:', {
-            reply_markup: {
-              inline_keyboard: [[{ text: '📊 Открыть полный отчет', web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
-            },
-          });
-        }
-        const enhancedCvRes = await runWithTyping(ctx.telegram, chatId, () =>
-          fetch('https://tailered-cv.onrender.com/generate-from-review', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ resumeText, review }),
-          })
+        const resumeText = await runWithTyping(ctx.telegram, chatId, () =>
+          extractResumeTextFromUrl(resumeUrl)
         );
-        if (!enhancedCvRes.ok) {
-          const errBody = await enhancedCvRes.json().catch(() => ({}));
-          throw new Error(errBody.error || 'Failed to generate enhanced CV');
+        if (!resumeText) {
+          await ctx.reply('Не удалось извлечь текст из резюме. Попробуйте отправить PDF с текстовым слоем.');
+          hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
+          return;
         }
-        const { url: enhancedCvUrl } = await enhancedCvRes.json();
-        await ctx.reply('Готово! Вот ваша улучшенная ATS-friendly версия резюме:', {
-          reply_markup: {
-            inline_keyboard: [[{ text: '⬇ Скачать улучшенное резюме', url: enhancedCvUrl }]],
-          },
-        });
-        hireAgentStateByChatId.set(chatId, { step: 'idle' });
+        hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_choice', resumeText });
+        await ctx.reply(
+          '✅ Резюме получено! Что хотите сделать?\n\n' +
+          '🌟 *Просто улучшить резюме* — анализ и ATS-friendly версия.\n\n' +
+          '💼 *На основе требований вакансии* — CV под конкретную вакансию.',
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              keyboard: [
+                ['🌟 Просто улучшить резюме', '💼 На основе требований вакансии'],
+              ],
+              resize_keyboard: true,
+            },
+          }
+        );
       } else if (isPositionCvFlow) {
         const positionId = String(st?.positionId || '').trim();
         if (positionId && models.UserApplications) {
@@ -1256,10 +1217,121 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const cmd = ctx.message?.entities?.[0];
     if (cmd?.type === 'bot_command' && cmd.offset === 0) return next();
     const st = hireAgentStateByChatId.get(ctx.chat.id);
+    const chatId = ctx.chat.id;
+    const text = ctx.message.text;
+
     if (st?.step === 'awaiting_cv') {
       await ctx.reply('Пожалуйста, отправьте резюме файлом (PDF или изображение), а не текстом.');
       return;
     }
+
+    if (st?.step === 'awaiting_cv_choice') {
+      if (text === '🌟 Просто улучшить резюме') {
+        hireAgentStateByChatId.set(chatId, { step: 'idle' });
+        await ctx.reply('Провожу HR-анализ и улучшаю структуру резюме…', {
+          reply_markup: { remove_keyboard: true },
+        });
+        let review;
+        try {
+          review = await runWithTyping(ctx.telegram, chatId, () =>
+            reviewResumeWithAI({ resumeText: st.resumeText })
+          );
+        } catch (err) {
+          console.error('reviewResumeWithAI error:', err);
+          await ctx.reply('Не удалось проанализировать резюме. Попробуйте ещё раз.');
+          return;
+        }
+        const cvScoreResult = {
+          name: `${ctx.from?.first_name || ''} ${ctx.from?.last_name || ''}`.trim() || 'Candidate',
+          title: 'Resume Review',
+          ats_score: review.score,
+          grade:
+            review.score >= 90 ? 'A+'
+              : review.score >= 80 ? 'A'
+                : review.score >= 70 ? 'B'
+                  : review.score >= 60 ? 'C'
+                    : review.score >= 50 ? 'D'
+                      : 'F',
+          summary: review.summary,
+          categories: [
+            { name: 'ATS & Keywords', score: review.score, max: 100, feedback: review.improvements[0] || 'Improve keyword relevance.' },
+            { name: 'Structure & Clarity', score: review.score, max: 100, feedback: review.improvements[1] || 'Keep sections concise.' },
+          ],
+          strengths: review.strengths,
+          critical_fixes: review.improvements,
+          roast: review.summary,
+        };
+        cvScoreResultByUserId.set(String(chatId), cvScoreResult);
+        if (canUseCvScoreWebApp) {
+          await ctx.reply('Открыть полный отчет CV Score:', {
+            reply_markup: {
+              inline_keyboard: [[{ text: '📊 Открыть полный отчет', web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
+            },
+          });
+        }
+        try {
+          const enhancedCvRes = await runWithTyping(ctx.telegram, chatId, () =>
+            fetch('https://tailered-cv.onrender.com/generate-from-review', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ resumeText: st.resumeText, review }),
+            })
+          );
+          if (!enhancedCvRes.ok) throw new Error('Failed to generate enhanced CV');
+          const { url: enhancedCvUrl } = await enhancedCvRes.json();
+          await ctx.reply('Готово! Вот ваша улучшенная ATS-friendly версия резюме:', {
+            reply_markup: {
+              inline_keyboard: [[{ text: '⬇ Скачать улучшенное резюме', url: enhancedCvUrl }]],
+            },
+          });
+        } catch (err) {
+          console.error('generate-from-review error:', err);
+          await ctx.reply('Не удалось сгенерировать улучшенное резюме. Попробуйте ещё раз.');
+        }
+        return;
+      }
+
+      if (text === '💼 На основе требований вакансии') {
+        hireAgentStateByChatId.set(chatId, { step: 'awaiting_job_desc', resumeText: st.resumeText });
+        await ctx.reply('📋 Отправьте текст вакансии, под которую нужно адаптировать резюме:', {
+          reply_markup: { remove_keyboard: true },
+        });
+        return;
+      }
+
+      await ctx.reply('Пожалуйста, выберите один из вариантов выше.');
+      return;
+    }
+
+    if (st?.step === 'awaiting_job_desc') {
+      if (text.length < 50) {
+        await ctx.reply('Текст слишком короткий. Пожалуйста, вставьте полное описание вакансии.');
+        return;
+      }
+      hireAgentStateByChatId.set(chatId, { step: 'idle' });
+      await ctx.reply('⏳ Адаптирую резюме под вакансию…');
+      try {
+        const res = await runWithTyping(ctx.telegram, chatId, () =>
+          fetch('https://tailered-cv.onrender.com/generate-simple', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ existingCvText: st.resumeText, jobRequirements: text }),
+          })
+        );
+        if (!res.ok) throw new Error('Tailored CV API error');
+        const { url: cvUrl } = await res.json();
+        await ctx.reply('✅ Готово! Вот ваше адаптированное резюме:', {
+          reply_markup: {
+            inline_keyboard: [[{ text: '⬇ Скачать резюме', url: cvUrl }]],
+          },
+        });
+      } catch (err) {
+        console.error('generate-simple error:', err);
+        await ctx.reply('Не удалось сгенерировать резюме. Попробуйте ещё раз.');
+      }
+      return;
+    }
+
     return next();
   });
 
