@@ -12,6 +12,17 @@ export const SUPPORTED_BOT_LANGUAGES = SUPPORTED_USER_LANGUAGES;
 
 export const DEFAULT_BOT_LANGUAGE = 'ru';
 
+/** Bump when BOT_MENU_COMMANDS change — triggers one-time refresh on live bot process. */
+export const BOT_MENU_VERSION = 2;
+
+const MENU_API_DELAY_MS = 40;
+let appliedMenuVersion = 0;
+let menuRefreshInFlight = null;
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** @param {string} text @param {string} key */
 export function textMatchesAnyLang(text, key) {
   return SUPPORTED_BOT_LANGUAGES.some((locale) => t(locale, key) === text);
@@ -64,4 +75,51 @@ export async function syncUserMenuCommands(telegram, chatId, lang) {
   await telegram.setMyCommands(getMenuCommands(locale), {
     scope: { type: 'chat', chat_id: Number(chatId) },
   });
+}
+
+/**
+ * Push global menus and refresh per-chat overrides (no bot process restart).
+ * @param {import('telegraf').Telegram} telegram
+ * @param {{ users?: Array<{ telegramChatId: number | string, language?: string | null }> }} [options]
+ */
+export async function refreshBotMenus(telegram, options = {}) {
+  if (!telegram) return { global: false, synced: 0, cleared: 0 };
+  await registerBotMenuCommands(telegram);
+
+  const users = Array.isArray(options.users) ? options.users : [];
+  let synced = 0;
+  let cleared = 0;
+
+  for (const user of users) {
+    const chatId = Number(user.telegramChatId);
+    if (!Number.isSafeInteger(chatId)) continue;
+    const dbLang = String(user.language || '').trim().toLowerCase();
+    try {
+      if (dbLang === 'ru' || dbLang === 'en') {
+        await syncUserMenuCommands(telegram, chatId, dbLang);
+        synced += 1;
+      } else {
+        await telegram.deleteMyCommands({ scope: { type: 'chat', chat_id: chatId } });
+        cleared += 1;
+      }
+    } catch (err) {
+      console.warn('refreshBotMenus user failed:', { chatId, error: err?.message || err });
+    }
+    await delay(MENU_API_DELAY_MS);
+  }
+
+  appliedMenuVersion = BOT_MENU_VERSION;
+  return { global: true, synced, cleared };
+}
+
+/** Idempotent: refresh menus once per process when BOT_MENU_VERSION increases. */
+export function ensureBotMenusApplied(telegram, users = []) {
+  if (!telegram || appliedMenuVersion >= BOT_MENU_VERSION) {
+    return Promise.resolve({ skipped: true });
+  }
+  if (menuRefreshInFlight) return menuRefreshInFlight;
+  menuRefreshInFlight = refreshBotMenus(telegram, { users }).finally(() => {
+    menuRefreshInFlight = null;
+  });
+  return menuRefreshInFlight;
 }

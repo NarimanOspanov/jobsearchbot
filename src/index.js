@@ -66,13 +66,16 @@ import {
   t,
   langFromCtx,
   textMatchesAnyLang,
-  registerBotMenuCommands,
+  refreshBotMenus,
+  ensureBotMenusApplied,
+  syncUserMenuCommands,
 } from './i18n/botI18n.js';
 import {
   hireAgentStateByChatId,
   legacyKeyboardClearedByChatId,
   cvScoreResultByUserId,
   runtimeBot,
+  menuSyncedChatIds,
 } from './bot/state.js';
 
 // routes
@@ -509,6 +512,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   };
 
   bot.use(async (ctx, next) => {
+    if (runtimeBot.telegram) {
+      ensureBotMenusApplied(runtimeBot.telegram).catch((err) => {
+        console.warn('ensureBotMenusApplied failed:', err?.message || err);
+      });
+    }
     await tryRemoveLegacyKeyboard(ctx);
     return next();
   });
@@ -519,6 +527,21 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       ctx.state.isFirstTimeUser = wasCreated;
       ctx.state.lang = resolveBotLanguage(user?.Language, ctx.from?.language_code);
       ctx.state.userLanguage = user?.Language ?? null;
+      if (user?.TelegramChatId && runtimeBot.telegram) {
+        const chatId = Number(user.TelegramChatId);
+        if (Number.isSafeInteger(chatId) && !menuSyncedChatIds.has(chatId)) {
+          menuSyncedChatIds.add(chatId);
+          const dbLang = String(user.Language || '').trim().toLowerCase();
+          const syncPromise =
+            dbLang === 'ru' || dbLang === 'en'
+              ? syncUserMenuCommands(runtimeBot.telegram, chatId, dbLang)
+              : runtimeBot.telegram.deleteMyCommands({ scope: { type: 'chat', chat_id: chatId } });
+          syncPromise.catch((err) => {
+            console.warn('Per-chat menu sync failed:', { chatId, error: err?.message || err });
+            menuSyncedChatIds.delete(chatId);
+          });
+        }
+      }
       if (wasCreated && user) {
         const totalUsers = await models.Users.count();
         const message = [
@@ -969,6 +992,28 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.command('referrals', async (ctx) => {
     await sendReferralScreen(ctx);
+  });
+
+  bot.command('refreshmenus', async (ctx) => {
+    const ok = await ensurePrivateAdminForHiddenCommand(ctx, '/refreshmenus');
+    if (!ok) return;
+    await ctx.reply('Refreshing bot command menus…');
+    try {
+      const rows = await models.Users.findAll({
+        attributes: ['TelegramChatId', 'Language'],
+      });
+      const users = rows.map((u) => ({
+        telegramChatId: u.TelegramChatId,
+        language: u.Language,
+      }));
+      const result = await refreshBotMenus(runtimeBot.telegram, { users });
+      await ctx.reply(
+        `Menus updated. Global: ok. Per-chat synced: ${result.synced}, cleared: ${result.cleared}.`
+      );
+    } catch (err) {
+      console.error('refreshmenus failed:', err);
+      await ctx.reply(`Failed: ${err?.message || err}`);
+    }
   });
 
   bot.command('admin', async (ctx) => {
@@ -1466,7 +1511,10 @@ async function main() {
   registerHandlers(bot, appBaseUrl, { hireAgentSimulationVisible });
 
   try {
-    await registerBotMenuCommands(bot.telegram);
+    const rows = await models.Users.findAll({ attributes: ['TelegramChatId', 'Language'] });
+    await refreshBotMenus(bot.telegram, {
+      users: rows.map((u) => ({ telegramChatId: u.TelegramChatId, language: u.Language })),
+    });
   } catch (err) {
     console.error('Failed to set menu commands:', err.message);
   }
