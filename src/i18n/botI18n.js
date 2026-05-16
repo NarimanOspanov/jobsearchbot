@@ -12,11 +12,8 @@ export const SUPPORTED_BOT_LANGUAGES = SUPPORTED_USER_LANGUAGES;
 
 export const DEFAULT_BOT_LANGUAGE = 'en';
 
-/** Bump when BOT_MENU_COMMANDS change — triggers one-time refresh on live bot process. */
+/** Bump when BOT_MENU_COMMANDS change (run `/refreshmenus` or `npm run menus:refresh`). */
 export const BOT_MENU_VERSION = 4;
-
-let appliedMenuVersion = 0;
-let menuRefreshInFlight = null;
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -93,18 +90,6 @@ export async function refreshBotMenus(telegram, options = {}) {
     await delay(40);
   }
 
-  appliedMenuVersion = BOT_MENU_VERSION;
   return { global: true, cleared };
 }
 
-/** Idempotent: refresh menus once per process when BOT_MENU_VERSION increases. */
-export function ensureBotMenusApplied(telegram) {
-  if (!telegram || appliedMenuVersion >= BOT_MENU_VERSION) {
-    return Promise.resolve({ skipped: true });
-  }
-  if (menuRefreshInFlight) return menuRefreshInFlight;
-  menuRefreshInFlight = refreshBotMenus(telegram).finally(() => {
-    menuRefreshInFlight = null;
-  });
-  return menuRefreshInFlight;
-}

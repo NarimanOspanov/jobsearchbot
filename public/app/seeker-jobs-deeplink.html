@@ -59,6 +59,8 @@
       }
       .job-card:active { transform: scale(0.998); }
       .job-card:hover { border-color: var(--accent); }
+      .job-card.is-opening { opacity: 0.75; pointer-events: none; }
+      .job-card-loader.loader { flex-shrink: 0; margin-top: 2px; }
       .job-card-head {
         display: flex;
         justify-content: space-between;
@@ -637,7 +639,7 @@
               <span id="jobLoader" class="loader" aria-hidden="true"></span>
             </div>
             <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
-            <label id="statusRow">Отметить как
+            <label id="statusRow" style="display:none">Отметить как
               <select id="statusSel">
                 <option value="new">новая</option>
                 <option value="applied">откликнулся</option>
@@ -744,10 +746,15 @@
       </div>
     </div>
 
+    <script src="/app/tma-i18n.js"></script>
+    <script src="/app/seeker-jobs-i18n.js"></script>
     <script>
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
       const urlParams = new URLSearchParams(window.location.search);
+      let uiLang = TmaI18n.resolveLang(tg, urlParams);
+      const sj = (key, params) => SeekerJobsI18n.sj(uiLang, key, params);
+      SeekerJobsI18n.applyStaticUi(uiLang);
       const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
       const initialLocationSearch = String(window.location.search || '');
       const advancedSearchStickyEl = document.querySelector('.advanced-search-sticky');
@@ -850,6 +857,7 @@
       let selectedApplication = null;
       let isSyncing = false;
       let isJobBusy = false;
+      let openingJobId = null;
       let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
       let isJobModalOpen = false;
       let isInsightModalOpen = false;
@@ -867,18 +875,8 @@
       let botUsername = '';
       let bootDeepLinkSkillIdsCsv = '';
       const CHANNEL_ALTERNATIVE_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
-      const APPLY_TYPE_OPTIONS = [
-        { value: 'linkedin', label: 'LinkedIn' },
-        { value: 'indeed', label: 'Indeed' },
-        { value: 'telegram', label: 'Telegram' },
-        { value: 'external', label: 'Сайты компаний' },
-      ];
-      const APPLY_TYPE_LABELS = {
-        linkedin: 'LinkedIn',
-        indeed: 'Indeed',
-        telegram: 'Telegram',
-        external: 'Сайты компаний',
-      };
+      let APPLY_TYPE_OPTIONS = SeekerJobsI18n.getApplyTypeOptions(uiLang);
+      let APPLY_TYPE_LABELS = SeekerJobsI18n.getApplyTypeLabels(uiLang);
       function getApplyTypeDisplay(position) {
         const applyType = String(position?.applyType || '').trim().toLowerCase();
         const source = String(position?.source || '').trim().toLowerCase();
@@ -887,7 +885,7 @@
           if (source === 'indeed') return 'Indeed';
         }
         if (applyType === 'telegram') return 'Telegram';
-        if (applyType === 'external') return 'Сторонний сайт';
+        if (applyType === 'external') return APPLY_TYPE_LABELS.thirdParty;
         if (applyType === 'linkedin') return 'LinkedIn';
         if (applyType === 'indeed') return 'Indeed';
         return APPLY_TYPE_LABELS[applyType] || position?.applyType || '—';
@@ -1173,8 +1171,8 @@
             })
             .join('');
         let out = '<div class="skills-block">';
-        out += `<h4>Ключевые навыки</h4><div>${chips(primary, 'primary') || '<span class="muted">Нет</span>'}</div>`;
-        out += `<h4>Дополнительные навыки</h4><div>${chips(secondary, '') || '<span class="muted">Нет</span>'}</div>`;
+        out += `<h4>${esc(sj('keySkills'))}</h4><div>${chips(primary, 'primary') || `<span class="muted">${esc(sj('none'))}</span>`}</div>`;
+        out += `<h4>${esc(sj('extraSkills'))}</h4><div>${chips(secondary, '') || `<span class="muted">${esc(sj('none'))}</span>`}</div>`;
         out += '</div>';
         return out;
       }
@@ -1211,6 +1209,13 @@
       function onLoading(id, on) {
         const el = document.getElementById(id);
         el.className = on ? 'loader on' : 'loader';
+      }
+      function setJobCardLoading(jobId, on) {
+        const row = document.querySelector(`.job-card[data-open-job="${jobId}"]`);
+        if (!row) return;
+        row.classList.toggle('is-opening', on);
+        const loader = row.querySelector('.job-card-loader');
+        if (loader) loader.classList.toggle('on', on);
       }
       function setSyncBusy(on) {
         isSyncing = on;
@@ -1276,12 +1281,12 @@
         const pageSize = Number(pi.pageSize) || 100;
         const count = Number(pi.count) || 0;
         const total = Number(pi.totalRows) || 0;
-        if (total === 0 && count === 0) return 'Ничего не найдено';
-        if (count === 0) return total > 0 ? `Нет записей на странице · всего ${total}` : 'Ничего не найдено';
+        if (total === 0 && count === 0) return sj('pagerNone');
+        if (count === 0) return total > 0 ? sj('pagerEmptyPage', { total }) : sj('pagerNone');
         const from = (page - 1) * pageSize + 1;
         const to = Math.min(from + count - 1, total > 0 ? total : from + count - 1);
         const totalShown = total > 0 ? String(total) : '…';
-        return `${from}\u2013${to} из ${totalShown}`;
+        return sj('pagerRange', { from, to, total: totalShown });
       }
       function pagerSummaryTitle(pi) {
         const page = Number(pi.page) || 1;
@@ -1292,9 +1297,9 @@
         const from = (page - 1) * pageSize + 1;
         const to = Math.min(from + count - 1, total > 0 ? total : from + count - 1);
         if (total > 0) {
-          return `Страница ${page}. На этой странице ${count} из ${pageSize} максимум. Всего по фильтру: ${total}.`;
+          return sj('pagerTitleFull', { page, count, pageSize, total });
         }
-        return `Страница ${page}. Показаны позиции с ${from}-й по ${to}-ю.`;
+        return sj('pagerTitleRange', { page, from, to });
       }
       function updatePagerUi() {
         const info = document.getElementById('pageInfo');
@@ -1318,8 +1323,8 @@
         });
       }
       function showInsight(title, text) {
-        document.getElementById('insightModalTitle').textContent = String(title || '').trim() || 'AI-пояснение';
-        document.getElementById('insightModalText').textContent = String(text || '').trim() || 'Нет данных.';
+        document.getElementById('insightModalTitle').textContent = String(title || '').trim() || sj('insightTitle');
+        document.getElementById('insightModalText').textContent = String(text || '').trim() || sj('noData');
         isInsightModalOpen = true;
         document.getElementById('insightModal').classList.add('on');
       }
@@ -1341,13 +1346,13 @@
         document.querySelectorAll('.skill-tag[data-justification]').forEach((el) => {
           el.addEventListener('click', () => {
             const justification = el.getAttribute('data-justification') || '';
-            showInsight('Почему AI выделил этот навык?', justification);
+            showInsight(sj('skillWhy'), justification);
           });
         });
         const remoteBtn = document.getElementById('showRemoteReasonBtn');
         if (remoteBtn) {
           remoteBtn.addEventListener('click', () => {
-            showInsight('Почему AI считает вакансию удаленной?', job.remoteReasoning || 'Нет данных.');
+            showInsight(sj('remoteWhy'), job.remoteReasoning || sj('noData'));
           });
         }
       }
@@ -1376,13 +1381,13 @@
         if (!file) {
           if (uploadBtn) uploadBtn.disabled = true;
           if (picker) {
-            picker.innerHTML = `<div><div>Нажмите, чтобы выбрать файл</div><div class="resume-file-picker-name">PDF/JPG/PNG/WEBP - до 15 MB</div></div>`;
+            picker.innerHTML = `<div><div>${esc(sj('pickFile'))}</div><div class="resume-file-picker-name">${esc(sj('pickFileTypes'))}</div></div>`;
           }
           return;
         }
         if (uploadBtn) uploadBtn.disabled = false;
         if (picker) {
-          picker.innerHTML = `<div><div>Файл выбран</div><div class="resume-file-picker-name">${esc(file.name)}</div></div>`;
+          picker.innerHTML = `<div><div>${esc(sj('fileSelected'))}</div><div class="resume-file-picker-name">${esc(file.name)}</div></div>`;
         }
       }
       function openSubscribeRequiredModal(payload, jobId) {
@@ -1396,7 +1401,7 @@
         if (!firstUrl) {
           openBtn.dataset.url = '';
           openBtn.disabled = true;
-          list.textContent = 'Канал пока не настроен. Обратитесь к администратору.';
+          list.textContent = sj('channelNotConfigured');
         } else {
           openBtn.dataset.url = firstUrl;
           openBtn.disabled = false;
@@ -1422,29 +1427,29 @@
         const plans = Array.isArray(payload?.monetization?.plans) ? payload.monetization.plans : [];
         const list = document.getElementById('paymentPlansList');
         if (!plans.length) {
-          list.innerHTML = '<div class="muted">Сейчас нет доступных тарифов.</div>';
+          list.innerHTML = `<div class="muted">${esc(sj('noPlans'))}</div>`;
         } else {
           const plan = plans[0];
           const code = String(plan?.code || '').trim().toLowerCase();
           const stars = Number(plan?.priceInStars || 0);
           const usdText = toUsdText(plan?.priceUsd);
-          const priceLabel = usdText ? `~${usdText} / месяц · ⭐ ${stars} Stars` : `⭐ ${stars} Stars`;
+          const priceLabel = usdText ? sj('planPriceMonthly', { usd: usdText, stars }) : sj('planPriceStars', { stars });
           list.innerHTML = `<div class="resume-upload-box paywall-card">
             <div class="paywall-top">
-              <div class="paywall-plan-name">${esc(plan?.name || 'Премиум')}</div>
+              <div class="paywall-plan-name">${esc(plan?.name || sj('premium'))}</div>
             </div>
             <div class="paywall-plan-price">${esc(priceLabel)}</div>
             <ul class="paywall-feature-list">
-              <li>Доступ к вакансиям</li>
-              <li>Автогенерация резюме и cover letter</li>
+              <li>${esc(sj('planFeatureJobs'))}</li>
+              <li>${esc(sj('planFeatureAi'))}</li>
             </ul>
-            <button type="button" class="paywall-primary-btn" data-plan-code="${attrEsc(code)}">Получить Премиум</button>
+            <button type="button" class="paywall-primary-btn" data-plan-code="${attrEsc(code)}">${esc(sj('getPremium'))}</button>
           </div>`;
           list.querySelectorAll('[data-plan-code]').forEach((btn) => {
             btn.addEventListener('click', () => {
               const planCode = String(btn.getAttribute('data-plan-code') || '').trim();
               openTelegramPaymentForPlan(planCode).catch((err) => {
-                setMsg('paymentRequiredMsg', err?.message || 'Не удалось открыть ссылку на оплату.', true);
+                setMsg('paymentRequiredMsg', err?.message || sj('errPaymentLink'), true);
               });
             });
           });
@@ -1507,7 +1512,7 @@
           err.payload = payload;
           throw err;
         }
-        throw new Error(String(payload?.error || raw || 'Не удалось зафиксировать открытие деталей вакансии'));
+        throw new Error(String(payload?.error || raw || sj('errOpenJobDetails')));
       }
       async function verifyRequiredChannels() {
         const payload = await api('/api/app/required-channels/verify', {
@@ -1555,14 +1560,14 @@
           : '/api/app/monetization/pay-link';
         const payload = await api(endpoint);
         const url = String(payload?.deepLink || '').trim();
-        if (!url) throw new Error('Ссылка на оплату пустая.');
+        if (!url) throw new Error(sj('errPaymentEmpty'));
         if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
       }
 
       async function openReferralBonusFlow() {
         const username = await loadBotUsername();
-        if (!username) throw new Error('Не удалось получить username бота.');
+        if (!username) throw new Error(sj('errBotUsername'));
         const url = `https://t.me/${username}?start=referrals`;
         if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
@@ -1575,7 +1580,7 @@
       }
       async function openAdvancedSearchFlow() {
         const username = await loadBotUsername();
-        if (!username) throw new Error('Не удалось получить username бота.');
+        if (!username) throw new Error(sj('errBotUsername'));
         const url = `https://t.me/${username}?start=jobsearch`;
         if (openTelegramLinkAndCloseMiniApp(url)) return;
         window.open(url, '_blank', 'noopener,noreferrer');
@@ -1592,7 +1597,7 @@
           try {
             const profile = await api('/api/app/profile');
             apply(profile);
-            if (!seekerId) throw new Error('Не удалось определить текущего пользователя.');
+            if (!seekerId) throw new Error(sj('errUser'));
             return;
           } catch (err) {
             const msg = String(err?.message || '');
@@ -1610,7 +1615,7 @@
         const menu = document.getElementById('skillPickerMenu');
         const grouped = new Map();
         for (const s of skills) {
-          const roleName = String(s.roleName || s.RoleName || '').trim() || 'Другое';
+          const roleName = String(s.roleName || s.RoleName || '').trim() || sj('otherRole');
           const skillName = String(s.name || s.Name || `${s.id}`).trim() || String(s.id);
           if (!grouped.has(roleName)) grouped.set(roleName, []);
           grouped.get(roleName).push({ id: s.id, name: skillName });
@@ -1655,10 +1660,10 @@
         const effectiveCsv = csv || bootDeepLinkSkillIdsCsv;
         const btn = document.getElementById('skillPickerBtn');
         if (!effectiveCsv) {
-          btn.textContent = 'Все роли';
+          btn.textContent = sj('allRoles');
         } else {
           const ids = [...new Set(effectiveCsv.split(',').map((id) => id.trim()).filter(Boolean))];
-          btn.textContent = `Выбрано ролей: ${ids.length}`;
+          btn.textContent = sj('rolesSelected', { count: ids.length });
         }
         renderSyncButtonLabel();
         renderSearchTitleSkill(effectiveCsv);
@@ -1682,7 +1687,7 @@
           title.textContent = '';
           return;
         }
-        title.textContent = `для ${labels.join(', ')}`;
+        title.textContent = sj('searchTitleFor', { labels: labels.join(', ') });
       }
       function renderSyncButtonLabel() {
         const btn = document.getElementById('syncBtn');
@@ -1690,17 +1695,17 @@
         const csv = getSelectedSkillIdsCsv() || bootDeepLinkSkillIdsCsv;
         const ids = [...new Set(String(csv || '').split(',').map((v) => v.trim()).filter(Boolean))];
         if (!ids.length) {
-          btn.textContent = 'Искать';
+          btn.textContent = sj('searchBtnDeeplink');
           return;
         }
         const idSet = new Set(ids);
         const selected = skills.filter((s) => idSet.has(String(s.id)));
         const firstSkillName = String(selected[0]?.name || selected[0]?.Name || '').trim();
         if (!firstSkillName) {
-          btn.textContent = 'Искать';
+          btn.textContent = sj('searchBtnDeeplink');
           return;
         }
-        btn.textContent = `Искать ${firstSkillName}`;
+        btn.textContent = sj('searchBtnWithSkill', { skill: firstSkillName });
       }
 
       function openSkillPicker() {
@@ -1747,7 +1752,7 @@
       function renderSourcePickerSummary() {
         const selected = getSelectedSources();
         const btn = document.getElementById('sourcePickerBtn');
-        btn.textContent = selected.length ? `Выбрано источников: ${selected.length}` : 'Все источники';
+        btn.textContent = selected.length ? sj('sourcesSelected', { count: selected.length }) : sj('allSources');
       }
 
       function openSourcePicker() {
@@ -1765,11 +1770,11 @@
         const uploadBtn = document.getElementById('uploadResumeBtn');
         const loaderId = 'uploadResumeLoader';
         const file = fileInput.files?.[0];
-        if (!file) throw new Error('Сначала выберите файл.');
-        if (file.size > 15 * 1024 * 1024) throw new Error('Файл слишком большой. Максимум 15MB.');
+        if (!file) throw new Error(sj('errPickFile'));
+        if (file.size > 15 * 1024 * 1024) throw new Error(sj('errFileSize'));
         const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
         if (!allowedTypes.includes(file.type)) {
-          throw new Error('Неподдерживаемый тип файла. Используйте PDF или изображение (JPG/PNG/WEBP).');
+          throw new Error(sj('errFileType'));
         }
         uploadBtn.disabled = true;
         onLoading(loaderId, true);
@@ -1799,11 +1804,11 @@
           });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) {
-            throw new Error(typeof payload?.error === 'string' ? payload.error : 'Не удалось загрузить резюме');
+            throw new Error(typeof payload?.error === 'string' ? payload.error : sj('errUploadResume'));
           }
           currentResumeUrl = String(payload?.resumeUrl || '').trim();
-          if (!currentResumeUrl) throw new Error('Резюме загружено, но ссылка отсутствует.');
-          setMsg('resumeUploadMsg', 'Резюме успешно загружено.');
+          if (!currentResumeUrl) throw new Error(sj('errResumeNoUrl'));
+          setMsg('resumeUploadMsg', sj('resumeUploaded'));
           return true;
         } finally {
           onLoading(loaderId, false);
@@ -1836,7 +1841,7 @@
         const source = isBotAdminUser
           ? normalizeSourceToken(document.getElementById('sourceSel')?.value || query.source || '')
           : '';
-        if (!from || !to) throw new Error('Укажите даты "С" и "По".');
+        if (!from || !to) throw new Error(sj('errDates'));
 
         setQ({
           from,
@@ -1888,7 +1893,7 @@
       function renderJobs() {
         const body = document.getElementById('jobsList');
         if (!positions.length) {
-          body.innerHTML = '<div class="muted">Вакансии не найдены.</div>';
+          body.innerHTML = `<div class="muted">${esc(sj('noJobs'))}</div>`;
           return;
         }
         body.innerHTML = positions.map((p) => {
@@ -1898,18 +1903,38 @@
                 <div class="job-card-title">${esc(p.title)}</div>
                 <div class="job-card-sub">${esc(p.company)} · ${esc(p.location)}</div>
               </div>
+              <span class="loader job-card-loader" aria-hidden="true"></span>
             </div>
             <div class="job-card-meta">
-              <span>Опубликовано: ${esc(formatPostedDate(p.publishedAt) || '—')}</span>
-              <span>Отклик: ${esc(getApplyTypeDisplay(p))}</span>
+              <span>${esc(sj('published'))}: ${esc(formatPostedDate(p.publishedAt) || '—')}</span>
+              <span>${esc(sj('applyVia'))}: ${esc(getApplyTypeDisplay(p))}</span>
             </div>
           </div>`;
         }).join('');
         body.querySelectorAll('[data-open-job]').forEach((row) => {
-          row.addEventListener('click', () => {
+          row.addEventListener('click', async () => {
             const id = Number(row.getAttribute('data-open-job'));
+            if (openingJobId) return;
             setQ({ jobId: id });
-            openJobById(id);
+            openingJobId = id;
+            setJobCardLoading(id, true);
+            try {
+              await trackJobDetailsOpen(id);
+              openJobById(id);
+            } catch (err) {
+              if (err?.code === 'subscribe_required') {
+                openSubscribeRequiredModal(err.payload || {}, id);
+                return;
+              }
+              if (err?.code === 'payment_required') {
+                openPaymentRequiredModal(err.payload || {});
+                return;
+              }
+              setMsg('dashMsg', err?.message || sj('errOpenJob'), true);
+            } finally {
+              setJobCardLoading(id, false);
+              openingJobId = null;
+            }
           });
         });
       }
@@ -1955,13 +1980,13 @@
         const genRow = document.getElementById('genRow');
         const statusRow = document.getElementById('statusRow');
         if (genRow) genRow.style.display = showAdminJobModal ? '' : 'none';
-        if (statusRow) statusRow.style.display = showAdminJobModal ? '' : 'none';
+        if (statusRow) statusRow.style.display = 'none';
         hideInsight();
         const sumHtml = String(job.shortSummary || '').trim()
           ? `<div class="skills-block" style="margin-top:10px"><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
           : '';
         const remoteHtml = (isBotAdminUser && String(job.source || '').trim().toLowerCase() !== 'hirehi' && String(job.remoteReasoning || '').trim())
-          ? `<div class="skills-block"><h4>Удаленка</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Почему AI считает эту вакансию удаленной?</button></div>`
+          ? `<div class="skills-block"><h4>${esc(sj('remote'))}</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">${esc(sj('remoteWhy'))}</button></div>`
           : '';
         const applyTypeDisplay = String(getApplyTypeDisplay(job) || '').trim();
         const applySourceBadge = applyTypeDisplay && applyTypeDisplay !== '—'
@@ -1975,7 +2000,7 @@
           `<div><strong>${esc(job.title)}</strong></div>` +
           `<div class="sub">${esc(job.company)} · ${esc(job.location)}</div>` +
           adminJobIdHtml +
-          `<div><a class="apply-cta" href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Откликнуться ${applySourceBadge}</a></div>` +
+          `<div><a class="apply-cta" href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">${esc(sj('applyNow'))} ${applySourceBadge}</a></div>` +
           remoteHtml +
           sumHtml +
           renderJobSkillsHtml(job.skills) +
@@ -1999,14 +2024,14 @@
           return;
         }
         links.innerHTML = selectedApplication.TailoredCVURL
-          ? `<a href="${esc(selectedApplication.TailoredCVURL)}" download target="_blank" rel="noopener noreferrer">Скачать адаптированное CV</a>`
+          ? `<a href="${esc(selectedApplication.TailoredCVURL)}" download target="_blank" rel="noopener noreferrer">${esc(sj('downloadTailoredCvAlt'))}</a>`
           : '';
         if (cover) cover.value = selectedApplication.CoverLetter || '';
       }
 
       async function saveStatus() {
         if (isJobBusy) return;
-        if (!selectedJob) throw new Error('Сначала откройте вакансию.');
+        if (!selectedJob) throw new Error(sj('errOpenJobFirst'));
         setJobBusy(true);
         try {
           const app = await ensureApplication(selectedJob);
@@ -2021,7 +2046,7 @@
           await loadApplicationsByUser();
           renderJobs();
           renderArtifacts();
-          setMsg('jobMsg', 'Статус сохранен.');
+          setMsg('jobMsg', sj('statusSaved'));
         } finally {
           setJobBusy(false);
         }
@@ -2029,7 +2054,7 @@
 
       async function generateMaterials() {
         if (isJobBusy) return;
-        if (!selectedJob) throw new Error('Сначала откройте вакансию.');
+        if (!selectedJob) throw new Error(sj('errOpenJobFirst'));
         if (!currentResumeUrl) {
           continueGenerateAfterResumeUpload = true;
           setMsg('resumeUploadMsg', '');
@@ -2041,7 +2066,7 @@
           const app = await ensureApplication(selectedJob);
           const resumePayload = await api(`${API_BASE}/api/app/admin/users/${encodeURIComponent(seekerId)}/resume-text`);
           const mainResumeText = String(resumePayload.resumeText || '').trim();
-          if (!mainResumeText) throw new Error('Текст резюме не найден у текущего пользователя.');
+          if (!mainResumeText) throw new Error(sj('errResumeText'));
 
           const [tailored, cover] = await Promise.all([
             api(`${API_BASE}/api/tailored-resume/upload`, {
@@ -2077,13 +2102,13 @@
           await loadApplicationsByUser();
           renderJobs();
           renderArtifacts();
-          setMsg('jobMsg', 'Адаптированные CV и cover letter сгенерированы и сохранены.');
+          setMsg('jobMsg', sj('materialsGenerated'));
         } catch (err) {
           const rawMessage = String(err?.message || '');
           if (rawMessage.includes('gold_required')) {
             // Deeplink: allow users to always attempt generation from job details
             // without forcing a paywall modal on click.
-            setMsg('jobMsg', 'Не удалось сгенерировать материалы. Попробуйте снова.', true);
+            setMsg('jobMsg', sj('errGenerateMaterials'), true);
             return;
           }
           throw err;
@@ -2130,9 +2155,9 @@
           const hrefLen = String(window.location.href || '').length;
           const hint =
             hrefLen > 6000
-              ? ' Ссылка может быть слишком длинной для Telegram на iOS. Откройте поиск из меню бота или сократите фильтры в ссылке.'
-              : ' Открывайте этот экран только из Telegram (меню бота или кнопка в чате), а не во внешнем браузере.';
-          throw new Error(`Нет данных Telegram Web App (init data).${hint}`);
+              ? sj('errInitHintLong')
+              : sj('errInitHintOpenInBot');
+          throw new Error(`${sj('errInitData')}${hint}`);
         }
         await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
@@ -2203,21 +2228,21 @@
         try {
           await openReferralBonusFlow();
         } catch (err) {
-          setMsg('paymentRequiredMsg', err?.message || 'Не удалось открыть реферальный экран.', true);
+          setMsg('paymentRequiredMsg', err?.message || sj('errReferral'), true);
         }
       });
       document.getElementById('openChannelAlternativeBtn').addEventListener('click', async () => {
         try {
           await openChannelAlternativeFlow();
         } catch (err) {
-          setMsg('paymentRequiredMsg', err?.message || 'Не удалось открыть ссылку на канал.', true);
+          setMsg('paymentRequiredMsg', err?.message || sj('errChannelLink'), true);
         }
       });
       document.getElementById('advancedSearchBtn').addEventListener('click', async () => {
         try {
           await openAdvancedSearchFlow();
         } catch (err) {
-          setMsg('dashMsg', err?.message || 'Не удалось открыть расширенный поиск.', true);
+          setMsg('dashMsg', err?.message || sj('errBotUsername'), true);
         }
       });
       window.addEventListener('scroll', updateAdvancedSearchStickyVisibility, { passive: true });
@@ -2261,7 +2286,7 @@
         try {
           const ok = await verifyRequiredChannels();
           if (!ok) {
-            setMsg('subscribeGateMsg', 'Вы все еще подписаны не на все обязательные каналы.', true);
+            setMsg('subscribeGateMsg', sj('subscribeStillRequired'), true);
             return;
           }
           const pendingJobId = Number(pendingSubscribeJobId || 0);
@@ -2274,7 +2299,7 @@
         } catch (err) {
           if (err?.code === 'subscribe_required') {
             openSubscribeRequiredModal(err.payload || {}, pendingSubscribeJobId);
-            setMsg('subscribeGateMsg', 'Вы все еще подписаны не на все обязательные каналы.', true);
+            setMsg('subscribeGateMsg', sj('subscribeStillRequired'), true);
             return;
           }
           if (err?.code === 'payment_required') {
@@ -2282,7 +2307,7 @@
             openPaymentRequiredModal(err.payload || {});
             return;
           }
-          setMsg('subscribeGateMsg', err?.message || 'Не удалось проверить подписку.', true);
+          setMsg('subscribeGateMsg', err?.message || sj('errVerifySubscribe'), true);
         } finally {
           onLoading('verifySubscriptionLoader', false);
         }
@@ -2291,7 +2316,7 @@
         const btn = document.getElementById('openRequiredChannelBtn');
         const url = String(btn?.dataset?.url || '').trim();
         if (!url) {
-          setMsg('subscribeGateMsg', 'Ссылка на канал недоступна.', true);
+          setMsg('subscribeGateMsg', sj('channelLinkUnavailable'), true);
           return;
         }
         if (openTelegramLinkAndCloseMiniApp(url)) return;
@@ -2338,7 +2363,7 @@
       });
 
       boot().catch((err) => {
-        setMsg('globalMsg', `Не удалось инициализировать страницу поиска вакансий: ${err.message}`, true);
+        setMsg('globalMsg', sj('bootError', { message: err.message }), true);
       });
     </script>
   </body>

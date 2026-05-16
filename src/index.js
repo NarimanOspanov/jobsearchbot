@@ -67,7 +67,6 @@ import {
   langFromCtx,
   textMatchesAnyLang,
   refreshBotMenus,
-  ensureBotMenusApplied,
 } from './i18n/botI18n.js';
 import {
   hireAgentStateByChatId,
@@ -510,11 +509,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   };
 
   bot.use(async (ctx, next) => {
-    if (runtimeBot.telegram) {
-      ensureBotMenusApplied(runtimeBot.telegram).catch((err) => {
-        console.warn('ensureBotMenusApplied failed:', err?.message || err);
-      });
-    }
     await tryRemoveLegacyKeyboard(ctx);
     return next();
   });
@@ -1484,13 +1478,6 @@ async function main() {
   const appBaseUrl = (process.env.ADMIN_APP_URL || config.webhookUrl || '').replace(/\/$/, '');
   const hireAgentSimulationVisible = await ensureHireAgentSimulationVisibleConfig();
   registerHandlers(bot, appBaseUrl, { hireAgentSimulationVisible });
-
-  try {
-    const rows = await models.Users.findAll({ attributes: ['TelegramChatId'] });
-    await refreshBotMenus(bot.telegram, { chatIds: rows.map((u) => u.TelegramChatId) });
-  } catch (err) {
-    console.error('Failed to set menu commands:', err.message);
-  }
 
   if (config.isProduction) {
     app.use(bot.webhookCallback('/'));
