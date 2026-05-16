@@ -74,7 +74,7 @@ export const BOT_LOCALES = {
     btn_apply_external: 'Откликнуться на сайте {company}',
     btn_apply_external_generic: 'Откликнуться на сайте работодателя',
     btn_open_other_jobs: 'Открыть другие вакансии на 100% удалёнку',
-    position_send_cv_html: '<b>Чтобы откликнуться, отправьте резюме файлом (PDF или изображение).</b>',
+    position_send_cv_html: '<b>Чтобы откликнуться, отправьте резюме файлом PDF.</b>',
 
     subscribe_success: 'Спасибо! Подписка подтверждена.',
     subscribe_bonus: 'Начислено +{bonus} открытий вакансий.',
@@ -114,7 +114,7 @@ export const BOT_LOCALES = {
     btn_cv_improve_job: '💼 На основе требований вакансии',
 
     position_resume_accepted:
-      'Резюме принято. Спасибо за отклик! Пока мы обрабатываем вашу заявку, вы можете посмотреть другие доступные вакансии.',
+      '✅ Ваше резюме по этой вакансии получено.\n\nРекрутер позиции рассмотрит его. Если решит двигаться дальше, свяжется с вами здесь в Telegram или по контактам, которые вы указали.\n\nПока можно посмотреть другие открытые вакансии.',
     hireagent_found_jobs:
       'Готово. Я сохранил ваше резюме и нашёл 263 вакансии с полной удалёнкой (100%), которые вам подходят.\n\nЗапустить автоматические отклики?',
     btn_hireagent_yes: 'Да, начинай',
@@ -250,7 +250,7 @@ export const BOT_LOCALES = {
     btn_apply_external: 'Apply on {company} website',
     btn_apply_external_generic: 'Apply on employer website',
     btn_open_other_jobs: 'Open other 100% remote jobs',
-    position_send_cv_html: '<b>To apply, send your resume as a file (PDF or image).</b>',
+    position_send_cv_html: '<b>To apply, send your resume as a PDF file.</b>',
 
     subscribe_success: 'Thank you! Subscription confirmed.',
     subscribe_bonus: '+{bonus} job opens credited.',
@@ -289,7 +289,7 @@ export const BOT_LOCALES = {
     btn_cv_improve_job: '💼 Based on job requirements',
 
     position_resume_accepted:
-      'Resume received. Thank you for applying! While we process your application, you can browse other available jobs.',
+      '✅ We received your resume for this role.\n\nThe recruiter will review it. If they decide to move forward, they will contact you here in Telegram or using the contact details you provided.\n\nIn the meantime, feel free to browse other open positions.',
     hireagent_found_jobs:
       'Done. I saved your resume and found 263 fully remote (100%) jobs that match you.\n\nStart automatic applications?',
     btn_hireagent_yes: 'Yes, start',
