@@ -981,8 +981,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     if (!ok) return;
     await ctx.reply('Refreshing bot command menus…');
     try {
-      await refreshBotMenus(runtimeBot.telegram);
-      await ctx.reply('Menus updated.');
+      const rows = await models.Users.findAll({ attributes: ['TelegramChatId'] });
+      const chatIds = rows.map((u) => u.TelegramChatId);
+      const result = await refreshBotMenus(runtimeBot.telegram, { chatIds });
+      await ctx.reply(`Menus updated. Global: ok. Cleared per-chat overrides: ${result.cleared}.`);
     } catch (err) {
       console.error('refreshmenus failed:', err);
       await ctx.reply(`Failed: ${err?.message || err}`);
@@ -1484,7 +1486,8 @@ async function main() {
   registerHandlers(bot, appBaseUrl, { hireAgentSimulationVisible });
 
   try {
-    await refreshBotMenus(bot.telegram);
+    const rows = await models.Users.findAll({ attributes: ['TelegramChatId'] });
+    await refreshBotMenus(bot.telegram, { chatIds: rows.map((u) => u.TelegramChatId) });
   } catch (err) {
     console.error('Failed to set menu commands:', err.message);
   }

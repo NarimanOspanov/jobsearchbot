@@ -13,10 +13,14 @@ export const SUPPORTED_BOT_LANGUAGES = SUPPORTED_USER_LANGUAGES;
 export const DEFAULT_BOT_LANGUAGE = 'en';
 
 /** Bump when BOT_MENU_COMMANDS change — triggers one-time refresh on live bot process. */
-export const BOT_MENU_VERSION = 3;
+export const BOT_MENU_VERSION = 4;
 
 let appliedMenuVersion = 0;
 let menuRefreshInFlight = null;
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /** @param {string} text @param {string} key */
 export function textMatchesAnyLang(text, key) {
@@ -63,12 +67,34 @@ export async function registerBotMenuCommands(telegram) {
   await telegram.setMyCommands(getMenuCommands('en'), { language_code: 'en' });
 }
 
-/** Push global menus to Telegram (no per-user DB language). */
-export async function refreshBotMenus(telegram) {
-  if (!telegram) return { global: false };
+/**
+ * Push global menus and clear per-chat overrides (left from older profile/language sync).
+ * @param {import('telegraf').Telegram} telegram
+ * @param {{ chatIds?: Array<number | string> }} [options]
+ */
+export async function refreshBotMenus(telegram, options = {}) {
+  if (!telegram) return { global: false, cleared: 0 };
   await registerBotMenuCommands(telegram);
+
+  const chatIds = Array.isArray(options.chatIds) ? options.chatIds : [];
+  let cleared = 0;
+  for (const rawChatId of chatIds) {
+    const chatId = Number(rawChatId);
+    if (!Number.isSafeInteger(chatId)) continue;
+    try {
+      await telegram.deleteMyCommands({ scope: { type: 'chat', chat_id: chatId } });
+      cleared += 1;
+    } catch (err) {
+      console.warn('deleteMyCommands (chat scope) failed:', {
+        chatId,
+        error: err?.message || err,
+      });
+    }
+    await delay(40);
+  }
+
   appliedMenuVersion = BOT_MENU_VERSION;
-  return { global: true };
+  return { global: true, cleared };
 }
 
 /** Idempotent: refresh menus once per process when BOT_MENU_VERSION increases. */

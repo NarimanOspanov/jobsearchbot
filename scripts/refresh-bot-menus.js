@@ -5,6 +5,7 @@
 import 'dotenv/config';
 import { Telegraf } from 'telegraf';
 import { config } from '../src/config.js';
+import { sequelize, models } from '../src/db.js';
 import { refreshBotMenus } from '../src/i18n/botI18n.js';
 
 async function main() {
@@ -16,8 +17,13 @@ async function main() {
   const me = await bot.telegram.getMe();
   console.log(`Refreshing menus for @${me.username || me.id}…`);
 
-  const result = await refreshBotMenus(bot.telegram);
+  const rows = await models.Users.findAll({ attributes: ['TelegramChatId'] });
+  const result = await refreshBotMenus(bot.telegram, {
+    chatIds: rows.map((u) => u.TelegramChatId),
+  });
+
   console.log('Done.', result);
+  await sequelize.close();
 }
 
 main().catch((err) => {
