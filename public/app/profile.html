@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Профиль</title>
+    <title>Profile</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root {
@@ -13,8 +13,6 @@
         --muted: #9eb0d1;
         --accent: #4f7cff;
         --border: #273357;
-        --switch-off: #3d4660;
-        --switch-on: #4f7cff;
       }
       * { box-sizing: border-box; }
       body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
@@ -26,31 +24,6 @@
       .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
       .row:last-child { border-bottom: none; }
       .muted { color: var(--muted); }
-      input, select, button {
-        width: 100%; border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 10px; font: inherit;
-      }
-      button { cursor: pointer; background: var(--accent); border-color: var(--accent); font-weight: 600; }
-      .switch {
-        position: relative; width: 52px; height: 32px; appearance: none; background: var(--switch-off);
-        border-radius: 999px; border: none; outline: none; transition: background 0.2s ease;
-      }
-      .switch::before {
-        content: ''; position: absolute; width: 26px; height: 26px; border-radius: 50%;
-        top: 3px; left: 3px; background: #fff; transition: transform 0.2s ease;
-      }
-      .switch:checked { background: var(--switch-on); }
-      .switch:checked::before { transform: translateX(20px); }
-      .field { margin-bottom: 10px; }
-      .money-input { position: relative; }
-      .money-input .prefix {
-        position: absolute;
-        left: 12px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: var(--muted);
-        pointer-events: none;
-      }
-      .money-input input { padding-left: 28px; }
       .hidden { display: none !important; }
     </style>
   <!-- Yandex.Metrika counter -->
@@ -68,52 +41,15 @@
   </head>
   <body>
     <div class="wrap">
-      <h1 id="pageTitle">Профиль</h1>
+      <h1 id="pageTitle">Profile</h1>
 
       <section class="card">
-        <h2 id="userSectionTitle">Пользователь</h2>
-        <div class="row"><span id="telegramLabel">Telegram</span><span id="profileUser" class="muted">загрузка...</span></div>
-        <div class="row"><span id="chatIdLabel">Chat ID</span><span id="profileChatId" class="muted">загрузка...</span></div>
+        <h2 id="userSectionTitle">User</h2>
+        <div class="row"><span id="telegramLabel">Telegram</span><span id="profileUser" class="muted">loading...</span></div>
+        <div class="row"><span id="chatIdLabel">Chat ID</span><span id="profileChatId" class="muted">loading...</span></div>
       </section>
 
-      <section class="card">
-        <h2 id="languageSectionTitle">Язык</h2>
-        <div class="field">
-          <label for="languageSelect" id="languageFieldLabel">Язык интерфейса</label>
-          <select id="languageSelect">
-            <option value="ru">Русский</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-        <p id="languageStatus" class="muted"></p>
-      </section>
-
-      <section id="jobSearchSettings" class="card hidden" aria-hidden="true">
-        <h2>Настройки</h2>
-        <div class="row"><span>HeadHunter</span><input id="hhEnabled" class="switch" type="checkbox" /></div>
-        <div class="row"><span>LinkedIn</span><input id="linkedInEnabled" class="switch" type="checkbox" /></div>
-        <div class="row"><span>Indeed</span><input id="indeedEnabled" class="switch" type="checkbox" /></div>
-        <div class="row"><span>Telegram</span><input id="telegramEnabled" class="switch" type="checkbox" /></div>
-        <div class="row"><span>Сайты компаний</span><input id="companySitesEnabled" class="switch" type="checkbox" /></div>
-        <div class="row"><span>Email фаундеров</span><input id="emailFoundersEnabled" class="switch" type="checkbox" /></div>
-        <div class="row"><span>Email рекрутеров</span><input id="emailRecruitersEnabled" class="switch" type="checkbox" /></div>
-
-        <div class="field">
-          <label for="searchMode">Режим поиска</label>
-          <select id="searchMode">
-            <option value="not_urgent">не срочно</option>
-            <option value="urgent">срочно</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="minimumSalary">Минимальная зарплата</label>
-          <div class="money-input">
-            <span class="prefix">$</span>
-            <input id="minimumSalary" type="number" min="0" step="1" placeholder="например, 3000" />
-          </div>
-        </div>
-        <div class="row"><span>Только удаленка</span><input id="remoteOnly" class="switch" type="checkbox" /></div>
-      </section>
+      <section id="jobSearchSettings" class="card hidden" aria-hidden="true"></section>
     </div>
 
     <script>
@@ -126,15 +62,8 @@
           userSection: 'Пользователь',
           telegram: 'Telegram',
           chatId: 'Chat ID',
-          languageSection: 'Язык',
-          languageField: 'Язык интерфейса',
-          langRu: 'Русский',
-          langEn: 'English',
           loading: 'загрузка...',
           noUsername: '(без username)',
-          saving: 'Сохраняем...',
-          saved: 'Сохранено',
-          saveError: 'Ошибка',
           loadError: 'Не удалось загрузить профиль',
         },
         en: {
@@ -142,39 +71,29 @@
           userSection: 'User',
           telegram: 'Telegram',
           chatId: 'Chat ID',
-          languageSection: 'Language',
-          languageField: 'Interface language',
-          langRu: 'Russian',
-          langEn: 'English',
           loading: 'loading...',
           noUsername: '(no username)',
-          saving: 'Saving...',
-          saved: 'Saved',
-          saveError: 'Error',
           loadError: 'Failed to load profile',
         },
       };
 
-      let currentLanguage = 'ru';
+      function telegramLang() {
+        const code = String(tg?.initDataUnsafe?.user?.language_code || '').toLowerCase();
+        return code === 'ru' || code.startsWith('ru-') ? 'ru' : 'en';
+      }
 
       function t(lang) {
-        return I18N[lang === 'en' ? 'en' : 'ru'];
+        return I18N[lang === 'ru' ? 'ru' : 'en'];
       }
 
       function applyLocale(lang) {
-        currentLanguage = lang === 'en' ? 'en' : 'ru';
-        const strings = t(currentLanguage);
-        document.documentElement.lang = currentLanguage;
+        const strings = t(lang);
+        document.documentElement.lang = lang;
         document.title = strings.pageTitle;
         document.getElementById('pageTitle').textContent = strings.pageTitle;
         document.getElementById('userSectionTitle').textContent = strings.userSection;
         document.getElementById('telegramLabel').textContent = strings.telegram;
         document.getElementById('chatIdLabel').textContent = strings.chatId;
-        document.getElementById('languageSectionTitle').textContent = strings.languageSection;
-        document.getElementById('languageFieldLabel').textContent = strings.languageField;
-        const select = document.getElementById('languageSelect');
-        select.options[0].textContent = strings.langRu;
-        select.options[1].textContent = strings.langEn;
         const profileUser = document.getElementById('profileUser');
         if (profileUser.dataset.noUsername === '1') {
           profileUser.textContent = strings.noUsername;
@@ -190,7 +109,8 @@
       }
 
       function applyProfile(profile) {
-        const strings = t(profile.language || 'ru');
+        const lang = telegramLang();
+        const strings = t(lang);
         const profileUser = document.getElementById('profileUser');
         if (profile.telegramUserName) {
           profileUser.textContent = `@${profile.telegramUserName}`;
@@ -200,8 +120,7 @@
           profileUser.dataset.noUsername = '1';
         }
         document.getElementById('profileChatId').textContent = profile.telegramChatId;
-        document.getElementById('languageSelect').value = profile.language === 'en' ? 'en' : 'ru';
-        applyLocale(profile.language || 'ru');
+        applyLocale(lang);
       }
 
       async function loadProfile() {
@@ -209,27 +128,8 @@
         applyProfile(profile);
       }
 
-      document.getElementById('languageSelect').addEventListener('change', async (event) => {
-        const selected = event.target.value === 'en' ? 'en' : 'ru';
-        const statusEl = document.getElementById('languageStatus');
-        const strings = t(selected);
-        statusEl.textContent = strings.saving;
-        try {
-          const result = await api('/api/app/profile/settings', {
-            method: 'PATCH',
-            body: JSON.stringify({ language: selected }),
-          });
-          applyLocale(result.language || selected);
-          statusEl.textContent = t(currentLanguage).saved;
-        } catch (err) {
-          statusEl.textContent = `${strings.saveError}: ${err.message}`;
-          event.target.value = currentLanguage;
-        }
-      });
-
       loadProfile().catch((err) => {
-        const strings = t(currentLanguage);
-        alert(`${strings.loadError}: ${err.message}`);
+        alert(`${t(telegramLang()).loadError}: ${err.message}`);
       });
     </script>
   </body>

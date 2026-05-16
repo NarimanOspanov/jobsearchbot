@@ -60,7 +60,7 @@ import {
   removeUserDataByTelegramChatId,
   runResumeEnrichmentInBackground,
 } from './services/userService.js';
-import { normalizeUserLanguage, resolveBotLanguage } from './utils/userLanguage.js';
+import { resolveBotLanguage } from './utils/userLanguage.js';
 import {
   tr,
   t,
@@ -68,14 +68,12 @@ import {
   textMatchesAnyLang,
   refreshBotMenus,
   ensureBotMenusApplied,
-  syncUserMenuCommands,
 } from './i18n/botI18n.js';
 import {
   hireAgentStateByChatId,
   legacyKeyboardClearedByChatId,
   cvScoreResultByUserId,
   runtimeBot,
-  menuSyncedChatIds,
 } from './bot/state.js';
 
 // routes
@@ -378,7 +376,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
       const granted = await grantReferralBonusToReferrer(referrer.Id, invitedUser.Id);
       if (granted > 0) {
-        const referrerLang = resolveBotLanguage(referrer.Language, null);
+        const referrerLang = resolveBotLanguage(null);
         await ctx.telegram.sendMessage(
           Number(referrer.TelegramChatId),
           t(referrerLang, 'referral_bonus_notify', { granted })
@@ -525,23 +523,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     try {
       const { user, wasCreated } = await ensureUser(ctx);
       ctx.state.isFirstTimeUser = wasCreated;
-      ctx.state.lang = resolveBotLanguage(user?.Language, ctx.from?.language_code);
-      ctx.state.userLanguage = user?.Language ?? null;
-      if (user?.TelegramChatId && runtimeBot.telegram) {
-        const chatId = Number(user.TelegramChatId);
-        if (Number.isSafeInteger(chatId) && !menuSyncedChatIds.has(chatId)) {
-          menuSyncedChatIds.add(chatId);
-          const dbLang = String(user.Language || '').trim().toLowerCase();
-          const syncPromise =
-            dbLang === 'ru' || dbLang === 'en'
-              ? syncUserMenuCommands(runtimeBot.telegram, chatId, dbLang)
-              : runtimeBot.telegram.deleteMyCommands({ scope: { type: 'chat', chat_id: chatId } });
-          syncPromise.catch((err) => {
-            console.warn('Per-chat menu sync failed:', { chatId, error: err?.message || err });
-            menuSyncedChatIds.delete(chatId);
-          });
-        }
-      }
+      ctx.state.lang = resolveBotLanguage(ctx.from?.language_code);
       if (wasCreated && user) {
         const totalUsers = await models.Users.count();
         const message = [
@@ -999,17 +981,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     if (!ok) return;
     await ctx.reply('Refreshing bot command menus…');
     try {
-      const rows = await models.Users.findAll({
-        attributes: ['TelegramChatId', 'Language'],
-      });
-      const users = rows.map((u) => ({
-        telegramChatId: u.TelegramChatId,
-        language: u.Language,
-      }));
-      const result = await refreshBotMenus(runtimeBot.telegram, { users });
-      await ctx.reply(
-        `Menus updated. Global: ok. Per-chat synced: ${result.synced}, cleared: ${result.cleared}.`
-      );
+      await refreshBotMenus(runtimeBot.telegram);
+      await ctx.reply('Menus updated.');
     } catch (err) {
       console.error('refreshmenus failed:', err);
       await ctx.reply(`Failed: ${err?.message || err}`);
@@ -1414,7 +1387,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         await ctx.reply(tr(ctx, 'payment_user_not_found'));
         return;
       }
-      ctx.state.lang = resolveBotLanguage(user.Language, ctx.from?.language_code);
+      ctx.state.lang = resolveBotLanguage(ctx.from?.language_code);
 
       const paidAt = new Date();
       let telegramPaymentRow = null;
@@ -1511,10 +1484,7 @@ async function main() {
   registerHandlers(bot, appBaseUrl, { hireAgentSimulationVisible });
 
   try {
-    const rows = await models.Users.findAll({ attributes: ['TelegramChatId', 'Language'] });
-    await refreshBotMenus(bot.telegram, {
-      users: rows.map((u) => ({ telegramChatId: u.TelegramChatId, language: u.Language })),
-    });
+    await refreshBotMenus(bot.telegram);
   } catch (err) {
     console.error('Failed to set menu commands:', err.message);
   }

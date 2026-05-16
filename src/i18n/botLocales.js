@@ -361,7 +361,6 @@ export const BOT_MENU_COMMANDS = {
     { command: 'cvscore', description: 'Проверка и улучшение резюме' },
     { command: 'companies', description: 'Компании с удалёнкой' },
     { command: 'referrals', description: 'Реферальная программа' },
-    { command: 'profile', description: 'Профиль и язык' },
     { command: 'news', description: 'Новости про релокацию, удалёнку и ИИ' },
   ],
   en: [
@@ -369,7 +368,6 @@ export const BOT_MENU_COMMANDS = {
     { command: 'cvscore', description: 'Resume review and improvement' },
     { command: 'companies', description: 'Remote-friendly companies' },
     { command: 'referrals', description: 'Referral program' },
-    { command: 'profile', description: 'Profile and language' },
     { command: 'news', description: 'News on relocation, remote work & AI' },
   ],
 };

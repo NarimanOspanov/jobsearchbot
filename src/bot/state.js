@@ -16,6 +16,3 @@ export const runtimeBot = {
   username: '',
   telegram: null,
 };
-
-/** @type {Set<number>} */
-export const menuSyncedChatIds = new Set();
