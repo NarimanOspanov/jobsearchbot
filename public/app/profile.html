@@ -51,6 +51,7 @@
         pointer-events: none;
       }
       .money-input input { padding-left: 28px; }
+      .hidden { display: none !important; }
     </style>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
@@ -67,15 +68,27 @@
   </head>
   <body>
     <div class="wrap">
-      <h1>Профиль</h1>
+      <h1 id="pageTitle">Профиль</h1>
 
       <section class="card">
-        <h2>Пользователь</h2>
-        <div class="row"><span>Telegram</span><span id="profileUser" class="muted">загрузка...</span></div>
-        <div class="row"><span>Chat ID</span><span id="profileChatId" class="muted">загрузка...</span></div>
+        <h2 id="userSectionTitle">Пользователь</h2>
+        <div class="row"><span id="telegramLabel">Telegram</span><span id="profileUser" class="muted">загрузка...</span></div>
+        <div class="row"><span id="chatIdLabel">Chat ID</span><span id="profileChatId" class="muted">загрузка...</span></div>
       </section>
 
       <section class="card">
+        <h2 id="languageSectionTitle">Язык</h2>
+        <div class="field">
+          <label for="languageSelect" id="languageFieldLabel">Язык интерфейса</label>
+          <select id="languageSelect">
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <p id="languageStatus" class="muted"></p>
+      </section>
+
+      <section id="jobSearchSettings" class="card hidden" aria-hidden="true">
         <h2>Настройки</h2>
         <div class="row"><span>HeadHunter</span><input id="hhEnabled" class="switch" type="checkbox" /></div>
         <div class="row"><span>LinkedIn</span><input id="linkedInEnabled" class="switch" type="checkbox" /></div>
@@ -100,14 +113,73 @@
           </div>
         </div>
         <div class="row"><span>Только удаленка</span><input id="remoteOnly" class="switch" type="checkbox" /></div>
-        <button id="saveSettingsBtn">Сохранить настройки</button>
-        <p id="saveStatus" class="muted"></p>
       </section>
     </div>
 
     <script>
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
+
+      const I18N = {
+        ru: {
+          pageTitle: 'Профиль',
+          userSection: 'Пользователь',
+          telegram: 'Telegram',
+          chatId: 'Chat ID',
+          languageSection: 'Язык',
+          languageField: 'Язык интерфейса',
+          langRu: 'Русский',
+          langEn: 'English',
+          loading: 'загрузка...',
+          noUsername: '(без username)',
+          saving: 'Сохраняем...',
+          saved: 'Сохранено',
+          saveError: 'Ошибка',
+          loadError: 'Не удалось загрузить профиль',
+        },
+        en: {
+          pageTitle: 'Profile',
+          userSection: 'User',
+          telegram: 'Telegram',
+          chatId: 'Chat ID',
+          languageSection: 'Language',
+          languageField: 'Interface language',
+          langRu: 'Russian',
+          langEn: 'English',
+          loading: 'loading...',
+          noUsername: '(no username)',
+          saving: 'Saving...',
+          saved: 'Saved',
+          saveError: 'Error',
+          loadError: 'Failed to load profile',
+        },
+      };
+
+      let currentLanguage = 'ru';
+
+      function t(lang) {
+        return I18N[lang === 'en' ? 'en' : 'ru'];
+      }
+
+      function applyLocale(lang) {
+        currentLanguage = lang === 'en' ? 'en' : 'ru';
+        const strings = t(currentLanguage);
+        document.documentElement.lang = currentLanguage;
+        document.title = strings.pageTitle;
+        document.getElementById('pageTitle').textContent = strings.pageTitle;
+        document.getElementById('userSectionTitle').textContent = strings.userSection;
+        document.getElementById('telegramLabel').textContent = strings.telegram;
+        document.getElementById('chatIdLabel').textContent = strings.chatId;
+        document.getElementById('languageSectionTitle').textContent = strings.languageSection;
+        document.getElementById('languageFieldLabel').textContent = strings.languageField;
+        const select = document.getElementById('languageSelect');
+        select.options[0].textContent = strings.langRu;
+        select.options[1].textContent = strings.langEn;
+        const profileUser = document.getElementById('profileUser');
+        if (profileUser.dataset.noUsername === '1') {
+          profileUser.textContent = strings.noUsername;
+        }
+      }
 
       async function api(path, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -117,35 +189,19 @@
         return response.json();
       }
 
-      function readSettings() {
-        return {
-          hhEnabled: document.getElementById('hhEnabled').checked,
-          linkedInEnabled: document.getElementById('linkedInEnabled').checked,
-          indeedEnabled: document.getElementById('indeedEnabled').checked,
-          telegramEnabled: document.getElementById('telegramEnabled').checked,
-          companySitesEnabled: document.getElementById('companySitesEnabled').checked,
-          remoteOnly: document.getElementById('remoteOnly').checked,
-          emailFoundersEnabled: document.getElementById('emailFoundersEnabled').checked,
-          emailRecruitersEnabled: document.getElementById('emailRecruitersEnabled').checked,
-          searchMode: document.getElementById('searchMode').value,
-          minimumSalary: document.getElementById('minimumSalary').value,
-        };
-      }
-
       function applyProfile(profile) {
-        document.getElementById('profileUser').textContent = profile.telegramUserName ? `@${profile.telegramUserName}` : '(без username)';
+        const strings = t(profile.language || 'ru');
+        const profileUser = document.getElementById('profileUser');
+        if (profile.telegramUserName) {
+          profileUser.textContent = `@${profile.telegramUserName}`;
+          profileUser.dataset.noUsername = '0';
+        } else {
+          profileUser.textContent = strings.noUsername;
+          profileUser.dataset.noUsername = '1';
+        }
         document.getElementById('profileChatId').textContent = profile.telegramChatId;
-        const s = profile.settings || {};
-        document.getElementById('hhEnabled').checked = !!s.hhEnabled;
-        document.getElementById('linkedInEnabled').checked = !!s.linkedInEnabled;
-        document.getElementById('indeedEnabled').checked = !!s.indeedEnabled;
-        document.getElementById('telegramEnabled').checked = !!s.telegramEnabled;
-        document.getElementById('companySitesEnabled').checked = !!s.companySitesEnabled;
-        document.getElementById('remoteOnly').checked = !!s.remoteOnly;
-        document.getElementById('emailFoundersEnabled').checked = !!s.emailFoundersEnabled;
-        document.getElementById('emailRecruitersEnabled').checked = !!s.emailRecruitersEnabled;
-        document.getElementById('searchMode').value = s.searchMode || 'not_urgent';
-        document.getElementById('minimumSalary').value = s.minimumSalary ?? '';
+        document.getElementById('languageSelect').value = profile.language === 'en' ? 'en' : 'ru';
+        applyLocale(profile.language || 'ru');
       }
 
       async function loadProfile() {
@@ -153,18 +209,28 @@
         applyProfile(profile);
       }
 
-      document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
-        const statusEl = document.getElementById('saveStatus');
-        statusEl.textContent = 'Сохраняем...';
+      document.getElementById('languageSelect').addEventListener('change', async (event) => {
+        const selected = event.target.value === 'en' ? 'en' : 'ru';
+        const statusEl = document.getElementById('languageStatus');
+        const strings = t(selected);
+        statusEl.textContent = strings.saving;
         try {
-          await api('/api/app/profile/settings', { method: 'PATCH', body: JSON.stringify(readSettings()) });
-          statusEl.textContent = 'Сохранено';
+          const result = await api('/api/app/profile/settings', {
+            method: 'PATCH',
+            body: JSON.stringify({ language: selected }),
+          });
+          applyLocale(result.language || selected);
+          statusEl.textContent = t(currentLanguage).saved;
         } catch (err) {
-          statusEl.textContent = `Ошибка: ${err.message}`;
+          statusEl.textContent = `${strings.saveError}: ${err.message}`;
+          event.target.value = currentLanguage;
         }
       });
 
-      loadProfile().catch((err) => alert(`Не удалось загрузить профиль: ${err.message}`));
+      loadProfile().catch((err) => {
+        const strings = t(currentLanguage);
+        alert(`${strings.loadError}: ${err.message}`);
+      });
     </script>
   </body>
 </html>

@@ -14,7 +14,9 @@ import {
   toSearchModeOrUndefined,
   toIntOrNullOrUndefined,
   toSkillIdsOrNullOrUndefined,
+  toLanguageOrUndefined,
 } from '../../utils/validators.js';
+import { normalizeUserLanguage } from '../../utils/userLanguage.js';
 
 export function createProfileRouter() {
   const router = Router();
@@ -38,6 +40,7 @@ export function createProfileRouter() {
         id: user.Id,
         telegramChatId: String(user.TelegramChatId),
         telegramUserName: user.TelegramUserName,
+        language: normalizeUserLanguage(user.Language),
         isBotAdmin,
         resumeUrl: user.ResumeURL,
         skills: user.skills,
@@ -139,6 +142,7 @@ export function createProfileRouter() {
         SearchMode: toSearchModeOrUndefined(req.body.searchMode),
         MinimumSalary: toIntOrNullOrUndefined(req.body.minimumSalary),
         RemoteOnly: toBoolOrUndefined(req.body.remoteOnly),
+        Language: toLanguageOrUndefined(req.body.language),
       };
       const skillIds = toSkillIdsOrNullOrUndefined(req.body.skills, normalizeSkillIds);
 
@@ -150,6 +154,7 @@ export function createProfileRouter() {
 
       res.json({
         ok: true,
+        language: normalizeUserLanguage(user.Language),
         skills: user.skills,
         settings: {
           hhEnabled: !!user.HhEnabled,

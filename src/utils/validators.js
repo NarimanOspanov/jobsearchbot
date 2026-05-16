@@ -3,6 +3,13 @@ export function toBoolOrUndefined(value) {
   return undefined;
 }
 
+export function toLanguageOrUndefined(value) {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'ru' || normalized === 'en') return normalized;
+  return undefined;
+}
+
 export function toSearchModeOrUndefined(value) {
   if (typeof value !== 'string') return undefined;
   const normalized = value.trim().toLowerCase();

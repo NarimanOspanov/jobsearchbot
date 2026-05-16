@@ -60,6 +60,7 @@ import {
   removeUserDataByTelegramChatId,
   runResumeEnrichmentInBackground,
 } from './services/userService.js';
+import { normalizeUserLanguage } from './utils/userLanguage.js';
 import {
   hireAgentStateByChatId,
   legacyKeyboardClearedByChatId,
@@ -944,15 +945,28 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   });
 
   bot.command('profile', async (ctx) => {
+    const { user } = await ensureUserByTelegramId(
+      ctx.from?.id,
+      ctx.from?.username ?? null,
+      ctx.from?.first_name ?? null,
+      ctx.from?.last_name ?? null
+    );
+    const lang = normalizeUserLanguage(user?.Language);
     if (canUseProfileWebApp) {
-      await ctx.reply('Открыть настройки:', {
+      const replyText = lang === 'en' ? 'Open settings:' : 'Открыть настройки:';
+      const buttonText = lang === 'en' ? 'Settings' : 'Настройки';
+      await ctx.reply(replyText, {
         reply_markup: {
-          inline_keyboard: [[{ text: 'Настройки', web_app: { url: profileUrl } }]],
+          inline_keyboard: [[{ text: buttonText, web_app: { url: profileUrl } }]],
         },
       });
       return;
     }
-    await ctx.reply('Страница настроек требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).');
+    const httpsErrorText =
+      lang === 'en'
+        ? 'Settings page requires a public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).'
+        : 'Страница настроек требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).';
+    await ctx.reply(httpsErrorText);
   });
 
   bot.command('about', async (ctx) => {
