@@ -60,7 +60,14 @@ import {
   removeUserDataByTelegramChatId,
   runResumeEnrichmentInBackground,
 } from './services/userService.js';
-import { normalizeUserLanguage } from './utils/userLanguage.js';
+import { normalizeUserLanguage, resolveBotLanguage } from './utils/userLanguage.js';
+import {
+  tr,
+  t,
+  langFromCtx,
+  textMatchesAnyLang,
+  registerBotMenuCommands,
+} from './i18n/botI18n.js';
 import {
   hireAgentStateByChatId,
   legacyKeyboardClearedByChatId,
@@ -81,33 +88,6 @@ import { createAdminRouter } from './routes/api/admin.js';
 import { createNotificationsRouter } from './routes/api/notifications.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const START_INTRO_MESSAGE = [
-  'Привет',
-  '',
-  'Получи доступ к вакансиям на 100% удалёнку',
-].join('\n');
-const ABOUT_MESSAGE = [
-  'Забудьте про поиск работы вручную.',
-  '',
-  'У вас будет личный карьерный агент.',
-  'Мы используем гибридную модель: человек-агент + ИИ.',
-  '',
-  'Что это значит на практике:',
-  '- ИИ ищет релевантные remote вакансии и готовит отклики',
-  '- Человек-агент проверяет качество и помогает там, где нужна ручная работа',
-  '',
-  'Если у сайта или бирж труда есть политика против автооткликов,',
-  'или есть риск блокировки за автоматизацию — отклик делает человек-агент.',
-  '',
-  'Если таких ограничений нет, отклик отправляет ИИ-агент.',
-  '',
-  'Вы получаете скорость ИИ и надежность ручной проверки в одном процессе.',
-  '',
-  'Когда от вас потребуется действие, мы сразу напишем.',
-  '',
-  'Отчеты о проделанных откликах всегда доступны в разделе мои отклики',
-].join('\n');
 
 const resumeStorage = createResumeStorage(config);
 const HIRE_AGENT_SIMULATION_CONFIG_KEY = 'hireAgentSimulationVisible';
@@ -182,63 +162,64 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const notSubscribedImagePath = join(__dirname, '..', 'not_subscribed.png');
   const subscribedImagePath = join(__dirname, '..', 'subscribed.png');
-  const startKeyboard = {
+  const buildStartKeyboard = (lang) => ({
     inline_keyboard: [
       [
         canUseSeekerJobsWebApp
-          ? { text: 'Открыть вакансии', web_app: { url: seekerJobsUrl } }
-          : { text: 'Открыть вакансии', callback_data: 'start_open_jobsearch' },
+          ? { text: t(lang, 'btn_open_jobs'), web_app: { url: seekerJobsUrl } }
+          : { text: t(lang, 'btn_open_jobs'), callback_data: 'start_open_jobsearch' },
       ],
     ],
-  };
+  });
   const START_REQUIRED_CHANNEL_CONFIRM_CALLBACK = 'start_confirm_required_channels';
 
   const sendStartIntro = async (ctx) => {
+    const lang = langFromCtx(ctx);
+    const intro = tr(ctx, 'start_intro');
+    const keyboard = buildStartKeyboard(lang);
     if (existsSync(startAvatarPath)) {
       await ctx.replyWithPhoto(
         { source: startAvatarPath },
         {
-          caption: START_INTRO_MESSAGE,
-          reply_markup: startKeyboard,
+          caption: intro,
+          reply_markup: keyboard,
         }
       );
       return;
     }
-    await ctx.reply(START_INTRO_MESSAGE, { reply_markup: startKeyboard });
+    await ctx.reply(intro, { reply_markup: keyboard });
   };
 
-  const buildStartRequiredChannelsKeyboard = (channels) => {
+  const buildStartRequiredChannelsKeyboard = (channels, lang) => {
     const serialized = serializeRequiredChannels(channels);
     const firstJoinUrl = String(serialized[0]?.joinUrl || '').trim();
-    const channelButtons = firstJoinUrl ? [[{ text: '✈️ Подписаться на канал', url: firstJoinUrl }]] : [];
+    const channelButtons = firstJoinUrl
+      ? [[{ text: t(lang, 'btn_subscribe_channel'), url: firstJoinUrl }]]
+      : [];
     return {
       inline_keyboard: [
         ...channelButtons,
-        [{ text: '✅ Я подписался', callback_data: START_REQUIRED_CHANNEL_CONFIRM_CALLBACK }],
+        [{ text: t(lang, 'btn_subscribed_confirm'), callback_data: START_REQUIRED_CHANNEL_CONFIRM_CALLBACK }],
       ],
     };
   };
 
   const sendStartRequiredChannelsGate = async (ctx, channels) => {
-    const lines = [
-      '<b>Подпишись на канал, для старта</b>',
-      '',
-      '',
-      'Мы фильтруем <b>10 000+ вакансий в день</b> — это требует серьёзных ресурсов. Подписка на канал помогает нам покрывать часть расходов, чтобы сервис оставался максимально доступным для вас.',
-    ].filter(Boolean);
-    const replyMarkup = buildStartRequiredChannelsKeyboard(channels);
+    const lang = langFromCtx(ctx);
+    const lines = tr(ctx, 'start_channel_gate');
+    const replyMarkup = buildStartRequiredChannelsKeyboard(channels, lang);
     if (existsSync(notSubscribedImagePath)) {
       await ctx.replyWithPhoto(
         { source: notSubscribedImagePath },
         {
-          caption: lines.join('\n'),
+          caption: lines,
           parse_mode: 'HTML',
           reply_markup: replyMarkup,
         }
       );
       return;
     }
-    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML', reply_markup: replyMarkup });
+    await ctx.reply(lines, { parse_mode: 'HTML', reply_markup: replyMarkup });
   };
 
   const enforceStartRequiredChannelsGate = async (ctx) => {
@@ -267,30 +248,29 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
   };
 
-  const formatPlanButtonLabel = (plan) => {
+  const formatPlanButtonLabel = (plan, lang) => {
     const limit = Number(plan?.JobOpenMonthlyLimit || 0);
     const priceLabel = formatPlanPrice(plan?.PriceInStars, plan?.PriceUsd);
-    return `${plan?.Name || 'Тариф'} · ${limit} открытий/мес · ${priceLabel}`;
+    return t(lang, 'plan_button', { name: plan?.Name || 'Plan', opens: limit, price: priceLabel });
   };
 
   const sendPlansIntro = async (ctx) => {
+    const lang = langFromCtx(ctx);
     const pricingButton = canUsePricingWebApp
-      ? { text: 'Pricing', web_app: { url: pricingTmaUrl } }
-      : { text: 'Pricing', callback_data: 'plan_pricing' };
-    await ctx.reply(
-      'Выберите формат оплаты через Telegram Stars. Нажмите Pricing, чтобы посмотреть доступные тарифы и описание.',
-      {
-        reply_markup: {
-          inline_keyboard: [[pricingButton]],
-        },
-      }
-    );
+      ? { text: t(lang, 'btn_pricing'), web_app: { url: pricingTmaUrl } }
+      : { text: t(lang, 'btn_pricing'), callback_data: 'plan_pricing' };
+    await ctx.reply(tr(ctx, 'plans_intro'), {
+      reply_markup: {
+        inline_keyboard: [[pricingButton]],
+      },
+    });
   };
 
   const sendPlanMenu = async (ctx) => {
+    const lang = langFromCtx(ctx);
     const plans = (await getActivePlans()).filter((plan) => Boolean(plan?.IsActive));
     if (plans.length === 0) {
-      await ctx.reply('Платные тарифы временно недоступны.');
+      await ctx.reply(tr(ctx, 'plans_unavailable'));
       return;
     }
     const sortedPlans = plans.sort((a, b) => Number(a.SortOrder || 0) - Number(b.SortOrder || 0));
@@ -299,15 +279,21 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         const monthlyOpens = Number(plan.JobOpenMonthlyLimit || 0);
         const durationDays = Number(plan.DurationDays || 30);
         const aiText = plan.IncludesAiTools
-          ? 'AI CV + Cover Letter включены'
-          : 'AI CV + Cover Letter не включены';
-        return `• ${plan.Name}: ${monthlyOpens} открытий/мес, ${durationDays} дней, ${formatPlanPrice(plan.PriceInStars, plan.PriceUsd)}, ${aiText}`;
+          ? t(lang, 'plan_ai_included')
+          : t(lang, 'plan_ai_not_included');
+        return t(lang, 'plan_line', {
+          name: plan.Name,
+          opens: monthlyOpens,
+          days: durationDays,
+          price: formatPlanPrice(plan.PriceInStars, plan.PriceUsd),
+          ai: aiText,
+        });
       })
       .join('\n');
-    const buttons = plans
-      .sort((a, b) => Number(a.SortOrder || 0) - Number(b.SortOrder || 0))
-      .map((plan) => [{ text: formatPlanButtonLabel(plan), callback_data: `plan_buy_${String(plan.Code || '').toLowerCase()}` }]);
-    await ctx.reply(`Pricing plans:\n${detailsText}\n\nВыберите подписку для оплаты в Telegram Stars:`, {
+    const buttons = sortedPlans.map((plan) => [
+      { text: formatPlanButtonLabel(plan, lang), callback_data: `plan_buy_${String(plan.Code || '').toLowerCase()}` },
+    ]);
+    await ctx.reply(tr(ctx, 'plans_menu_header', { details: detailsText }), {
       reply_markup: { inline_keyboard: buttons },
     });
   };
@@ -325,7 +311,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   const sendReferralScreen = async (ctx) => {
     if (ctx.chat?.type !== 'private') {
-      await ctx.reply('Команда доступна только в личном чате с ботом.');
+      await ctx.reply(tr(ctx, 'private_chat_only'));
       return;
     }
     const { user } = await ensureUserByTelegramId(
@@ -335,9 +321,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       ctx.from?.last_name ?? null
     );
     if (!user) {
-      await ctx.reply('Не удалось определить пользователя.');
+      await ctx.reply(tr(ctx, 'user_not_found'));
       return;
     }
+    const lang = langFromCtx(ctx);
     const bonusOpens = Math.max(0, await getConfigInt(REFERRAL_BONUS_OPENS_CONFIG_KEY, 10));
     const invitedCount = models.Referrals
       ? await models.Referrals.count({ where: { ReferrerUserId: user.Id } })
@@ -347,16 +334,16 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       ? `https://t.me/${botUsername}?start=${encodeURIComponent(String(user.TelegramChatId || ''))}`
       : '';
     const shareUrl = referralLink
-      ? `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Привет! Попробуй бот для поиска удаленной работы:')}`
+      ? `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(t(lang, 'referral_share_text'))}`
       : '';
     const lines = [
-      `Пригласите друга и получите +${bonusOpens} открытий вакансий.`,
-      `Уже приглашено: ${invitedCount}`,
+      t(lang, 'referral_invite', { bonus: bonusOpens }),
+      t(lang, 'referral_invited', { count: invitedCount }),
       '',
-      referralLink || 'Реферальная ссылка временно недоступна.',
+      referralLink || t(lang, 'referral_link_unavailable'),
     ];
     const inlineKeyboard = shareUrl
-      ? [[{ text: 'Поделиться ссылкой', url: shareUrl }]]
+      ? [[{ text: t(lang, 'btn_share_referral'), url: shareUrl }]]
       : [];
     await ctx.reply(lines.join('\n'), {
       disable_web_page_preview: true,
@@ -388,9 +375,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
       const granted = await grantReferralBonusToReferrer(referrer.Id, invitedUser.Id);
       if (granted > 0) {
+        const referrerLang = resolveBotLanguage(referrer.Language, null);
         await ctx.telegram.sendMessage(
           Number(referrer.TelegramChatId),
-          `🎉 Ваш друг запустил бота по вашей ссылке. Начислено +${granted} открытий вакансий.`
+          t(referrerLang, 'referral_bonus_notify', { granted })
         ).catch(() => { });
       }
     } catch (err) {
@@ -399,20 +387,26 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   };
 
   const sendPlanInvoice = async (ctx, planCode) => {
+    const lang = langFromCtx(ctx);
     const plan = await getPlanByCode(planCode);
     if (!plan || Number(plan.PriceInStars || 0) < 1) {
-      await ctx.reply('Этот тариф недоступен для оплаты.');
+      await ctx.reply(tr(ctx, 'plan_not_payable'));
       return;
     }
     const payload = buildPlanInvoicePayload(plan);
     const monthlyOpens = Number(plan.JobOpenMonthlyLimit || 0);
     const hasAiTools = Boolean(plan.IncludesAiTools);
     const priceLabel = formatPlanPrice(plan.PriceInStars, plan.PriceUsd);
-    const title = `${plan.Name} — ${monthlyOpens} открытий/мес — ${priceLabel}`;
-    const description =
-      `${plan.Name}: ${monthlyOpens} открытий вакансий в месяц на ${Number(plan.DurationDays || 30)} дней. ` +
-      `${hasAiTools ? 'Включает инструменты AI CV и Cover Letter. ' : 'Инструменты AI CV и Cover Letter не включены. '}` +
-      `Цена: ${priceLabel}. Оплата через Telegram Stars.`;
+    const durationDays = Number(plan.DurationDays || 30);
+    const aiText = hasAiTools ? t(lang, 'plan_ai_included') : t(lang, 'plan_ai_not_included');
+    const title = t(lang, 'invoice_title', { name: plan.Name, opens: monthlyOpens, price: priceLabel });
+    const description = t(lang, 'invoice_description', {
+      name: plan.Name,
+      opens: monthlyOpens,
+      days: durationDays,
+      ai: aiText,
+      price: priceLabel,
+    });
     try {
       await ctx.telegram.sendInvoice(ctx.chat.id, {
         title,
@@ -420,57 +414,59 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         payload,
         provider_token: '',
         currency: 'XTR',
-        prices: [{ label: `${plan.Name} (${Number(plan.DurationDays || 30)} дней)`, amount: Number(plan.PriceInStars || 0) }],
+        prices: [
+          {
+            label: t(lang, 'invoice_price_label', { name: plan.Name, days: durationDays }),
+            amount: Number(plan.PriceInStars || 0),
+          },
+        ],
       });
     } catch (err) {
       const msg = err?.response?.body?.description ?? err?.message ?? String(err);
       console.error('sendInvoice plan error:', msg);
-      await ctx.reply(`Не удалось выставить счёт. Попробуйте позже.${msg ? ` (${msg})` : ''}`);
+      await ctx.reply(tr(ctx, 'invoice_failed', { details: msg ? ` (${msg})` : '' }));
     }
   };
 
   const startHireAgentScenario = async (ctx) => {
     const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
     if (chat?.type !== 'private') {
-      await ctx.reply('Этот сценарий доступен только в личном чате с ботом.');
+      await ctx.reply(tr(ctx, 'scenario_private_only'));
       return;
     }
     if (ctx.callbackQuery) await withTypingTelegram(ctx.telegram, chat.id, 700);
     hireAgentStateByChatId.set(chat.id, { step: 'awaiting_cv' });
-    await ctx.reply(
-      'Отправьте резюме файлом (PDF или изображение) — я разберу его и начну работу.\n' +
-      'Когда потребуются действия, я напишу.'
-    );
+    await ctx.reply(tr(ctx, 'hireagent_send_cv'));
   };
 
   const startPositionApplyScenario = async (ctx, positionId) => {
+    const lang = langFromCtx(ctx);
     const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
     if (chat?.type !== 'private') {
-      await ctx.reply('Этот сценарий доступен только в личном чате с ботом.');
+      await ctx.reply(tr(ctx, 'scenario_private_only'));
       return;
     }
     if (!models.Positions) {
-      await ctx.reply('Сервис вакансий временно недоступен. Попробуйте позже.');
+      await ctx.reply(tr(ctx, 'position_service_unavailable'));
       return;
     }
     const position = await models.Positions.findByPk(positionId);
     if (!position || position.IsArchived) {
-      await ctx.reply('Вакансия не найдена или уже архивирована.');
+      await ctx.reply(tr(ctx, 'position_not_found'));
       return;
     }
     const website = String(position.CompanyWebsite || '').trim();
     const externalApplyUrl = String(position.ExternalApplyURL || '').trim();
     const companyName = String(position.CompanyName || '').trim();
     const externalApplyButtonText = companyName
-      ? `Откликнуться на сайте ${companyName}`
-      : 'Откликнуться на сайте работодателя';
+      ? t(lang, 'btn_apply_external', { company: companyName })
+      : t(lang, 'btn_apply_external_generic');
     const openOtherJobsButton = canUseSeekerJobsWebApp
-      ? { text: 'Открыть другие вакансии на 100% удалёнку', web_app: { url: seekerJobsUrl } }
-      : { text: 'Открыть другие вакансии на 100% удалёнку', callback_data: 'start_open_jobsearch' };
+      ? { text: t(lang, 'btn_open_other_jobs'), web_app: { url: seekerJobsUrl } }
+      : { text: t(lang, 'btn_open_other_jobs'), callback_data: 'start_open_jobsearch' };
     const lines = [
-      `Вакансия: ${position.Title}`,
-      `Компания: ${position.CompanyName}`,
-      ...(website ? [`Сайт компании: ${website}`] : []),
+      t(lang, 'position_header', { title: position.Title, company: position.CompanyName }),
+      ...(website ? [t(lang, 'position_website', { website })] : []),
       '',
       String(position.Description || '').trim(),
     ];
@@ -486,7 +482,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       });
       return;
     }
-    lines.push('', '<b>Чтобы откликнуться, отправьте резюме файлом (PDF или изображение).</b>');
+    lines.push('', tr(ctx, 'position_send_cv_html'));
     hireAgentStateByChatId.set(chat.id, { step: 'awaiting_cv_for_position', positionId: position.Id });
     await ctx.reply(lines.join('\n'), {
       parse_mode: 'HTML',
@@ -521,6 +517,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     try {
       const { user, wasCreated } = await ensureUser(ctx);
       ctx.state.isFirstTimeUser = wasCreated;
+      ctx.state.lang = resolveBotLanguage(user?.Language, ctx.from?.language_code);
+      ctx.state.userLanguage = user?.Language ?? null;
       if (wasCreated && user) {
         const totalUsers = await models.Users.count();
         const message = [
@@ -594,7 +592,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     const telegramUserId = Number(ctx.from?.id || ctx.chat?.id || 0);
     if (!telegramUserId) {
-      await ctx.reply('Не удалось определить пользователя. Откройте /start еще раз.');
+      await ctx.reply(tr(ctx, 'start_user_not_found'));
       return;
     }
     const channelsState = await getRequiredChannelsState(telegramUserId);
@@ -615,9 +613,12 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     } catch (err) {
       console.warn('Failed to grant start subscription bonus:', err?.message || err);
     }
+    const lang = langFromCtx(ctx);
     const successLines = [
-      'Спасибо! Подписка подтверждена.',
-      grantedBonus > 0 ? `Начислено +${grantedBonus} открытий вакансий.` : 'Доступ к вакансиям открыт.',
+      tr(ctx, 'subscribe_success'),
+      grantedBonus > 0
+        ? t(lang, 'subscribe_bonus', { bonus: grantedBonus })
+        : tr(ctx, 'subscribe_access'),
     ];
     if (existsSync(subscribedImagePath)) {
       await ctx.replyWithPhoto({ source: subscribedImagePath }, { caption: successLines.join('\n') });
@@ -628,18 +629,16 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   });
 
   const openJobSearchFromBot = async (ctx) => {
+    const lang = langFromCtx(ctx);
     if (canUseSeekerJobsWebApp) {
-      await ctx.reply(
-        'Ищите удаленные вакансии, отмечайте релевантные роли и открывайте детали прямо в мини-приложении.',
-        {
-          reply_markup: {
-            inline_keyboard: [[{ text: 'Open job search', web_app: { url: seekerJobsUrl } }]],
-          },
-        }
-      );
+      await ctx.reply(tr(ctx, 'jobsearch_intro'), {
+        reply_markup: {
+          inline_keyboard: [[{ text: t(lang, 'btn_jobsearch'), web_app: { url: seekerJobsUrl } }]],
+        },
+      });
       return;
     }
-    await ctx.reply('Job search page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+    await ctx.reply(tr(ctx, 'jobsearch_https_error'));
   };
 
   bot.command('jobsearch', async (ctx) => {
@@ -685,22 +684,23 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     const code = String(ctx.match?.[1] || '').trim().toLowerCase();
     if (!code) {
-      await ctx.reply('Не удалось определить тариф для оплаты.');
+      await ctx.reply(tr(ctx, 'plan_code_missing'));
       return;
     }
     await sendPlanInvoice(ctx, code);
   });
 
   bot.command('applications', async (ctx) => {
+    const lang = langFromCtx(ctx);
     if (canUseApplicationsWebApp) {
-      await ctx.reply('Мои отклики', {
+      await ctx.reply(tr(ctx, 'applications_title'), {
         reply_markup: {
-          inline_keyboard: [[{ text: 'Applications', web_app: { url: applicationsUrl } }]],
+          inline_keyboard: [[{ text: t(lang, 'btn_applications'), web_app: { url: applicationsUrl } }]],
         },
       });
       return;
     }
-    await ctx.reply('Applications page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+    await ctx.reply(tr(ctx, 'applications_https_error'));
   });
 
   bot.command('hireagent', async (ctx) => {
@@ -709,15 +709,12 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.command('cvscore', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
-      await ctx.reply('Эта команда доступна только в личном чате с ботом.');
+      await ctx.reply(tr(ctx, 'cvscore_private_only'));
       return;
     }
     const chatId = ctx.chat.id;
     hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
-    await ctx.reply(
-      'Отправьте ваше резюме файлом (PDF/TXT).\n' +
-      'Я оценю CV как HR-эксперт, дам комментарии и верну улучшенную ATS-friendly версию.'
-    );
+    await ctx.reply(tr(ctx, 'cvscore_prompt'));
   });
 
   bot.action('start_hireagent', async (ctx) => {
@@ -737,9 +734,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     const chatId = ctx.callbackQuery?.message?.chat?.id;
     if (chatId) await withTypingTelegram(ctx.telegram, chatId, 700);
-    await ctx.reply(ABOUT_MESSAGE, {
+    await ctx.reply(tr(ctx, 'about_message'), {
       reply_markup: {
-        inline_keyboard: [[{ text: 'Отправить резюме и попробовать', callback_data: 'start_hireagent' }]],
+        inline_keyboard: [[{ text: tr(ctx, 'btn_try_hireagent'), callback_data: 'start_hireagent' }]],
       },
     });
   });
@@ -752,19 +749,19 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     if (!hireAgentSimulationVisible) {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
-      await ctx.reply('Симуляция откликов сейчас отключена. Мы сообщим вам по результатам проверки резюме.');
+      await ctx.reply(tr(ctx, 'hireagent_sim_disabled'));
       return;
     }
     const chatId = ctx.callbackQuery?.message?.chat?.id;
     if (!chatId) return;
     const st = hireAgentStateByChatId.get(chatId);
     if (st?.step !== 'awaiting_confirm') {
-      await ctx.reply('Сначала пройдите шаг с резюме в диалоге с агентом (/hireagent).');
+      await ctx.reply(tr(ctx, 'hireagent_need_cv_first'));
       return;
     }
     hireAgentStateByChatId.set(chatId, { step: 'applying' });
     await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
-    await runHireAgentFakeApplying(ctx, chatId, hireAgentStateByChatId);
+    await runHireAgentFakeApplying(ctx, chatId, hireAgentStateByChatId, langFromCtx(ctx));
   });
 
   bot.action('hireagent_no', async (ctx) => {
@@ -783,7 +780,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     if (st?.step !== 'awaiting_confirm') return;
     hireAgentStateByChatId.set(chatId, { step: 'idle' });
     await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => { });
-    await ctx.reply('Хорошо. Когда будете готовы — снова выберите «Делегировать отклики» в меню.');
+    await ctx.reply(tr(ctx, 'hireagent_decline_later'));
   });
 
   bot.action('hireagent_continue', async (ctx) => {
@@ -804,11 +801,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     if (!isHireAgentCvFlow && !isPositionCvFlow && !isCvReviewFlow) return next();
     const resumeSource = pickResumeSourceFromMessage(ctx.message);
     if (!resumeSource) {
-      await ctx.reply('Не удалось распознать файл резюме. Отправьте PDF или изображение еще раз.');
+      await ctx.reply(tr(ctx, 'resume_unrecognized'));
       return;
     }
     try {
-      await ctx.reply('Спасибо! Загружаю и анализирую резюме…');
+      await ctx.reply(tr(ctx, 'resume_uploading'));
       await withTypingTelegram(ctx.telegram, chatId, 1200 + Math.floor(Math.random() * 600));
 
       const fileBuffer = await downloadTelegramFileAsBuffer(ctx.telegram, resumeSource.fileId);
@@ -860,32 +857,26 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           String(resumeSource.fileName || '').toLowerCase().endsWith('.txt');
         if (!canExtractText) {
           hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
-          await ctx.reply('Для CV score сейчас поддерживаются PDF/TXT файлы. Пожалуйста, отправьте резюме в PDF.');
+          await ctx.reply(tr(ctx, 'cvscore_pdf_only'));
           return;
         }
         const resumeText = await runWithTyping(ctx.telegram, chatId, () =>
           extractResumeTextFromUrl(resumeUrl)
         );
         if (!resumeText) {
-          await ctx.reply('Не удалось извлечь текст из резюме. Попробуйте отправить PDF с текстовым слоем.');
+          await ctx.reply(tr(ctx, 'cvscore_extract_failed'));
           hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
           return;
         }
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_choice', resumeText });
-        await ctx.reply(
-          '✅ Резюме получено! Что хотите сделать?\n\n' +
-          '🌟 *Просто улучшить резюме* — анализ и ATS-friendly версия.\n\n' +
-          '💼 *На основе требований вакансии* — CV под конкретную вакансию.',
-          {
-            parse_mode: 'Markdown',
-            reply_markup: {
-              keyboard: [
-                ['🌟 Просто улучшить резюме', '💼 На основе требований вакансии'],
-              ],
-              resize_keyboard: true,
-            },
-          }
-        );
+        const lang = langFromCtx(ctx);
+        await ctx.reply(tr(ctx, 'cvscore_received_choice'), {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            keyboard: [[t(lang, 'btn_cv_improve_simple'), t(lang, 'btn_cv_improve_job')]],
+            resize_keyboard: true,
+          },
+        });
       } else if (isPositionCvFlow) {
         const positionId = String(st?.positionId || '').trim();
         if (positionId && models.UserApplications) {
@@ -896,107 +887,84 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           });
         }
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
+        const lang = langFromCtx(ctx);
         if (canUseSeekerJobsWebApp) {
-          await ctx.reply(
-            'Резюме принято. Спасибо за отклик! Пока мы обрабатываем вашу заявку, вы можете посмотреть другие доступные вакансии.',
-            {
-              reply_markup: {
-                inline_keyboard: [[{ text: 'Открыть поиск вакансий', web_app: { url: seekerJobsUrl } }]],
-              },
-            }
-          );
+          await ctx.reply(tr(ctx, 'position_resume_accepted'), {
+            reply_markup: {
+              inline_keyboard: [[{ text: t(lang, 'btn_jobsearch'), web_app: { url: seekerJobsUrl } }]],
+            },
+          });
         } else {
-          await ctx.reply(
-            'Резюме принято. Спасибо за отклик! Пока мы обрабатываем вашу заявку, вы можете посмотреть другие доступные вакансии.'
-          );
+          await ctx.reply(tr(ctx, 'position_resume_accepted'));
         }
       } else if (hireAgentSimulationVisible) {
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_confirm' });
-        await ctx.reply(
-          'Готово. Я сохранил ваше резюме и нашёл 263 вакансии с полной удалёнкой (100%), которые вам подходят.\n\n' +
-          'Запустить автоматические отклики?',
-          {
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  { text: 'Да, начинай', callback_data: 'hireagent_yes' },
-                  { text: 'Нет, позже', callback_data: 'hireagent_no' },
-                ],
+        const lang = langFromCtx(ctx);
+        await ctx.reply(tr(ctx, 'hireagent_found_jobs'), {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: t(lang, 'btn_hireagent_yes'), callback_data: 'hireagent_yes' },
+                { text: t(lang, 'btn_hireagent_no'), callback_data: 'hireagent_no' },
               ],
-            },
-          }
-        );
+            ],
+          },
+        });
       } else {
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
-        await ctx.reply('Резюме принято. Мы передали его на проверку — свяжемся с вами с обратной связью.');
+        await ctx.reply(tr(ctx, 'hireagent_resume_submitted'));
       }
     } catch (err) {
       console.error('hireagent resume upload failed:', err);
       if (isCvReviewFlow) {
-        await ctx.reply('Не удалось обработать резюме для CV score. Попробуйте еще раз через минуту.');
+        await ctx.reply(tr(ctx, 'cvscore_process_failed'));
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
       } else {
-        await ctx.reply(
-          'Не удалось сохранить резюме. Проверьте настройки Azure Storage (AZURE_STORAGE_CONNECTION_STRING) и попробуйте снова.'
-        );
+        await ctx.reply(tr(ctx, 'resume_save_failed'));
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv' });
       }
     }
   });
 
   bot.command('profile', async (ctx) => {
-    const { user } = await ensureUserByTelegramId(
-      ctx.from?.id,
-      ctx.from?.username ?? null,
-      ctx.from?.first_name ?? null,
-      ctx.from?.last_name ?? null
-    );
-    const lang = normalizeUserLanguage(user?.Language);
+    const lang = langFromCtx(ctx);
     if (canUseProfileWebApp) {
-      const replyText = lang === 'en' ? 'Open settings:' : 'Открыть настройки:';
-      const buttonText = lang === 'en' ? 'Settings' : 'Настройки';
-      await ctx.reply(replyText, {
+      await ctx.reply(tr(ctx, 'profile_open'), {
         reply_markup: {
-          inline_keyboard: [[{ text: buttonText, web_app: { url: profileUrl } }]],
+          inline_keyboard: [[{ text: t(lang, 'btn_profile_settings'), web_app: { url: profileUrl } }]],
         },
       });
       return;
     }
-    const httpsErrorText =
-      lang === 'en'
-        ? 'Settings page requires a public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).'
-        : 'Страница настроек требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).';
-    await ctx.reply(httpsErrorText);
+    await ctx.reply(tr(ctx, 'profile_https_error'));
   });
 
   bot.command('about', async (ctx) => {
-    await ctx.reply(ABOUT_MESSAGE);
+    await ctx.reply(tr(ctx, 'about_message'));
   });
 
   bot.command('companies', async (ctx) => {
     const canProceedToCompanies = await enforceStartRequiredChannelsGate(ctx);
     if (!canProceedToCompanies) return;
+    const lang = langFromCtx(ctx);
     if (canUseCompaniesWebApp) {
-      await ctx.reply('Открыть компании с удалёнкой:', {
+      await ctx.reply(tr(ctx, 'companies_open'), {
         reply_markup: {
-          inline_keyboard: [[{ text: 'Компании с удалёнкой', web_app: { url: companiesUrl } }]],
+          inline_keyboard: [[{ text: t(lang, 'btn_companies'), web_app: { url: companiesUrl } }]],
         },
       });
       return;
     }
-    await ctx.reply('Страница компаний требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).');
+    await ctx.reply(tr(ctx, 'companies_https_error'));
   });
 
   bot.command('news', async (ctx) => {
-    await ctx.reply(
-      'Получайте последние новости про удалённую жизнь, релокацию и общение с единомышленниками.\n\n' +
-      'Сообщество Digital nomads. Work from anywhere:',
-      {
+    const lang = langFromCtx(ctx);
+    await ctx.reply(tr(ctx, 'news_text'), {
       reply_markup: {
-        inline_keyboard: [[{ text: 'Ознакомиться', url: DIGITAL_NOMADS_CHANNEL_URL }]],
+        inline_keyboard: [[{ text: t(lang, 'btn_news_read'), url: DIGITAL_NOMADS_CHANNEL_URL }]],
       },
-      }
-    );
+    });
   });
 
   bot.command('referrals', async (ctx) => {
@@ -1235,14 +1203,14 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const text = ctx.message.text;
 
     if (st?.step === 'awaiting_cv') {
-      await ctx.reply('Пожалуйста, отправьте резюме файлом (PDF или изображение), а не текстом.');
+      await ctx.reply(tr(ctx, 'awaiting_cv_text'));
       return;
     }
 
     if (st?.step === 'awaiting_cv_choice') {
-      if (text === '🌟 Просто улучшить резюме') {
+      if (textMatchesAnyLang(text, 'btn_cv_improve_simple')) {
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
-        await ctx.reply('Провожу HR-анализ и улучшаю структуру резюме…', {
+        await ctx.reply(tr(ctx, 'cv_analyzing'), {
           reply_markup: { remove_keyboard: true },
         });
         let review;
@@ -1252,7 +1220,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           );
         } catch (err) {
           console.error('reviewResumeWithAI error:', err);
-          await ctx.reply('Не удалось проанализировать резюме. Попробуйте ещё раз.');
+          await ctx.reply(tr(ctx, 'cv_analyze_failed'));
           return;
         }
         const cvScoreResult = {
@@ -1277,9 +1245,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         };
         cvScoreResultByUserId.set(String(chatId), cvScoreResult);
         if (canUseCvScoreWebApp) {
-          await ctx.reply('Открыть полный отчет CV Score:', {
+          const lang = langFromCtx(ctx);
+          await ctx.reply(tr(ctx, 'cv_report_open'), {
             reply_markup: {
-              inline_keyboard: [[{ text: '📊 Открыть полный отчет', web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
+              inline_keyboard: [[{ text: t(lang, 'btn_cv_report'), web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
             },
           });
         }
@@ -1293,37 +1262,38 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           );
           if (!enhancedCvRes.ok) throw new Error('Failed to generate enhanced CV');
           const { url: enhancedCvUrl } = await enhancedCvRes.json();
-          await ctx.reply('Готово! Вот ваша улучшенная ATS-friendly версия резюме:', {
+          const lang = langFromCtx(ctx);
+          await ctx.reply(tr(ctx, 'cv_enhanced_ready'), {
             reply_markup: {
-              inline_keyboard: [[{ text: '⬇ Скачать улучшенное резюме', url: enhancedCvUrl }]],
+              inline_keyboard: [[{ text: t(lang, 'btn_cv_download'), url: enhancedCvUrl }]],
             },
           });
         } catch (err) {
           console.error('generate-from-review error:', err);
-          await ctx.reply('Не удалось сгенерировать улучшенное резюме. Попробуйте ещё раз.');
+          await ctx.reply(tr(ctx, 'cv_enhance_failed'));
         }
         return;
       }
 
-      if (text === '💼 На основе требований вакансии') {
+      if (textMatchesAnyLang(text, 'btn_cv_improve_job')) {
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_job_desc', resumeText: st.resumeText });
-        await ctx.reply('📋 Отправьте текст вакансии, под которую нужно адаптировать резюме:', {
+        await ctx.reply(tr(ctx, 'awaiting_job_desc'), {
           reply_markup: { remove_keyboard: true },
         });
         return;
       }
 
-      await ctx.reply('Пожалуйста, выберите один из вариантов выше.');
+      await ctx.reply(tr(ctx, 'choose_option_above'));
       return;
     }
 
     if (st?.step === 'awaiting_job_desc') {
       if (text.length < 50) {
-        await ctx.reply('Текст слишком короткий. Пожалуйста, вставьте полное описание вакансии.');
+        await ctx.reply(tr(ctx, 'job_desc_too_short'));
         return;
       }
       hireAgentStateByChatId.set(chatId, { step: 'idle' });
-      await ctx.reply('⏳ Адаптирую резюме под вакансию…');
+      await ctx.reply(tr(ctx, 'tailoring_cv'));
       try {
         const res = await runWithTyping(ctx.telegram, chatId, () =>
           fetch('https://tailered-cv.onrender.com/generate-simple', {
@@ -1334,14 +1304,15 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         );
         if (!res.ok) throw new Error('Tailored CV API error');
         const { url: cvUrl } = await res.json();
-        await ctx.reply('✅ Готово! Вот ваше адаптированное резюме:', {
+        const lang = langFromCtx(ctx);
+        await ctx.reply(tr(ctx, 'tailored_ready'), {
           reply_markup: {
-            inline_keyboard: [[{ text: '⬇ Скачать резюме', url: cvUrl }]],
+            inline_keyboard: [[{ text: t(lang, 'btn_tailored_download'), url: cvUrl }]],
           },
         });
       } catch (err) {
         console.error('generate-simple error:', err);
-        await ctx.reply('Не удалось сгенерировать резюме. Попробуйте ещё раз.');
+        await ctx.reply(tr(ctx, 'tailored_failed'));
       }
       return;
     }
@@ -1375,7 +1346,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const planCode = String(payload.code || '').trim().toLowerCase();
     const plan = await getPlanByCode(planCode);
     if (!plan) {
-      await ctx.reply('Оплата получена, но тариф не найден. Напишите в поддержку.');
+      await ctx.reply(tr(ctx, 'payment_plan_not_found'));
       return;
     }
 
@@ -1384,7 +1355,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         ? await models.TelegramPayments.findOne({ where: { TelegramPaymentChargeId: telegramPaymentChargeId } })
         : null;
       if (existing) {
-        await ctx.reply('Оплата уже была зачислена ранее. Подписка активна.');
+        await ctx.reply(tr(ctx, 'payment_already_credited'));
         return;
       }
 
@@ -1395,9 +1366,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         ctx.from?.last_name ?? null
       );
       if (!user) {
-        await ctx.reply('Не удалось определить пользователя для зачисления подписки.');
+        await ctx.reply(tr(ctx, 'payment_user_not_found'));
         return;
       }
+      ctx.state.lang = resolveBotLanguage(user.Language, ctx.from?.language_code);
 
       const paidAt = new Date();
       let telegramPaymentRow = null;
@@ -1416,7 +1388,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       }
 
       if (!models.UserSubscriptions) {
-        await ctx.reply('Оплата получена, но таблица подписок недоступна. Напишите в поддержку.');
+        await ctx.reply(tr(ctx, 'payment_subscriptions_unavailable'));
         return;
       }
 
@@ -1434,10 +1406,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       });
 
       const until = endsAt.toISOString().slice(0, 10);
-      await ctx.reply(`✅ Оплата получена. Подписка ${plan.Name} активна до ${until}.`);
+      await ctx.reply(tr(ctx, 'payment_success', { plan: plan.Name, until }));
     } catch (err) {
       console.error('successful_payment processing failed:', err);
-      await ctx.reply('Оплата получена, но автозачисление не завершилось. Напишите в поддержку.');
+      await ctx.reply(tr(ctx, 'payment_processing_failed'));
     }
   });
 
@@ -1494,13 +1466,7 @@ async function main() {
   registerHandlers(bot, appBaseUrl, { hireAgentSimulationVisible });
 
   try {
-    await bot.telegram.setMyCommands([
-      { command: 'start', description: 'Вакансии на удалёнку' },
-      { command: 'cvscore', description: 'Проверка и улучшение резюме' },
-      { command: 'companies', description: 'Компании с удалёнкой' },
-      { command: 'referrals', description: 'Реферальная программа' },
-      { command: 'news', description: 'Новости про релокацию, удалёнку и ИИ' },
-    ]);
+    await registerBotMenuCommands(bot.telegram);
   } catch (err) {
     console.error('Failed to set menu commands:', err.message);
   }

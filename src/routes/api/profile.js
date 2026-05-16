@@ -17,6 +17,8 @@ import {
   toLanguageOrUndefined,
 } from '../../utils/validators.js';
 import { normalizeUserLanguage } from '../../utils/userLanguage.js';
+import { syncUserMenuCommands } from '../../i18n/botI18n.js';
+import { runtimeBot } from '../../bot/state.js';
 
 export function createProfileRouter() {
   const router = Router();
@@ -150,7 +152,14 @@ export function createProfileRouter() {
         Object.entries(patch).filter(([, v]) => typeof v === 'boolean' || typeof v === 'string' || v === null || typeof v === 'number')
       );
       if (skillIds !== undefined) updates.skills = skillIds;
+      const languageUpdated = updates.Language !== undefined;
       if (Object.keys(updates).length > 0) await user.update(updates);
+
+      if (languageUpdated && runtimeBot.telegram && user.TelegramChatId) {
+        syncUserMenuCommands(runtimeBot.telegram, user.TelegramChatId, user.Language).catch((err) => {
+          console.warn('syncUserMenuCommands after profile language change:', err?.message || err);
+        });
+      }
 
       res.json({
         ok: true,

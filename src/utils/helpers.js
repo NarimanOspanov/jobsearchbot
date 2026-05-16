@@ -1,3 +1,5 @@
+import { t } from '../i18n/botI18n.js';
+
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -123,11 +125,11 @@ export function formatHireAgentFullList(doneThroughIndex) {
   }).join('\n');
 }
 
-export async function runHireAgentFakeApplying(ctx, chatId, hireAgentStateByChatId) {
+export async function runHireAgentFakeApplying(ctx, chatId, hireAgentStateByChatId, lang = 'ru') {
   await withTypingTelegram(ctx.telegram, chatId, 500 + Math.floor(Math.random() * 500));
   const pendingPreview = formatHireAgentFullList(-1);
   const statusMsg = await ctx.reply(
-    `⏳ Запускаю автоматические отклики…\nСтатус: подготовка\n\nВакансии (${HIRE_AGENT_FAKE_QUEUE.length}):\n${pendingPreview}`
+    t(lang, 'hireagent_applying_start', { count: HIRE_AGENT_FAKE_QUEUE.length, list: pendingPreview })
   );
   const mid = statusMsg.message_id;
   const api = ctx.telegram;
@@ -135,10 +137,11 @@ export async function runHireAgentFakeApplying(ctx, chatId, hireAgentStateByChat
   for (let i = 0; i < HIRE_AGENT_FAKE_QUEUE.length; i++) {
     const current = HIRE_AGENT_FAKE_QUEUE[i];
     const listBlock = formatHireAgentFullList(i);
-    const text =
-      `Статус: отправка отклика…\n` +
-      `Сейчас: ${current.role} — ${current.company}\n\n` +
-      listBlock;
+    const text = t(lang, 'hireagent_applying_status', {
+      role: current.role,
+      company: current.company,
+      list: listBlock,
+    });
     await api.editMessageText(chatId, mid, undefined, text).catch(() => {});
     await withTypingTelegram(api, chatId, 900 + Math.floor(Math.random() * 700));
   }
@@ -149,19 +152,14 @@ export async function runHireAgentFakeApplying(ctx, chatId, hireAgentStateByChat
       chatId,
       mid,
       undefined,
-      `✅ Первая партия откликов завершена (демо).\n\n${allChecked}`
+      t(lang, 'hireagent_applying_done', { list: allChecked })
     )
     .catch(() => {});
 
-  await ctx.reply(
-    'Я откликнулся на первые 10 позиций. Резюме и сопроводительные письма были адаптированы под каждую вакансию.\n\n' +
-      'Проверьте почту — возможно, уже есть письма от работодателей.\n\n' +
-      'Чтобы продолжить, купите подписку.',
-    {
-      reply_markup: {
-        inline_keyboard: [[{ text: 'Продолжить', callback_data: 'hireagent_continue' }]],
-      },
-    }
-  );
+  await ctx.reply(t(lang, 'hireagent_continue_message'), {
+    reply_markup: {
+      inline_keyboard: [[{ text: t(lang, 'btn_continue'), callback_data: 'hireagent_continue' }]],
+    },
+  });
   hireAgentStateByChatId.set(chatId, { step: 'idle' });
 }
