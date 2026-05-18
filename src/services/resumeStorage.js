@@ -23,6 +23,10 @@ export function createResumeStorage(config) {
     if (!connectionString) {
       throw new Error('AZURE_STORAGE_CONNECTION_STRING is not configured.');
     }
+    const MAX_SIZE = 50 * 1024 * 1024;
+    if (buffer && buffer.length > MAX_SIZE) {
+      throw new Error(`File size ${(buffer.length / (1024 * 1024)).toFixed(1)} MB exceeds the 50 MB limit.`);
+    }
     const client = BlobServiceClient.fromConnectionString(connectionString);
     const container = client.getContainerClient(containerName);
     await container.createIfNotExists();
