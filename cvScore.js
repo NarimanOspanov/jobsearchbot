@@ -210,6 +210,7 @@ export function registerCVScore(bot) {
   // ── Inline button callbacks ──────────────────────────────────────────────
   bot.action(CB_ROAST, async (ctx) => {
     await ctx.answerCbQuery();
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
     ctx.session.cvScoreMode = 'awaiting_cv_roast';
     ctx.session.cvText = null;
     const t = userL10n(ctx);
@@ -218,6 +219,7 @@ export function registerCVScore(bot) {
 
   bot.action(CB_TAILOR, async (ctx) => {
     await ctx.answerCbQuery();
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
     ctx.session.cvScoreMode = 'awaiting_cv_tailor';
     ctx.session.cvText = null;
     const t = userL10n(ctx);
