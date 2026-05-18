@@ -739,13 +739,101 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await startHireAgentScenario(ctx);
   });
 
+  const runCvAnalysis = async (ctx, chatId, resumeText) => {
+    await ctx.reply(tr(ctx, 'cv_analyzing'), { reply_markup: { remove_keyboard: true } });
+    let review;
+    try {
+      review = await runWithTyping(ctx.telegram, chatId, () =>
+        reviewResumeWithAI({ resumeText })
+      );
+    } catch (err) {
+      console.error('reviewResumeWithAI error:', err);
+      await ctx.reply(tr(ctx, 'cv_analyze_failed'));
+      return;
+    }
+    const cvScoreResult = {
+      name: `${ctx.from?.first_name || ''} ${ctx.from?.last_name || ''}`.trim() || 'Candidate',
+      title: 'Resume Review',
+      ats_score: review.score,
+      grade:
+        review.score >= 90 ? 'A+'
+          : review.score >= 80 ? 'A'
+            : review.score >= 70 ? 'B'
+              : review.score >= 60 ? 'C'
+                : review.score >= 50 ? 'D'
+                  : 'F',
+      summary: review.summary,
+      categories: [
+        { name: 'ATS & Keywords', score: review.score, max: 100, feedback: review.improvements[0] || 'Improve keyword relevance.' },
+        { name: 'Structure & Clarity', score: review.score, max: 100, feedback: review.improvements[1] || 'Keep sections concise.' },
+      ],
+      strengths: review.strengths,
+      critical_fixes: review.improvements,
+      roast: review.summary,
+    };
+    cvScoreResultByUserId.set(String(chatId), cvScoreResult);
+    if (canUseCvScoreWebApp) {
+      const lang = langFromCtx(ctx);
+      await ctx.reply(tr(ctx, 'cv_report_open'), {
+        reply_markup: {
+          inline_keyboard: [[{ text: t(lang, 'btn_cv_report'), web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
+        },
+      });
+    }
+    try {
+      const enhancedCvRes = await runWithTyping(ctx.telegram, chatId, () =>
+        fetch('https://tailered-cv.onrender.com/generate-from-review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resumeText, review }),
+        })
+      );
+      if (!enhancedCvRes.ok) throw new Error('Failed to generate enhanced CV');
+      const { url: enhancedCvUrl } = await enhancedCvRes.json();
+      const lang = langFromCtx(ctx);
+      await ctx.reply(tr(ctx, 'cv_enhanced_ready'), {
+        reply_markup: {
+          inline_keyboard: [[{ text: t(lang, 'btn_cv_download'), url: enhancedCvUrl }]],
+        },
+      });
+    } catch (err) {
+      console.error('generate-from-review error:', err);
+      await ctx.reply(tr(ctx, 'cv_enhance_failed'));
+    }
+  };
+
   bot.command('cvscore', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
       await ctx.reply(tr(ctx, 'cvscore_private_only'));
       return;
     }
-    const chatId = ctx.chat.id;
-    hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
+    const lang = langFromCtx(ctx);
+    await ctx.reply(tr(ctx, 'cvscore_intro'), {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: t(lang, 'btn_cv_improve_simple'), callback_data: 'cvscore_improve' }],
+          [{ text: t(lang, 'btn_cv_improve_job'), callback_data: 'cvscore_tailor' }],
+        ],
+      },
+    });
+  });
+
+  bot.action('cvscore_improve', async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+    const chatId = ctx.callbackQuery?.message?.chat?.id;
+    if (!chatId) return;
+    hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_roast' });
+    await ctx.reply(tr(ctx, 'cvscore_prompt'));
+  });
+
+  bot.action('cvscore_tailor', async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+    const chatId = ctx.callbackQuery?.message?.chat?.id;
+    if (!chatId) return;
+    hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_tailor' });
     await ctx.reply(tr(ctx, 'cvscore_prompt'));
   });
 
@@ -829,8 +917,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const st = hireAgentStateByChatId.get(chatId);
     const isHireAgentCvFlow = st?.step === 'awaiting_cv';
     const isPositionCvFlow = st?.step === 'awaiting_cv_for_position';
-    const isCvReviewFlow = st?.step === 'awaiting_cv_review';
-    if (!isHireAgentCvFlow && !isPositionCvFlow && !isCvReviewFlow) return next();
+    const isCvRoastFlow = st?.step === 'awaiting_cv_roast';
+    const isCvTailorFlow = st?.step === 'awaiting_cv_tailor';
+    if (!isHireAgentCvFlow && !isPositionCvFlow && !isCvRoastFlow && !isCvTailorFlow) return next();
     const resumeSource = pickResumeSourceFromMessage(ctx.message);
     if (!resumeSource) {
       await ctx.reply(tr(ctx, 'resume_unrecognized'));
@@ -880,15 +969,16 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       );
 
       await withTypingTelegram(ctx.telegram, chatId, 800 + Math.floor(Math.random() * 400));
-      if (isCvReviewFlow) {
+      if (isCvRoastFlow || isCvTailorFlow) {
         const mime = String(resumeSource.mimeType || '').toLowerCase();
         const canExtractText =
           mime.includes('pdf') ||
           mime.includes('text/') ||
           String(resumeSource.fileName || '').toLowerCase().endsWith('.pdf') ||
           String(resumeSource.fileName || '').toLowerCase().endsWith('.txt');
+        const originalStep = isCvRoastFlow ? 'awaiting_cv_roast' : 'awaiting_cv_tailor';
         if (!canExtractText) {
-          hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
+          hireAgentStateByChatId.set(chatId, { step: originalStep });
           await ctx.reply(tr(ctx, 'cvscore_pdf_only'));
           return;
         }
@@ -897,18 +987,16 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         );
         if (!resumeText) {
           await ctx.reply(tr(ctx, 'cvscore_extract_failed'));
-          hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
+          hireAgentStateByChatId.set(chatId, { step: originalStep });
           return;
         }
-        hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_choice', resumeText });
-        const lang = langFromCtx(ctx);
-        await ctx.reply(tr(ctx, 'cvscore_received_choice'), {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            keyboard: [[t(lang, 'btn_cv_improve_simple'), t(lang, 'btn_cv_improve_job')]],
-            resize_keyboard: true,
-          },
-        });
+        if (isCvRoastFlow) {
+          hireAgentStateByChatId.set(chatId, { step: 'idle' });
+          await runCvAnalysis(ctx, chatId, resumeText);
+        } else {
+          hireAgentStateByChatId.set(chatId, { step: 'awaiting_job_desc', resumeText });
+          await ctx.reply(tr(ctx, 'awaiting_job_desc'), { reply_markup: { remove_keyboard: true } });
+        }
       } else if (isPositionCvFlow) {
         const positionId = String(st?.positionId || '').trim();
         if (positionId && models.UserApplications) {
@@ -948,9 +1036,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       }
     } catch (err) {
       console.error('hireagent resume upload failed:', err);
-      if (isCvReviewFlow) {
+      if (isCvRoastFlow || isCvTailorFlow) {
         await ctx.reply(tr(ctx, 'cvscore_process_failed'));
-        hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_review' });
+        hireAgentStateByChatId.set(chatId, { step: isCvRoastFlow ? 'awaiting_cv_roast' : 'awaiting_cv_tailor' });
       } else {
         await ctx.reply(tr(ctx, 'resume_save_failed'));
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv' });
@@ -1249,88 +1337,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const chatId = ctx.chat.id;
     const text = ctx.message.text;
 
-    if (st?.step === 'awaiting_cv') {
+    if (st?.step === 'awaiting_cv' || st?.step === 'awaiting_cv_roast' || st?.step === 'awaiting_cv_tailor') {
       await ctx.reply(tr(ctx, 'awaiting_cv_text'));
-      return;
-    }
-
-    if (st?.step === 'awaiting_cv_choice') {
-      if (textMatchesAnyLang(text, 'btn_cv_improve_simple')) {
-        hireAgentStateByChatId.set(chatId, { step: 'idle' });
-        await ctx.reply(tr(ctx, 'cv_analyzing'), {
-          reply_markup: { remove_keyboard: true },
-        });
-        let review;
-        try {
-          review = await runWithTyping(ctx.telegram, chatId, () =>
-            reviewResumeWithAI({ resumeText: st.resumeText })
-          );
-        } catch (err) {
-          console.error('reviewResumeWithAI error:', err);
-          await ctx.reply(tr(ctx, 'cv_analyze_failed'));
-          return;
-        }
-        const cvScoreResult = {
-          name: `${ctx.from?.first_name || ''} ${ctx.from?.last_name || ''}`.trim() || 'Candidate',
-          title: 'Resume Review',
-          ats_score: review.score,
-          grade:
-            review.score >= 90 ? 'A+'
-              : review.score >= 80 ? 'A'
-                : review.score >= 70 ? 'B'
-                  : review.score >= 60 ? 'C'
-                    : review.score >= 50 ? 'D'
-                      : 'F',
-          summary: review.summary,
-          categories: [
-            { name: 'ATS & Keywords', score: review.score, max: 100, feedback: review.improvements[0] || 'Improve keyword relevance.' },
-            { name: 'Structure & Clarity', score: review.score, max: 100, feedback: review.improvements[1] || 'Keep sections concise.' },
-          ],
-          strengths: review.strengths,
-          critical_fixes: review.improvements,
-          roast: review.summary,
-        };
-        cvScoreResultByUserId.set(String(chatId), cvScoreResult);
-        if (canUseCvScoreWebApp) {
-          const lang = langFromCtx(ctx);
-          await ctx.reply(tr(ctx, 'cv_report_open'), {
-            reply_markup: {
-              inline_keyboard: [[{ text: t(lang, 'btn_cv_report'), web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
-            },
-          });
-        }
-        try {
-          const enhancedCvRes = await runWithTyping(ctx.telegram, chatId, () =>
-            fetch('https://tailered-cv.onrender.com/generate-from-review', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ resumeText: st.resumeText, review }),
-            })
-          );
-          if (!enhancedCvRes.ok) throw new Error('Failed to generate enhanced CV');
-          const { url: enhancedCvUrl } = await enhancedCvRes.json();
-          const lang = langFromCtx(ctx);
-          await ctx.reply(tr(ctx, 'cv_enhanced_ready'), {
-            reply_markup: {
-              inline_keyboard: [[{ text: t(lang, 'btn_cv_download'), url: enhancedCvUrl }]],
-            },
-          });
-        } catch (err) {
-          console.error('generate-from-review error:', err);
-          await ctx.reply(tr(ctx, 'cv_enhance_failed'));
-        }
-        return;
-      }
-
-      if (textMatchesAnyLang(text, 'btn_cv_improve_job')) {
-        hireAgentStateByChatId.set(chatId, { step: 'awaiting_job_desc', resumeText: st.resumeText });
-        await ctx.reply(tr(ctx, 'awaiting_job_desc'), {
-          reply_markup: { remove_keyboard: true },
-        });
-        return;
-      }
-
-      await ctx.reply(tr(ctx, 'choose_option_above'));
       return;
     }
 

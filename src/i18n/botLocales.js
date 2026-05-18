@@ -94,6 +94,8 @@ export const BOT_LOCALES = {
       'Страница откликов требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).',
 
     cvscore_private_only: 'Эта команда доступна только в личном чате с ботом.',
+    cvscore_intro:
+      '📄 *Работа с резюме*\n\nМогу помочь двумя способами:\n\n🌟 *Просто улучшить резюме* — проанализирую как HR-эксперт и верну ATS-friendly версию. ATS — алгоритмы, которые компании используют для автофильтрации резюме до живого рекрутера.\n\n💼 *На основе требований вакансии* — адаптирую резюме под конкретную вакансию и верну готовый PDF.\n\nЧто хочешь сделать? 👇',
     cvscore_prompt:
       'Отправьте ваше резюме файлом (PDF/TXT).\nЯ оценю CV как HR-эксперт, дам комментарии и верну улучшенную ATS-friendly версию.',
     btn_try_hireagent: 'Отправить резюме и попробовать',
@@ -272,6 +274,8 @@ export const BOT_LOCALES = {
       'Applications page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).',
 
     cvscore_private_only: 'This command is only available in a private chat with the bot.',
+    cvscore_intro:
+      '📄 *CV Tools*\n\nI can help in two ways:\n\n🌟 *Just improve resume* — analyze as an HR expert and return an ATS-friendly version. ATS (Applicant Tracking System) are algorithms companies use to filter resumes before a human sees them.\n\n💼 *Based on job requirements* — tailor your CV to a specific job description and return a ready PDF.\n\nWhat would you like to do? 👇',
     cvscore_prompt:
       'Send your resume as a file (PDF/TXT).\nI will review it as an HR expert, give feedback, and return an improved ATS-friendly version.',
     btn_try_hireagent: 'Send resume and try',
