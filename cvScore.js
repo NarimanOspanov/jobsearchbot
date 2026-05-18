@@ -1,9 +1,9 @@
 // cvScore.js — CV scoring and tailoring via Telegram bot
 // Session state machine:
-//   cvScoreMode = false            → inactive
-//   cvScoreMode = 'awaiting_cv'    → waiting for user to send their CV
-//   cvScoreMode = 'awaiting_choice'→ CV received, waiting for user to pick General or Job-specific
-//   cvScoreMode = 'awaiting_job_desc' → job-specific chosen, waiting for job description
+//   cvScoreMode = false                → inactive
+//   cvScoreMode = 'awaiting_cv_roast'  → roast chosen, waiting for CV
+//   cvScoreMode = 'awaiting_cv_tailor' → tailor chosen, waiting for CV
+//   cvScoreMode = 'awaiting_job_desc'  → tailor: CV received, waiting for job description
 
 import { Markup } from 'telegraf';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
@@ -14,9 +14,9 @@ const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const TAILORED_CV_API_URL = 'https://tailered-cv.onrender.com/generate-simple';
 const MODEL = 'claude-sonnet-4-20250514';
 
-const BTN_GENERAL = '🌟 Просто улучшить резюме';
-const BTN_JOB = '💼 На основе требований вакансии';
 const BTN_BACK = '🔙 Назад в меню';
+const CB_ROAST = 'cvscore_roast';
+const CB_TAILOR = 'cvscore_tailor';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -99,8 +99,54 @@ async function generateTailoredCV(existingCvText, jobRequirements) {
 
 // ─── Localized UI strings ────────────────────────────────────────────────────
 
+const L10N_DEFAULT = {
+  intro:
+    '📄 *CV Tools*\n\n' +
+    'I can help in two ways:\n\n' +
+    '🔥 *Roast my CV* — analyze it against ATS (the algorithms companies use to filter CVs before a human ever sees them), give an honest score and specific actionable fixes.\n\n' +
+    '✨ *Tailor my CV* — adapt your CV to a specific job description and return a ready-to-send PDF.\n\n' +
+    'What would you like to do? 👇',
+  btn_roast: '🔥 Roast my CV',
+  btn_tailor: '✨ Tailor to a job',
+  ask_cv: '📎 Send your CV as a PDF or paste the text directly.',
+  ask_job_desc: '📋 Paste the *job description* you want to tailor your CV for:',
+  processing_roast: '⏳ Analyzing your CV with Claude AI…',
+  processing_tailor: '⏳ Tailoring your CV to the job description…',
+  done: 'Analysis complete',
+  report: '📊 Open Full Report',
+  pdf_only: '⚠️ Please send a PDF file.',
+  pdf_error: '⚠️ Could not extract text from this PDF. Try a text-based PDF or paste your CV as text.',
+  too_short_cv: 'That looks too short for a CV. Please paste your full CV text or upload a PDF.',
+  too_short_job: 'That looks too short. Please paste the full job description.',
+  error_cv: '❌ Failed to read CV. Please try again.',
+  error_roast: '❌ Something went wrong analyzing your CV. Please try again.',
+  error_tailor: '❌ Failed to generate tailored CV. Please try again.',
+};
+
 const L10N = {
-  ru: { done: 'Анализ готов', report: '📊 Открыть полный отчёт' },
+  ru: {
+    intro:
+      '📄 *Работа с резюме*\n\n' +
+      'Могу помочь двумя способами:\n\n' +
+      '🔥 *Оценить резюме* — проанализирую по системе ATS (алгоритмы, которые компании используют для автоматической фильтрации резюме до живого рекрутера), дам честную оценку и конкретные советы.\n\n' +
+      '✨ *Адаптировать резюме* — подстрою под конкретную вакансию и верну готовый PDF.\n\n' +
+      'Что хочешь сделать? 👇',
+    btn_roast: '🔥 Оценить резюме',
+    btn_tailor: '✨ Адаптировать под вакансию',
+    ask_cv: '📎 Отправь своё резюме в формате PDF или вставь текст напрямую.',
+    ask_job_desc: '📋 Вставь *описание вакансии*, под которую адаптируем резюме:',
+    processing_roast: '⏳ Анализирую резюме с Claude AI…',
+    processing_tailor: '⏳ Адаптирую резюме под вакансию…',
+    done: 'Анализ готов',
+    report: '📊 Открыть полный отчёт',
+    pdf_only: '⚠️ Пожалуйста, отправь PDF файл.',
+    pdf_error: '⚠️ Не удалось извлечь текст из PDF. Попробуй PDF с текстом или вставь резюме текстом.',
+    too_short_cv: 'Слишком коротко для резюме. Вставь полный текст или загрузи PDF.',
+    too_short_job: 'Слишком коротко. Вставь полное описание вакансии.',
+    error_cv: '❌ Не удалось прочитать резюме. Попробуй ещё раз.',
+    error_roast: '❌ Ошибка при анализе резюме. Попробуй ещё раз.',
+    error_tailor: '❌ Не удалось сгенерировать адаптированное резюме. Попробуй ещё раз.',
+  },
   kk: { done: 'Талдау дайын', report: '📊 Толық есепті ашу' },
   de: { done: 'Analyse fertig', report: '📊 Vollständigen Bericht öffnen' },
   es: { done: 'Análisis listo', report: '📊 Ver informe completo' },
@@ -110,11 +156,15 @@ const L10N = {
   zh: { done: '分析完成', report: '📊 查看完整报告' },
   uk: { done: 'Аналіз готовий', report: '📊 Відкрити повний звіт' },
 };
-const L10N_DEFAULT = { done: 'Analysis complete', report: '📊 Open Full Report' };
 
+// Merge language-specific overrides on top of the default
 function l10n(language) {
   const lang = String(language || '').trim().toLowerCase().slice(0, 2);
-  return L10N[lang] || L10N_DEFAULT;
+  return { ...L10N_DEFAULT, ...(L10N[lang] || {}) };
+}
+
+function userL10n(ctx) {
+  return l10n(ctx.from?.language_code);
 }
 
 // ─── Session store: userId → latest result (in-memory) ──────────────────────
@@ -126,46 +176,67 @@ export function getCVScoreResult(userId) {
 
 // ─── Keyboards ───────────────────────────────────────────────────────────────
 
-const choiceKeyboard = Markup.keyboard([
-  [BTN_GENERAL, BTN_JOB],
-  [BTN_BACK],
-]).resize();
-
 const backKeyboard = Markup.keyboard([[BTN_BACK]]).resize();
+
+function introKeyboard(t) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback(t.btn_roast, CB_ROAST)],
+    [Markup.button.callback(t.btn_tailor, CB_TAILOR)],
+  ]);
+}
 
 // ─── Bot handler registration ────────────────────────────────────────────────
 
 export function registerCVScore(bot) {
 
-  // Entry point: user taps "📄 CV Score" from menu
+  async function showIntro(ctx) {
+    const t = userL10n(ctx);
+    await ctx.reply(t.intro, { parse_mode: 'Markdown', ...introKeyboard(t) });
+  }
+
+  // Entry points
   bot.hears('📄 CV Score', async (ctx) => {
-    ctx.session.cvScoreMode = 'awaiting_cv';
+    ctx.session.cvScoreMode = false;
     ctx.session.cvText = null;
-    await ctx.reply(
-      '📎 *Send me your CV* as a PDF or paste the text directly.',
-      { parse_mode: 'Markdown', ...backKeyboard },
-    );
+    await showIntro(ctx);
   });
 
   bot.command('cvscore', async (ctx) => {
-    ctx.session.cvScoreMode = 'awaiting_cv';
+    ctx.session.cvScoreMode = false;
     ctx.session.cvText = null;
-    await ctx.reply(
-      '📎 *Send me your CV* as a PDF or paste the text directly.',
-      { parse_mode: 'Markdown', ...backKeyboard },
-    );
+    await showIntro(ctx);
   });
 
-  // Handle PDF document upload (only when waiting for the CV)
-  bot.on('document', async (ctx) => {
-    if (ctx.session?.cvScoreMode !== 'awaiting_cv') return;
+  // ── Inline button callbacks ──────────────────────────────────────────────
+  bot.action(CB_ROAST, async (ctx) => {
+    await ctx.answerCbQuery();
+    ctx.session.cvScoreMode = 'awaiting_cv_roast';
+    ctx.session.cvText = null;
+    const t = userL10n(ctx);
+    await ctx.reply(t.ask_cv, { ...backKeyboard });
+  });
 
+  bot.action(CB_TAILOR, async (ctx) => {
+    await ctx.answerCbQuery();
+    ctx.session.cvScoreMode = 'awaiting_cv_tailor';
+    ctx.session.cvText = null;
+    const t = userL10n(ctx);
+    await ctx.reply(t.ask_cv, { ...backKeyboard });
+  });
+
+  // ── PDF upload ────────────────────────────────────────────────────────────
+  bot.on('document', async (ctx) => {
+    const mode = ctx.session?.cvScoreMode;
+    if (mode !== 'awaiting_cv_roast' && mode !== 'awaiting_cv_tailor') return;
+
+    const t = userL10n(ctx);
     const doc = ctx.message.document;
+
     if (doc.mime_type !== 'application/pdf') {
-      return ctx.reply('⚠️ Please send a PDF file.');
+      return ctx.reply(t.pdf_only);
     }
 
-    const processingMsg = await ctx.reply('⏳ Reading your CV…');
+    const statusMsg = await ctx.reply('⏳ Reading your CV…');
 
     try {
       const fileLink = await ctx.telegram.getFileLink(doc.file_id);
@@ -174,29 +245,36 @@ export function registerCVScore(bot) {
       const text = await extractTextFromPDF(buffer);
 
       if (!text || text.trim().length < 100) {
-        await ctx.telegram.deleteMessage(ctx.chat.id, processingMsg.message_id).catch(() => {});
-        return ctx.reply('⚠️ Could not extract text from this PDF. Try a text-based PDF or paste your CV as text.');
+        await ctx.telegram.editMessageText(ctx.chat.id, statusMsg.message_id, undefined, t.pdf_error);
+        return;
       }
 
       ctx.session.cvText = text;
-      ctx.session.cvScoreMode = 'awaiting_choice';
-      await ctx.telegram.deleteMessage(ctx.chat.id, processingMsg.message_id).catch(() => {});
-      await showChoicePrompt(ctx);
+
+      if (mode === 'awaiting_cv_roast') {
+        await ctx.telegram.editMessageText(ctx.chat.id, statusMsg.message_id, undefined, t.processing_roast);
+        await runGeneralFlow(ctx, statusMsg.message_id);
+      } else {
+        // awaiting_cv_tailor
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+        ctx.session.cvScoreMode = 'awaiting_job_desc';
+        await ctx.reply(t.ask_job_desc, { parse_mode: 'Markdown', ...backKeyboard });
+      }
     } catch (err) {
       console.error('CV Score PDF error:', err);
       await ctx.telegram.editMessageText(
-        ctx.chat.id, processingMsg.message_id, undefined,
-        '❌ Failed to read CV. Please try again.',
-      );
+        ctx.chat.id, statusMsg.message_id, undefined, t.error_cv,
+      ).catch(() => {});
     }
   });
 
-  // Handle all text input
+  // ── Text input ────────────────────────────────────────────────────────────
   bot.on('text', async (ctx, next) => {
     const mode = ctx.session?.cvScoreMode;
     if (!mode) return next();
 
     const text = ctx.message.text;
+    const t = userL10n(ctx);
 
     if (text === BTN_BACK) {
       ctx.session.cvScoreMode = false;
@@ -204,39 +282,34 @@ export function registerCVScore(bot) {
       return next();
     }
 
-    // ── Step 1: waiting for CV text ──────────────────────────────────────────
-    if (mode === 'awaiting_cv') {
+    // ── Waiting for CV text (roast) ──────────────────────────────────────
+    if (mode === 'awaiting_cv_roast') {
       if (text.length < 200) {
-        return ctx.reply('That looks too short for a CV. Please paste your full CV text or upload a PDF.');
+        return ctx.reply(t.too_short_cv);
       }
       ctx.session.cvText = text;
-      ctx.session.cvScoreMode = 'awaiting_choice';
-      return showChoicePrompt(ctx);
+      const processingMsg = await ctx.reply(t.processing_roast);
+      await runGeneralFlow(ctx, processingMsg.message_id);
+      return;
     }
 
-    // ── Step 2: waiting for choice ───────────────────────────────────────────
-    if (mode === 'awaiting_choice') {
-      if (text === BTN_GENERAL) {
-        const processingMsg = await ctx.reply('⏳ Analyzing your CV with Claude AI…');
-        await runGeneralFlow(ctx, processingMsg.message_id);
-        return;
+    // ── Waiting for CV text (tailor) ─────────────────────────────────────
+    if (mode === 'awaiting_cv_tailor') {
+      if (text.length < 200) {
+        return ctx.reply(t.too_short_cv);
       }
-      if (text === BTN_JOB) {
-        ctx.session.cvScoreMode = 'awaiting_job_desc';
-        return ctx.reply(
-          '📋 Paste the *job description* you want to tailor your CV for:',
-          { parse_mode: 'Markdown', ...backKeyboard },
-        );
-      }
-      return ctx.reply('Please choose one of the options above.');
+      ctx.session.cvText = text;
+      ctx.session.cvScoreMode = 'awaiting_job_desc';
+      await ctx.reply(t.ask_job_desc, { parse_mode: 'Markdown', ...backKeyboard });
+      return;
     }
 
-    // ── Step 3: waiting for job description ──────────────────────────────────
+    // ── Waiting for job description ──────────────────────────────────────
     if (mode === 'awaiting_job_desc') {
       if (text.length < 50) {
-        return ctx.reply('That looks too short. Please paste the full job description.');
+        return ctx.reply(t.too_short_job);
       }
-      const processingMsg = await ctx.reply('⏳ Tailoring your CV to the job description…');
+      const processingMsg = await ctx.reply(t.processing_tailor);
       await runJobSpecificFlow(ctx, text, processingMsg.message_id);
       return;
     }
@@ -245,21 +318,13 @@ export function registerCVScore(bot) {
 
 // ─── Flow helpers ────────────────────────────────────────────────────────────
 
-async function showChoicePrompt(ctx) {
-  await ctx.reply(
-    '✅ CV received\\! What would you like to do?\n\n' +
-    `*${BTN_GENERAL}* — Score your CV and open a full ATS analysis report\\.\n\n` +
-    `*${BTN_JOB}* — Tailor your CV to a specific job description\\.`,
-    { parse_mode: 'MarkdownV2', ...choiceKeyboard },
-  );
-}
-
 async function runGeneralFlow(ctx, processingMsgId) {
   try {
     const result = await scoreCV(ctx.session.cvText);
     const userId = ctx.from.id;
     resultCache.set(String(userId), result);
 
+    // Use CV's detected language for the success message
     const t = l10n(result.language);
     await ctx.telegram.editMessageText(
       ctx.chat.id, processingMsgId, undefined,
@@ -273,10 +338,10 @@ async function runGeneralFlow(ctx, processingMsgId) {
     );
   } catch (err) {
     console.error('CV Score analysis error:', err);
+    const t = userL10n(ctx);
     await ctx.telegram.editMessageText(
-      ctx.chat.id, processingMsgId, undefined,
-      '❌ Something went wrong analyzing your CV. Please try again.',
-    );
+      ctx.chat.id, processingMsgId, undefined, t.error_roast,
+    ).catch(() => {});
   } finally {
     ctx.session.cvScoreMode = false;
     ctx.session.cvText = null;
@@ -293,10 +358,10 @@ async function runJobSpecificFlow(ctx, jobDescription, processingMsgId) {
     );
   } catch (err) {
     console.error('Tailored CV error:', err);
+    const t = userL10n(ctx);
     await ctx.telegram.editMessageText(
-      ctx.chat.id, processingMsgId, undefined,
-      '❌ Failed to generate tailored CV. Please try again.',
-    );
+      ctx.chat.id, processingMsgId, undefined, t.error_tailor,
+    ).catch(() => {});
   } finally {
     ctx.session.cvScoreMode = false;
     ctx.session.cvText = null;
