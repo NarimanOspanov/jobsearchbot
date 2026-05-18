@@ -74,7 +74,9 @@ export const BOT_LOCALES = {
     btn_apply_external: 'Откликнуться на сайте {company}',
     btn_apply_external_generic: 'Откликнуться на сайте работодателя',
     btn_open_other_jobs: 'Открыть другие вакансии на 100% удалёнку',
-    position_send_cv_html: '<b>Чтобы откликнуться, отправьте резюме файлом PDF.</b>',
+    btn_position_apply: 'Откликнуться',
+    position_apply_prompt:
+      'Чтобы завершить отклик, отправьте резюме файлом PDF в этот чат. Рекрутер рассмотрит его.',
 
     subscribe_success: 'Спасибо! Подписка подтверждена.',
     subscribe_bonus: 'Начислено +{bonus} открытий вакансий.',
@@ -250,7 +252,9 @@ export const BOT_LOCALES = {
     btn_apply_external: 'Apply on {company} website',
     btn_apply_external_generic: 'Apply on employer website',
     btn_open_other_jobs: 'Open other 100% remote jobs',
-    position_send_cv_html: '<b>To apply, send your resume as a PDF file.</b>',
+    btn_position_apply: 'Apply',
+    position_apply_prompt:
+      'To complete your application, send your resume here as a PDF file. The recruiter will review it.',
 
     subscribe_success: 'Thank you! Subscription confirmed.',
     subscribe_bonus: '+{bonus} job opens credited.',

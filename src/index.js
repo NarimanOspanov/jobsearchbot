@@ -482,12 +482,38 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       });
       return;
     }
-    lines.push('', tr(ctx, 'position_send_cv_html'));
-    hireAgentStateByChatId.set(chat.id, { step: 'awaiting_cv_for_position', positionId: position.Id });
+    const applyButton = {
+      text: t(lang, 'btn_position_apply'),
+      callback_data: `position_apply_${position.Id}`,
+    };
     await ctx.reply(lines.join('\n'), {
-      parse_mode: 'HTML',
       disable_web_page_preview: true,
+      reply_markup: {
+        inline_keyboard: [[applyButton], [openOtherJobsButton]],
+      },
     });
+  };
+
+  const promptPositionResumeUpload = async (ctx, positionId) => {
+    const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
+    if (chat?.type !== 'private') {
+      await ctx.reply(tr(ctx, 'scenario_private_only'));
+      return;
+    }
+    if (!models.Positions) {
+      await ctx.reply(tr(ctx, 'position_service_unavailable'));
+      return;
+    }
+    const position = await models.Positions.findByPk(positionId);
+    if (!position || position.IsArchived) {
+      await ctx.reply(tr(ctx, 'position_not_found'));
+      return;
+    }
+    hireAgentStateByChatId.set(chat.id, {
+      step: 'awaiting_cv_for_position',
+      positionId: position.Id,
+    });
+    await ctx.reply(tr(ctx, 'position_apply_prompt'));
   };
 
   const tryRemoveLegacyKeyboard = async (ctx) => {
@@ -642,6 +668,13 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.command('jobsearch', async (ctx) => {
     await openJobSearchFromBot(ctx);
+  });
+
+  bot.action(/^position_apply_([0-9a-f-]{36})$/i, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const positionId = String(ctx.match?.[1] || '').trim();
+    if (!positionId) return;
+    await promptPositionResumeUpload(ctx, positionId);
   });
 
   bot.action('start_open_jobsearch', async (ctx) => {
