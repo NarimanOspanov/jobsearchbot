@@ -106,8 +106,8 @@ const L10N_DEFAULT = {
     '🔥 *Roast my CV* — analyze it against ATS (the algorithms companies use to filter CVs before a human ever sees them), give an honest score and specific actionable fixes.\n\n' +
     '✨ *Tailor my CV* — adapt your CV to a specific job description and return a ready-to-send PDF.\n\n' +
     'What would you like to do? 👇',
-  btn_roast: '🔥 Roast my CV',
-  btn_tailor: '✨ Tailor to a job',
+  btn_roast: '🌟 Just improve my CV',
+  btn_tailor: '💼 Based on job requirements',
   ask_cv: '📎 Send your CV as a PDF or paste the text directly.',
   ask_job_desc: '📋 Paste the *job description* you want to tailor your CV for:',
   processing_roast: '⏳ Analyzing your CV with Claude AI…',
@@ -131,8 +131,8 @@ const L10N = {
       '🔥 *Оценить резюме* — проанализирую по системе ATS (алгоритмы, которые компании используют для автоматической фильтрации резюме до живого рекрутера), дам честную оценку и конкретные советы.\n\n' +
       '✨ *Адаптировать резюме* — подстрою под конкретную вакансию и верну готовый PDF.\n\n' +
       'Что хочешь сделать? 👇',
-    btn_roast: '🔥 Оценить резюме',
-    btn_tailor: '✨ Адаптировать под вакансию',
+    btn_roast: '🌟 Просто улучшить резюме',
+    btn_tailor: '💼 На основе требований вакансии',
     ask_cv: '📎 Отправь своё резюме в формате PDF или вставь текст напрямую.',
     ask_job_desc: '📋 Вставь *описание вакансии*, под которую адаптируем резюме:',
     processing_roast: '⏳ Анализирую резюме с Claude AI…',
