@@ -70,6 +70,7 @@ import {
 } from './i18n/botI18n.js';
 import {
   hireAgentStateByChatId,
+  positionApplyChannelBypassByChatId,
   legacyKeyboardClearedByChatId,
   cvScoreResultByUserId,
   runtimeBot,
@@ -222,9 +223,32 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.reply(lines, { parse_mode: 'HTML', reply_markup: replyMarkup });
   };
 
+  const enablePositionApplyChannelBypass = (chatId, positionId) => {
+    const normalizedChatId = Number(chatId);
+    const normalizedPositionId = String(positionId || '').trim();
+    if (!normalizedChatId || !normalizedPositionId) return;
+    positionApplyChannelBypassByChatId.set(normalizedChatId, {
+      positionId: normalizedPositionId,
+    });
+  };
+
+  const clearPositionApplyChannelBypass = (chatId) => {
+    const normalizedChatId = Number(chatId);
+    if (!normalizedChatId) return;
+    positionApplyChannelBypassByChatId.delete(normalizedChatId);
+  };
+
+  const shouldSkipChannelGateForPositionApply = (chatId) => {
+    const normalizedChatId = Number(chatId);
+    if (!normalizedChatId) return false;
+    if (positionApplyChannelBypassByChatId.has(normalizedChatId)) return true;
+    return hireAgentStateByChatId.get(normalizedChatId)?.step === 'awaiting_cv_for_position';
+  };
+
   const enforceStartRequiredChannelsGate = async (ctx) => {
     const telegramUserId = Number(ctx.from?.id || ctx.chat?.id || 0);
     if (!telegramUserId) return true;
+    if (shouldSkipChannelGateForPositionApply(telegramUserId)) return true;
     const channelsState = await getRequiredChannelsState(telegramUserId);
     if (channelsState.ok) {
       await ensureRequiredChannelUserRecords(telegramUserId);
@@ -439,7 +463,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.reply(tr(ctx, 'hireagent_send_cv'));
   };
 
-  const startPositionApplyScenario = async (ctx, positionId) => {
+  const startPositionApplyScenario = async (ctx, positionId, { enableChannelBypass = false } = {}) => {
     const lang = langFromCtx(ctx);
     const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
     if (chat?.type !== 'private') {
@@ -481,6 +505,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         },
       });
       return;
+    }
+    if (enableChannelBypass) {
+      enablePositionApplyChannelBypass(chat.id, position.Id);
     }
     const applyButton = {
       text: t(lang, 'btn_position_apply'),
@@ -578,12 +605,12 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   bot.start(async (ctx) => {
     const payload = parseStartPayload(ctx);
     const positionIdFromStart = parseStartPositionId(payload);
-    const canProceedToVacancies = await enforceStartRequiredChannelsGate(ctx);
-    if (!canProceedToVacancies) return;
     if (positionIdFromStart) {
-      await startPositionApplyScenario(ctx, positionIdFromStart);
+      await startPositionApplyScenario(ctx, positionIdFromStart, { enableChannelBypass: true });
       return;
     }
+    const canProceedToVacancies = await enforceStartRequiredChannelsGate(ctx);
+    if (!canProceedToVacancies) return;
     if (payload === 'jobsearch') {
       await openJobSearchFromBot(ctx);
       return;
@@ -674,6 +701,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.answerCbQuery().catch(() => {});
     const positionId = String(ctx.match?.[1] || '').trim();
     if (!positionId) return;
+    const chatId = ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id;
+    if (chatId) enablePositionApplyChannelBypass(chatId, positionId);
     await promptPositionResumeUpload(ctx, positionId);
   });
 
@@ -1007,6 +1036,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           });
         }
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
+        clearPositionApplyChannelBypass(chatId);
         const lang = langFromCtx(ctx);
         if (canUseSeekerJobsWebApp) {
           await ctx.reply(tr(ctx, 'position_resume_accepted'), {

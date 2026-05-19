@@ -1,6 +1,9 @@
 /** @type {Map<number, { step: string }>} */
 export const hireAgentStateByChatId = new Map();
 
+/** @type {Map<number, { positionId: string }>} */
+export const positionApplyChannelBypassByChatId = new Map();
+
 /** @type {Set<number>} */
 export const legacyKeyboardClearedByChatId = new Set();
 
