@@ -837,15 +837,19 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     const lang = langFromCtx(ctx);
-    await ctx.reply(tr(ctx, 'cvscore_intro'), {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: t(lang, 'btn_cv_improve_simple'), callback_data: 'cvscore_improve' }],
-          [{ text: t(lang, 'btn_cv_improve_job'), callback_data: 'cvscore_tailor' }],
-        ],
+    await ctx.replyWithPhoto(
+      { source: new URL('../here_cv.png', import.meta.url).pathname },
+      {
+        caption: tr(ctx, 'cvscore_intro'),
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: t(lang, 'btn_cv_improve_simple'), callback_data: 'cvscore_improve' }],
+            [{ text: t(lang, 'btn_cv_improve_job'), callback_data: 'cvscore_tailor' }],
+          ],
+        },
       },
-    });
+    );
   });
 
   bot.action('cvscore_improve', async (ctx) => {
