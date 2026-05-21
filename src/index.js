@@ -865,7 +865,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const chatId = ctx.callbackQuery?.message?.chat?.id;
     if (!chatId) return;
     hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_tailor' });
-    await ctx.reply(tr(ctx, 'cvscore_prompt'));
+    await ctx.reply(tr(ctx, 'cvscore_tailor_prompt'));
   });
 
   bot.action('start_hireagent', async (ctx) => {
