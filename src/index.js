@@ -854,7 +854,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.action('cvscore_improve', async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
-    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
     const chatId = ctx.callbackQuery?.message?.chat?.id;
     if (!chatId) return;
     hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_roast' });
@@ -863,7 +862,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.action('cvscore_tailor', async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
-    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
     const chatId = ctx.callbackQuery?.message?.chat?.id;
     if (!chatId) return;
     hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_tailor' });
