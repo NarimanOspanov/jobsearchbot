@@ -770,10 +770,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   const runCvAnalysis = async (ctx, chatId, resumeText) => {
     await ctx.reply(tr(ctx, 'cv_analyzing'), { reply_markup: { remove_keyboard: true } });
+    const lang = langFromCtx(ctx);
     let review;
     try {
       review = await runWithTyping(ctx.telegram, chatId, () =>
-        reviewResumeWithAI({ resumeText })
+        reviewResumeWithAI({ resumeText, lang })
       );
     } catch (err) {
       console.error('reviewResumeWithAI error:', err);
@@ -802,7 +803,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     };
     cvScoreResultByUserId.set(String(chatId), cvScoreResult);
     if (canUseCvScoreWebApp) {
-      const lang = langFromCtx(ctx);
       await ctx.reply(tr(ctx, 'cv_report_open'), {
         reply_markup: {
           inline_keyboard: [[{ text: t(lang, 'btn_cv_report'), web_app: { url: `${cvScoreUrl}?uid=${chatId}` } }]],
@@ -819,7 +819,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       );
       if (!enhancedCvRes.ok) throw new Error('Failed to generate enhanced CV');
       const { url: enhancedCvUrl } = await enhancedCvRes.json();
-      const lang = langFromCtx(ctx);
       await ctx.reply(tr(ctx, 'cv_enhanced_ready'), {
         reply_markup: {
           inline_keyboard: [[{ text: t(lang, 'btn_cv_download'), url: enhancedCvUrl }]],

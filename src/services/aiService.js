@@ -117,13 +117,14 @@ Output plain text only (no markdown, no code fences, no explanations).`;
   return sentenceCandidates.slice(0, 4).join(' ');
 }
 
-export async function reviewResumeWithAI({ resumeText }) {
+export async function reviewResumeWithAI({ resumeText, lang = 'en' }) {
   const sourceText = String(resumeText || '').trim();
   if (!sourceText) throw new Error('Resume text is empty');
   if (config.anthropicApiKey) {
-    return reviewResumeWithAnthropic({ resumeText: sourceText });
+    return reviewResumeWithAnthropic({ resumeText: sourceText, lang });
   }
   if (!genAI) throw new Error('Neither ANTHROPIC_API_KEY nor GEMINI_API_KEY is configured');
+  const feedbackLanguage = lang === 'ru' ? 'Russian' : 'English';
   const prompt = `You are a senior HR expert and ATS resume reviewer.
 Task:
 1) Review the candidate resume text and provide concise expert feedback.
@@ -145,7 +146,7 @@ Rules:
 - rewrittenResume must be plain text resume with clear sections and simple bullets
 - Use ONLY facts present in source resume. Do not invent companies, dates, titles, metrics, education, certificates, or skills.
 - Keep rewrittenResume ATS-friendly: no tables, no columns, no icons, no links formatting.
-- Preserve the same language as source resume.
+- Write summary, strengths, and improvements in ${feedbackLanguage}. Keep rewrittenResume in the same language as the source resume.
 
 Source resume text:
 ${sourceText}`;
@@ -173,10 +174,11 @@ ${sourceText}`;
   return { score, summary, strengths, improvements, rewrittenResume };
 }
 
-export async function reviewResumeWithAnthropic({ resumeText }) {
+export async function reviewResumeWithAnthropic({ resumeText, lang = 'en' }) {
   const sourceText = String(resumeText || '').trim();
   if (!sourceText) throw new Error('Resume text is empty');
   if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY is not configured');
+  const feedbackLanguage = lang === 'ru' ? 'Russian' : 'English';
   const systemPrompt = `You are a senior HR expert and ATS resume reviewer.
 Task:
 1) Review the candidate resume text and provide concise expert feedback.
@@ -198,7 +200,7 @@ Rules:
 - rewrittenResume must be plain text resume with clear sections and simple bullets
 - Use ONLY facts present in source resume. Do not invent companies, dates, titles, metrics, education, certificates, or skills.
 - Keep rewrittenResume ATS-friendly: no tables, no columns, no icons, no links formatting.
-- Preserve the same language as source resume.`;
+- Write summary, strengths, and improvements in ${feedbackLanguage}. Keep rewrittenResume in the same language as the source resume.`;
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
