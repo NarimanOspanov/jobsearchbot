@@ -275,7 +275,7 @@
 
 <div id="loading">
   <div class="spinner"></div>
-  <span>Loading your report…</span>
+  <span id="txt-loading">Loading your report…</span>
 </div>
 
 <div id="error-state">
@@ -286,7 +286,7 @@
 <div id="report">
   <!-- Header -->
   <div class="header">
-    <div class="header-label">CV Analysis Report</div>
+    <div class="header-label" id="txt-report-label">CV Analysis Report</div>
     <div class="candidate-name" id="cand-name">—</div>
     <div class="candidate-title" id="cand-title">—</div>
     <div class="score-ring-wrap">
@@ -314,20 +314,22 @@
       <span class="roast-text" id="roast-text">—</span>
     </div>
 
-    <!-- Summary -->
-    <div class="summary-card" id="summary-text">—</div>
+    <div class="section-title" id="txt-fixes-title">⚡ Critical Fixes</div>
+    <div class="list-card" id="fixes-list"></div>
 
     <!-- Categories -->
-    <div class="section-title">Score Breakdown</div>
+    <div class="section-title" id="txt-breakdown-title">Score Breakdown</div>
     <div id="categories-container"></div>
 
     <!-- Strengths -->
-    <div class="section-title">✅ Strengths</div>
+    <div class="section-title" id="txt-strengths-title">✅ Strengths</div>
     <div class="list-card" id="strengths-list"></div>
 
-    <!-- Fixes -->
-    <div class="section-title">⚡ Critical Fixes</div>
-    <div class="list-card" id="fixes-list"></div>
+    <!-- Summary -->
+    <div class="summary-card" id="summary-text">—</div>
+
+     
+    
 
   </div>
 </div>
@@ -343,6 +345,138 @@
 
   const uid = new URLSearchParams(location.search).get('uid')
            || tg?.initDataUnsafe?.user?.id;
+
+  // ── i18n ──
+  const I18N = {
+    en: {
+      loading:       'Loading your report…',
+      reportLabel:   'CV Analysis Report',
+      fixesTitle:    '⚡ Critical Fixes',
+      breakdown:     'Score Breakdown',
+      strengthsTitle:'✅ Strengths',
+      grade:         'Grade',
+      noResult:      'No CV analysis found.<br>Please send your CV to the bot first.',
+      noUser:        'Could not identify user.<br>Please open this from the bot.',
+      networkError:  'Network error. Please try again.',
+      apiFail:       'No result found. Send your CV to the bot first.',
+    },
+    ru: {
+      loading:       'Загружаем отчёт…',
+      reportLabel:   'Анализ резюме',
+      fixesTitle:    '⚡ Критические замечания',
+      breakdown:     'Разбивка по баллам',
+      strengthsTitle:'✅ Сильные стороны',
+      grade:         'Оценка',
+      noResult:      'Анализ резюме не найден.<br>Отправьте резюме боту.',
+      noUser:        'Не удалось определить пользователя.<br>Откройте эту страницу через бота.',
+      networkError:  'Ошибка сети. Попробуйте ещё раз.',
+      apiFail:       'Результат не найден. Отправьте резюме боту.',
+    },
+    de: {
+      loading:       'Bericht wird geladen…',
+      reportLabel:   'Lebenslauf-Analyse',
+      fixesTitle:    '⚡ Kritische Punkte',
+      breakdown:     'Punkteübersicht',
+      strengthsTitle:'✅ Stärken',
+      grade:         'Note',
+      noResult:      'Keine Analyse gefunden.<br>Bitte sende deinen Lebenslauf an den Bot.',
+      noUser:        'Benutzer nicht erkannt.<br>Öffne die Seite über den Bot.',
+      networkError:  'Netzwerkfehler. Bitte versuche es erneut.',
+      apiFail:       'Kein Ergebnis gefunden. Sende deinen Lebenslauf an den Bot.',
+    },
+    fr: {
+      loading:       'Chargement du rapport…',
+      reportLabel:   'Analyse du CV',
+      fixesTitle:    '⚡ Points critiques',
+      breakdown:     'Détail des scores',
+      strengthsTitle:'✅ Points forts',
+      grade:         'Note',
+      noResult:      'Aucune analyse trouvée.<br>Envoie ton CV au bot.',
+      noUser:        'Utilisateur introuvable.<br>Ouvre cette page depuis le bot.',
+      networkError:  'Erreur réseau. Réessaie.',
+      apiFail:       'Résultat introuvable. Envoie ton CV au bot.',
+    },
+    es: {
+      loading:       'Cargando tu informe…',
+      reportLabel:   'Análisis de CV',
+      fixesTitle:    '⚡ Correcciones clave',
+      breakdown:     'Desglose de puntuación',
+      strengthsTitle:'✅ Puntos fuertes',
+      grade:         'Calificación',
+      noResult:      'No se encontró análisis.<br>Envía tu CV al bot primero.',
+      noUser:        'No se pudo identificar al usuario.<br>Abre esto desde el bot.',
+      networkError:  'Error de red. Inténtalo de nuevo.',
+      apiFail:       'Resultado no encontrado. Envía tu CV al bot.',
+    },
+    tr: {
+      loading:       'Rapor yükleniyor…',
+      reportLabel:   'CV Analizi',
+      fixesTitle:    '⚡ Kritik Düzeltmeler',
+      breakdown:     'Puan Dağılımı',
+      strengthsTitle:'✅ Güçlü Yönler',
+      grade:         'Derece',
+      noResult:      'CV analizi bulunamadı.<br>Lütfen önce CV\'nizi bota gönderin.',
+      noUser:        'Kullanıcı tanımlanamadı.<br>Botu üzerinden açın.',
+      networkError:  'Ağ hatası. Tekrar deneyin.',
+      apiFail:       'Sonuç bulunamadı. CV\'nizi bota gönderin.',
+    },
+    kk: {
+      loading:       'Есеп жүктелуде…',
+      reportLabel:   'Түйіндеме талдауы',
+      fixesTitle:    '⚡ Маңызды түзетулер',
+      breakdown:     'Балл бойынша бөлінім',
+      strengthsTitle:'✅ Күшті жақтары',
+      grade:         'Баға',
+      noResult:      'Талдау табылмады.<br>Алдымен түйіндемеңізді ботқа жіберіңіз.',
+      noUser:        'Пайдаланушы анықталмады.<br>Ботты арқылы ашыңыз.',
+      networkError:  'Желі қатесі. Қайталап көріңіз.',
+      apiFail:       'Нәтиже табылмады. Түйіндемеңізді ботқа жіберіңіз.',
+    },
+    zh: {
+      loading:       '正在加载报告…',
+      reportLabel:   '简历分析报告',
+      fixesTitle:    '⚡ 关键改进',
+      breakdown:     '分项评分',
+      strengthsTitle:'✅ 优势',
+      grade:         '等级',
+      noResult:      '未找到简历分析。<br>请先将简历发送给机器人。',
+      noUser:        '无法识别用户。<br>请通过机器人打开此页面。',
+      networkError:  '网络错误，请重试。',
+      apiFail:       '未找到结果，请将简历发送给机器人。',
+    },
+    ar: {
+      loading:       'جارٍ تحميل التقرير…',
+      reportLabel:   'تحليل السيرة الذاتية',
+      fixesTitle:    '⚡ إصلاحات حرجة',
+      breakdown:     'تفاصيل النقاط',
+      strengthsTitle:'✅ نقاط القوة',
+      grade:         'التقدير',
+      noResult:      'لم يُعثر على تحليل للسيرة الذاتية.<br>يرجى إرسال سيرتك الذاتية إلى البوت أولاً.',
+      noUser:        'تعذّر التعرف على المستخدم.<br>افتح الصفحة عبر البوت.',
+      networkError:  'خطأ في الشبكة. حاول مرة أخرى.',
+      apiFail:       'لم يُعثر على نتيجة. أرسل سيرتك الذاتية إلى البوت.',
+    },
+  };
+
+  function getLang() {
+    const raw = tg?.initDataUnsafe?.user?.language_code || navigator.language || 'en';
+    const code = raw.split('-')[0].toLowerCase();
+    return I18N[code] ? code : 'en';
+  }
+
+  const lang = getLang();
+  const T = I18N[lang];
+
+  function applyStaticTranslations() {
+    document.getElementById('txt-loading').textContent      = T.loading;
+    document.getElementById('txt-report-label').textContent = T.reportLabel;
+    document.getElementById('txt-fixes-title').textContent  = T.fixesTitle;
+    document.getElementById('txt-breakdown-title').textContent = T.breakdown;
+    document.getElementById('txt-strengths-title').textContent = T.strengthsTitle;
+    document.getElementById('error-msg').innerHTML          = T.noResult;
+  }
+
+  applyStaticTranslations();
 
   function scoreColor(s) {
     if (s >= 75) return 'var(--accent3)';
@@ -364,7 +498,7 @@
 
   async function loadReport() {
     if (!uid) {
-      showError('Could not identify user.<br>Please open this from the bot.');
+      showError(T.noUser);
       return;
     }
 
@@ -372,13 +506,13 @@
       const res = await fetch(`/api/cvscore-result?uid=${uid}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        showError(data.error || 'No result found. Send your CV to the bot first.');
+        showError(data.error || T.apiFail);
         return;
       }
       const data = await res.json();
       renderReport(data);
     } catch (e) {
-      showError('Network error. Please try again.');
+      showError(T.networkError);
     }
   }
 
@@ -395,7 +529,7 @@
     // Header
     document.getElementById('cand-name').textContent = d.name || 'Candidate';
     document.getElementById('cand-title').textContent = d.title || '';
-    document.getElementById('grade-badge').textContent = `Grade: ${d.grade}`;
+    document.getElementById('grade-badge').textContent = `${T.grade}: ${d.grade}`;
     document.getElementById('roast-text').textContent = d.roast || '';
     document.getElementById('summary-text').textContent = d.summary || '';
 
