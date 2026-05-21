@@ -771,10 +771,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const runCvAnalysis = async (ctx, chatId, resumeText) => {
     await ctx.reply(tr(ctx, 'cv_analyzing'), { reply_markup: { remove_keyboard: true } });
     const lang = langFromCtx(ctx);
+    const telegramLang = ctx.from?.language_code || lang;
     let review;
     try {
       review = await runWithTyping(ctx.telegram, chatId, () =>
-        reviewResumeWithAI({ resumeText, lang })
+        reviewResumeWithAI({ resumeText, lang: telegramLang })
       );
     } catch (err) {
       console.error('reviewResumeWithAI error:', err);

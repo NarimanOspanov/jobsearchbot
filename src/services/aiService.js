@@ -124,7 +124,7 @@ export async function reviewResumeWithAI({ resumeText, lang = 'en' }) {
     return reviewResumeWithAnthropic({ resumeText: sourceText, lang });
   }
   if (!genAI) throw new Error('Neither ANTHROPIC_API_KEY nor GEMINI_API_KEY is configured');
-  const feedbackLanguage = lang === 'ru' ? 'Russian' : 'English';
+  const feedbackLanguage = lang;
   const prompt = `You are a senior HR expert and ATS resume reviewer.
 Task:
 1) Review the candidate resume text and provide concise expert feedback.
@@ -178,7 +178,7 @@ export async function reviewResumeWithAnthropic({ resumeText, lang = 'en' }) {
   const sourceText = String(resumeText || '').trim();
   if (!sourceText) throw new Error('Resume text is empty');
   if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY is not configured');
-  const feedbackLanguage = lang === 'ru' ? 'Russian' : 'English';
+  const feedbackLanguage = lang;
   const systemPrompt = `You are a senior HR expert and ATS resume reviewer.
 Task:
 1) Review the candidate resume text and provide concise expert feedback.
