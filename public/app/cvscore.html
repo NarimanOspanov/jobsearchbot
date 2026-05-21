@@ -96,11 +96,11 @@
   <!-- /Yandex.Metrika counter -->
 </head>
 <body>
-<div id="loading"><div class="spinner"></div><span>Loading your report...</span></div>
+<div id="loading"><div class="spinner"></div><span id="txt-loading">Loading your report...</span></div>
 <div id="error-state"><p id="error-msg">No CV analysis found.<br>Please send your CV to the bot first.</p></div>
 <div id="report">
   <div class="header">
-    <div class="header-label">CV Analysis Report</div>
+    <div class="header-label" id="txt-report-label">CV Analysis Report</div>
     <div class="candidate-name" id="cand-name">-</div>
     <div class="candidate-title" id="cand-title">-</div>
     <div class="score-ring-wrap">
@@ -115,20 +115,150 @@
     <span class="grade-badge" id="grade-badge">-</span>
   </div>
   <div class="content">
-    <div class="roast-card" id="roast-text">-</div>
     <div class="summary-card" id="summary-text">-</div>
-    <div class="section-title">Score Breakdown</div>
-    <div id="categories-container"></div>
-    <div class="section-title">Strengths</div>
-    <div class="list-card" id="strengths-list"></div>
-    <div class="section-title">Critical Fixes</div>
+
+    <div class="section-title" id="txt-fixes-title">Critical Fixes</div>
     <div class="list-card" id="fixes-list"></div>
+
+    <div class="section-title" id="txt-strengths-title">Strengths</div>
+    <div class="list-card" id="strengths-list"></div>
+
+    <div class="section-title" id="txt-breakdown-title">Score Breakdown</div>
+    <div id="categories-container"></div>
   </div>
 </div>
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor('#0a0a0f'); tg.setBackgroundColor('#0a0a0f'); }
   const uid = new URLSearchParams(location.search).get('uid') || tg?.initDataUnsafe?.user?.id;
+
+  // ── i18n ──
+  const I18N = {
+    en: {
+      loading:        'Loading your report...',
+      reportLabel:    'CV Analysis Report',
+      breakdown:      'Score Breakdown',
+      strengthsTitle: 'Strengths',
+      fixesTitle:     'Critical Fixes',
+      grade:          'Grade',
+      noResult:       'No CV analysis found.<br>Please send your CV to the bot first.',
+      noUser:         'Could not identify user.<br>Please open this from the bot.',
+      networkError:   'Network error. Please try again.',
+      apiFail:        'No result found. Send your CV to the bot first.',
+    },
+    ru: {
+      loading:        'Загружаем отчёт…',
+      reportLabel:    'Анализ резюме',
+      breakdown:      'Разбивка по баллам',
+      strengthsTitle: 'Сильные стороны',
+      fixesTitle:     'Критические замечания',
+      grade:          'Оценка',
+      noResult:       'Анализ резюме не найден.<br>Отправьте резюме боту.',
+      noUser:         'Не удалось определить пользователя.<br>Откройте эту страницу через бота.',
+      networkError:   'Ошибка сети. Попробуйте ещё раз.',
+      apiFail:        'Результат не найден. Отправьте резюме боту.',
+    },
+    de: {
+      loading:        'Bericht wird geladen…',
+      reportLabel:    'Lebenslauf-Analyse',
+      breakdown:      'Punkteübersicht',
+      strengthsTitle: 'Stärken',
+      fixesTitle:     'Kritische Punkte',
+      grade:          'Note',
+      noResult:       'Keine Analyse gefunden.<br>Bitte sende deinen Lebenslauf an den Bot.',
+      noUser:         'Benutzer nicht erkannt.<br>Öffne die Seite über den Bot.',
+      networkError:   'Netzwerkfehler. Bitte versuche es erneut.',
+      apiFail:        'Kein Ergebnis gefunden. Sende deinen Lebenslauf an den Bot.',
+    },
+    fr: {
+      loading:        'Chargement du rapport…',
+      reportLabel:    'Analyse du CV',
+      breakdown:      'Détail des scores',
+      strengthsTitle: 'Points forts',
+      fixesTitle:     'Points critiques',
+      grade:          'Note',
+      noResult:       'Aucune analyse trouvée.<br>Envoie ton CV au bot.',
+      noUser:         'Utilisateur introuvable.<br>Ouvre cette page depuis le bot.',
+      networkError:   'Erreur réseau. Réessaie.',
+      apiFail:        'Résultat introuvable. Envoie ton CV au bot.',
+    },
+    es: {
+      loading:        'Cargando tu informe…',
+      reportLabel:    'Análisis de CV',
+      breakdown:      'Desglose de puntuación',
+      strengthsTitle: 'Puntos fuertes',
+      fixesTitle:     'Correcciones clave',
+      grade:          'Calificación',
+      noResult:       'No se encontró análisis.<br>Envía tu CV al bot primero.',
+      noUser:         'No se pudo identificar al usuario.<br>Abre esto desde el bot.',
+      networkError:   'Error de red. Inténtalo de nuevo.',
+      apiFail:        'Resultado no encontrado. Envía tu CV al bot.',
+    },
+    tr: {
+      loading:        'Rapor yükleniyor…',
+      reportLabel:    'CV Analizi',
+      breakdown:      'Puan Dağılımı',
+      strengthsTitle: 'Güçlü Yönler',
+      fixesTitle:     'Kritik Düzeltmeler',
+      grade:          'Derece',
+      noResult:       'CV analizi bulunamadı.<br>Lütfen önce CV\'nizi bota gönderin.',
+      noUser:         'Kullanıcı tanımlanamadı.<br>Botu üzerinden açın.',
+      networkError:   'Ağ hatası. Tekrar deneyin.',
+      apiFail:        'Sonuç bulunamadı. CV\'nizi bota gönderin.',
+    },
+    kk: {
+      loading:        'Есеп жүктелуде…',
+      reportLabel:    'Түйіндеме талдауы',
+      breakdown:      'Балл бойынша бөлінім',
+      strengthsTitle: 'Күшті жақтары',
+      fixesTitle:     'Маңызды түзетулер',
+      grade:          'Баға',
+      noResult:       'Талдау табылмады.<br>Алдымен түйіндемеңізді ботқа жіберіңіз.',
+      noUser:         'Пайдаланушы анықталмады.<br>Ботты арқылы ашыңыз.',
+      networkError:   'Желі қатесі. Қайталап көріңіз.',
+      apiFail:        'Нәтиже табылмады. Түйіндемеңізді ботқа жіберіңіз.',
+    },
+    zh: {
+      loading:        '正在加载报告…',
+      reportLabel:    '简历分析报告',
+      breakdown:      '分项评分',
+      strengthsTitle: '优势',
+      fixesTitle:     '关键改进',
+      grade:          '等级',
+      noResult:       '未找到简历分析。<br>请先将简历发送给机器人。',
+      noUser:         '无法识别用户。<br>请通过机器人打开此页面。',
+      networkError:   '网络错误，请重试。',
+      apiFail:        '未找到结果，请将简历发送给机器人。',
+    },
+    ar: {
+      loading:        'جارٍ تحميل التقرير…',
+      reportLabel:    'تحليل السيرة الذاتية',
+      breakdown:      'تفاصيل النقاط',
+      strengthsTitle: 'نقاط القوة',
+      fixesTitle:     'إصلاحات حرجة',
+      grade:          'التقدير',
+      noResult:       'لم يُعثر على تحليل.<br>يرجى إرسال سيرتك الذاتية إلى البوت أولاً.',
+      noUser:         'تعذّر التعرف على المستخدم.<br>افتح الصفحة عبر البوت.',
+      networkError:   'خطأ في الشبكة. حاول مرة أخرى.',
+      apiFail:        'لم يُعثر على نتيجة. أرسل سيرتك الذاتية إلى البوت.',
+    },
+  };
+
+  function getLang() {
+    const raw = tg?.initDataUnsafe?.user?.language_code || navigator.language || 'en';
+    const code = raw.split('-')[0].toLowerCase();
+    return I18N[code] ? code : 'en';
+  }
+
+  const T = I18N[getLang()];
+
+  document.getElementById('txt-loading').textContent       = T.loading;
+  document.getElementById('txt-report-label').textContent  = T.reportLabel;
+  document.getElementById('txt-breakdown-title').textContent = T.breakdown;
+  document.getElementById('txt-strengths-title').textContent = T.strengthsTitle;
+  document.getElementById('txt-fixes-title').textContent   = T.fixesTitle;
+  document.getElementById('error-msg').innerHTML           = T.noResult;
+
   function scoreColor(s) { if (s >= 75) return 'var(--accent3)'; if (s >= 50) return '#ffd166'; return 'var(--accent2)'; }
   function barColor(s) { if (s >= 75) return 'linear-gradient(90deg, #43e97b, #38f9d7)'; if (s >= 50) return 'linear-gradient(90deg, #f7971e, #ffd200)'; return 'linear-gradient(90deg, #ff6584, #ff8e53)'; }
   function ringColor(s) { if (s >= 75) return '#43e97b'; if (s >= 50) return '#ffd166'; return '#ff6584'; }
@@ -142,8 +272,7 @@
     document.getElementById('report').style.display = 'block';
     document.getElementById('cand-name').textContent = d.name || 'Candidate';
     document.getElementById('cand-title').textContent = d.title || '';
-    document.getElementById('grade-badge').textContent = `Grade: ${d.grade || '-'}`;
-    document.getElementById('roast-text').textContent = d.roast || '';
+    document.getElementById('grade-badge').textContent = `${T.grade}: ${d.grade || '-'}`;
     document.getElementById('summary-text').textContent = d.summary || '';
     const score = Number(d.ats_score || 0);
     const circumference = 314;
@@ -177,17 +306,17 @@
     fixes.innerHTML = (d.critical_fixes || []).map((f) => `<div class="list-item"><span>${f}</span></div>`).join('');
   }
   async function loadReport() {
-    if (!uid) return showError('Could not identify user.<br>Please open this from the bot.');
+    if (!uid) return showError(T.noUser);
     try {
       const res = await fetch(`/api/cvscore-result?uid=${uid}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        return showError(data.error || 'No result found. Send your CV to the bot first.');
+        return showError(data.error || T.apiFail);
       }
       const data = await res.json();
       renderReport(data);
     } catch {
-      showError('Network error. Please try again.');
+      showError(T.networkError);
     }
   }
   loadReport();
