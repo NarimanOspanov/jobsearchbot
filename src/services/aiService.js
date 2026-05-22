@@ -135,7 +135,8 @@ Return strict JSON only (no markdown fences) with this exact schema:
   "structure_score": number,
   "summary": "string",
   "strengths": ["string"],
-  "improvements": ["string"]
+  "improvements": ["string"],
+  "rewrittenResume": "string"
 }
 
 Rules:
@@ -144,8 +145,9 @@ Rules:
 - structure_score: layout, clarity & formatting, integer 0..100
 - strengths: 3-6 bullet points
 - improvements: 3-6 bullet points
+- rewrittenResume: plain text ATS-friendly resume with clear sections; use ONLY facts from source resume
 - Use ONLY facts present in source resume. Do not invent companies, dates, titles, metrics, education, certificates, or skills.
-- Write summary, strengths, and improvements in ${feedbackLanguage}.
+- Write summary, strengths, and improvements in ${feedbackLanguage}. Keep rewrittenResume in the same language as the source resume.
 
 Source resume text:
 ${sourceText}`;
@@ -169,9 +171,10 @@ ${sourceText}`;
   const improvements = Array.isArray(parsed?.improvements)
     ? parsed.improvements.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
     : [];
+  const rewrittenResume = String(parsed?.rewrittenResume || '').trim();
   if (score == null) throw new Error('AI review score is invalid');
   if (!summary) throw new Error('AI review summary is missing');
-  return { score, atsScore, structureScore, summary, strengths, improvements };
+  return { score, atsScore, structureScore, summary, strengths, improvements, rewrittenResume };
 }
 
 export async function reviewResumeWithAnthropic({ resumeText, lang = 'en' }) {
@@ -189,7 +192,8 @@ Return strict JSON only (no markdown fences) with this exact schema:
   "structure_score": number,
   "summary": "string",
   "strengths": ["string"],
-  "improvements": ["string"]
+  "improvements": ["string"],
+  "rewrittenResume": "string"
 }
 
 Rules:
@@ -198,8 +202,9 @@ Rules:
 - structure_score: layout, clarity & formatting, integer 0..100
 - strengths: 3-6 bullet points
 - improvements: 3-6 bullet points
+- rewrittenResume: plain text ATS-friendly resume with clear sections; use ONLY facts from source resume
 - Use ONLY facts present in source resume. Do not invent companies, dates, titles, metrics, education, certificates, or skills.
-- Write summary, strengths, and improvements in ${feedbackLanguage}.`;
+- Write summary, strengths, and improvements in ${feedbackLanguage}. Keep rewrittenResume in the same language as the source resume.`;
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -210,7 +215,7 @@ Rules:
     },
     body: JSON.stringify({
       model: config.anthropicCvScoreModel,
-      max_tokens: 2000,
+      max_tokens: 4000,
       system: systemPrompt,
       messages: [{ role: 'user', content: `Source resume text:\n${sourceText}` }],
     }),
@@ -240,9 +245,10 @@ Rules:
   const improvements = Array.isArray(parsed?.improvements)
     ? parsed.improvements.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
     : [];
+  const rewrittenResume = String(parsed?.rewrittenResume || '').trim();
   if (score == null) throw new Error('Anthropic review score is invalid');
   if (!summary) throw new Error('Anthropic review summary is missing');
-  return { score, atsScore, structureScore, summary, strengths, improvements };
+  return { score, atsScore, structureScore, summary, strengths, improvements, rewrittenResume };
 }
 
 export async function extractResumeContactsWithAI(resumeText) {
