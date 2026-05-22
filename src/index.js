@@ -795,8 +795,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
                   : 'F',
       summary: review.summary,
       categories: [
-        { name: 'ATS & Keywords', score: review.score, max: 100, feedback: review.improvements[0] || 'Improve keyword relevance.' },
-        { name: 'Structure & Clarity', score: review.score, max: 100, feedback: review.improvements[1] || 'Keep sections concise.' },
+        { name: 'ATS & Keywords', score: review.atsScore, max: 100, feedback: review.improvements[0] || 'Improve keyword relevance.' },
+        { name: 'Structure & Clarity', score: review.structureScore, max: 100, feedback: review.improvements[1] || 'Keep sections concise.' },
       ],
       strengths: review.strengths,
       critical_fixes: review.improvements,

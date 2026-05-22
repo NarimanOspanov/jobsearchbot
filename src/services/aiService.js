@@ -126,27 +126,26 @@ export async function reviewResumeWithAI({ resumeText, lang = 'en' }) {
   if (!genAI) throw new Error('Neither ANTHROPIC_API_KEY nor GEMINI_API_KEY is configured');
   const feedbackLanguage = lang;
   const prompt = `You are a senior HR expert and ATS resume reviewer.
-Task:
-1) Review the candidate resume text and provide concise expert feedback.
-2) Return a new improved resume text that is clean, flat, structured, and ATS-friendly.
+Task: Review the candidate resume text and provide concise expert feedback.
 
 Return strict JSON only (no markdown fences) with this exact schema:
 {
   "score": number,
+  "ats_score": number,
+  "structure_score": number,
   "summary": "string",
   "strengths": ["string"],
-  "improvements": ["string"],
-  "rewrittenResume": "string"
+  "improvements": ["string"]
 }
 
 Rules:
-- score must be integer 0..100
+- score: overall integer 0..100
+- ats_score: keyword relevance & ATS compatibility, integer 0..100
+- structure_score: layout, clarity & formatting, integer 0..100
 - strengths: 3-6 bullet points
 - improvements: 3-6 bullet points
-- rewrittenResume must be plain text resume with clear sections and simple bullets
 - Use ONLY facts present in source resume. Do not invent companies, dates, titles, metrics, education, certificates, or skills.
-- Keep rewrittenResume ATS-friendly: no tables, no columns, no icons, no links formatting.
-- Write summary, strengths, and improvements in ${feedbackLanguage}. Keep rewrittenResume in the same language as the source resume.
+- Write summary, strengths, and improvements in ${feedbackLanguage}.
 
 Source resume text:
 ${sourceText}`;
@@ -158,8 +157,11 @@ ${sourceText}`;
   if (!raw) throw new Error('AI response is empty');
   const jsonText = extractFirstJsonObject(raw);
   const parsed = JSON.parse(jsonText);
+  const clamp = (n) => Math.min(100, Math.max(0, n));
   const scoreRaw = Number.parseInt(String(parsed?.score ?? ''), 10);
-  const score = Number.isFinite(scoreRaw) ? Math.min(100, Math.max(0, scoreRaw)) : null;
+  const score = Number.isFinite(scoreRaw) ? clamp(scoreRaw) : null;
+  const atsScore = clamp(Number.parseInt(String(parsed?.ats_score ?? ''), 10) || scoreRaw);
+  const structureScore = clamp(Number.parseInt(String(parsed?.structure_score ?? ''), 10) || scoreRaw);
   const summary = String(parsed?.summary || '').trim();
   const strengths = Array.isArray(parsed?.strengths)
     ? parsed.strengths.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
@@ -167,11 +169,9 @@ ${sourceText}`;
   const improvements = Array.isArray(parsed?.improvements)
     ? parsed.improvements.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
     : [];
-  const rewrittenResume = String(parsed?.rewrittenResume || '').trim();
   if (score == null) throw new Error('AI review score is invalid');
   if (!summary) throw new Error('AI review summary is missing');
-  if (!rewrittenResume) throw new Error('AI rewritten resume is empty');
-  return { score, summary, strengths, improvements, rewrittenResume };
+  return { score, atsScore, structureScore, summary, strengths, improvements };
 }
 
 export async function reviewResumeWithAnthropic({ resumeText, lang = 'en' }) {
@@ -180,27 +180,26 @@ export async function reviewResumeWithAnthropic({ resumeText, lang = 'en' }) {
   if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY is not configured');
   const feedbackLanguage = lang;
   const systemPrompt = `You are a senior HR expert and ATS resume reviewer.
-Task:
-1) Review the candidate resume text and provide concise expert feedback.
-2) Return a new improved resume text that is clean, flat, structured, and ATS-friendly.
+Task: Review the candidate resume text and provide concise expert feedback.
 
 Return strict JSON only (no markdown fences) with this exact schema:
 {
   "score": number,
+  "ats_score": number,
+  "structure_score": number,
   "summary": "string",
   "strengths": ["string"],
-  "improvements": ["string"],
-  "rewrittenResume": "string"
+  "improvements": ["string"]
 }
 
 Rules:
-- score must be integer 0..100
+- score: overall integer 0..100
+- ats_score: keyword relevance & ATS compatibility, integer 0..100
+- structure_score: layout, clarity & formatting, integer 0..100
 - strengths: 3-6 bullet points
 - improvements: 3-6 bullet points
-- rewrittenResume must be plain text resume with clear sections and simple bullets
 - Use ONLY facts present in source resume. Do not invent companies, dates, titles, metrics, education, certificates, or skills.
-- Keep rewrittenResume ATS-friendly: no tables, no columns, no icons, no links formatting.
-- Write summary, strengths, and improvements in ${feedbackLanguage}. Keep rewrittenResume in the same language as the source resume.`;
+- Write summary, strengths, and improvements in ${feedbackLanguage}.`;
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -229,8 +228,11 @@ Rules:
 
   const jsonText = extractFirstJsonObject(raw);
   const parsed = JSON.parse(jsonText);
+  const clamp = (n) => Math.min(100, Math.max(0, n));
   const scoreRaw = Number.parseInt(String(parsed?.score ?? ''), 10);
-  const score = Number.isFinite(scoreRaw) ? Math.min(100, Math.max(0, scoreRaw)) : null;
+  const score = Number.isFinite(scoreRaw) ? clamp(scoreRaw) : null;
+  const atsScore = clamp(Number.parseInt(String(parsed?.ats_score ?? ''), 10) || scoreRaw);
+  const structureScore = clamp(Number.parseInt(String(parsed?.structure_score ?? ''), 10) || scoreRaw);
   const summary = String(parsed?.summary || '').trim();
   const strengths = Array.isArray(parsed?.strengths)
     ? parsed.strengths.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
@@ -238,11 +240,9 @@ Rules:
   const improvements = Array.isArray(parsed?.improvements)
     ? parsed.improvements.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 6)
     : [];
-  const rewrittenResume = String(parsed?.rewrittenResume || '').trim();
   if (score == null) throw new Error('Anthropic review score is invalid');
   if (!summary) throw new Error('Anthropic review summary is missing');
-  if (!rewrittenResume) throw new Error('Anthropic rewritten resume is empty');
-  return { score, summary, strengths, improvements, rewrittenResume };
+  return { score, atsScore, structureScore, summary, strengths, improvements };
 }
 
 export async function extractResumeContactsWithAI(resumeText) {
