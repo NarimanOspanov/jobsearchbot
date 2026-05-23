@@ -56,8 +56,8 @@ function serializeAdminNotification(row) {
     receiverLabel:
       receiverType === 'digest'
         ? plain.ReceiverChatId == null
-          ? '24h job digest'
-          : `24h digest (${String(plain.ReceiverChatId)})`
+          ? '24h job digest (all)'
+          : `Digest test (${String(plain.ReceiverChatId)})`
         : receiverType === 'all'
           ? plain.ReceiverChatId == null
             ? 'All users'
@@ -219,6 +219,49 @@ export function createNotificationsRouter() {
         }
         const reloaded = await models.AdminNotifications.findByPk(id);
         return res.json({ ok: true, notification: serializeAdminNotification(reloaded) });
+      }
+
+      if (mode === 'digest') {
+        const testReceiverChatId = toChatId(req.body.receiverChatId);
+        if (testReceiverChatId) {
+          const receiverUser = await models.Users.findOne({ where: { TelegramChatId: testReceiverChatId } });
+          if (!receiverUser) return res.status(404).json({ error: 'User not found' });
+          if (receiverUser.IsBlocked) return res.status(403).json({ error: 'User is blocked' });
+
+          const [digest] = await buildJobDigestNotificationsForUsers([receiverUser]);
+          const digestText = String(digest?.text || '').trim();
+          if (!digestText) return res.status(500).json({ error: 'Failed to build digest message' });
+
+          const id = randomUUID();
+          const row = await models.AdminNotifications.create({
+            Id: id,
+            RunId: null,
+            InitiatorChatId: initiatorChatId,
+            Text: digestText,
+            ReplyMarkupJson: digest.replyMarkupJson,
+            ReceiverType: 'digest',
+            ReceiverChatId: testReceiverChatId,
+            Status: 'sending',
+            CreatedAt: new Date(),
+            UpdatedAt: new Date(),
+          });
+          try {
+            await runtimeBot.telegram.sendMessage(
+              testReceiverChatId,
+              digestText,
+              telegramSendOptionsFromRow(row)
+            );
+            await row.update({ Status: 'sent', SentAt: new Date(), UpdatedAt: new Date(), Error: null });
+          } catch (err) {
+            await row.update({
+              Status: 'failed',
+              Error: String(err?.response?.description || err?.message || err || 'Failed to send').slice(0, 500),
+              UpdatedAt: new Date(),
+            });
+          }
+          const reloaded = await models.AdminNotifications.findByPk(id);
+          return res.json({ ok: true, notification: serializeAdminNotification(reloaded) });
+        }
       }
 
       if (mode !== 'all' && mode !== 'digest') {
