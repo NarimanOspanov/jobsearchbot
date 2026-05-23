@@ -5,6 +5,12 @@ import { extractResumeContactsWithAI, fetchScreenlySkillsCatalog, extractResumeS
 
 export { normalizeSkillIds };
 
+/** @param {import('../models/User.js').default | Record<string, unknown> | null | undefined} user */
+export function userCanReceiveMarketingNotifications(user) {
+  if (!user || user.IsBlocked) return false;
+  return user.PushNotificationsEnabled !== false;
+}
+
 export function buildAdminUserContactProjection(user) {
   const resumeContacts = parseResumeContactsJson(user.ResumeContactsJson);
   const resumeName = resumeContacts.name || null;

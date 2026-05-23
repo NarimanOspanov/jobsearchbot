@@ -4,6 +4,7 @@ import { Sequelize } from 'sequelize';
 import { adminMiniAppAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
 import { adminNotificationRunControl, runtimeBot } from '../../bot/state.js';
+import { userCanReceiveMarketingNotifications } from '../../services/userService.js';
 
 function normalizeNotificationText(value) {
   const raw = value == null ? '' : String(value);
@@ -169,6 +170,10 @@ export function createNotificationsRouter() {
       if (mode === 'single') {
         const receiverChatId = toChatId(req.body.receiverChatId);
         if (!receiverChatId) return res.status(400).json({ error: 'receiverChatId is required for single mode' });
+        const receiverUser = await models.Users.findOne({ where: { TelegramChatId: receiverChatId } });
+        if (!userCanReceiveMarketingNotifications(receiverUser)) {
+          return res.status(403).json({ error: 'push_notifications_disabled' });
+        }
         const id = randomUUID();
         const row = await models.AdminNotifications.create({
           Id: id,
@@ -205,13 +210,18 @@ export function createNotificationsRouter() {
       }
 
       const users = await models.Users.findAll({
-        where: { TelegramChatId: { [Sequelize.Op.ne]: null } },
+        where: {
+          TelegramChatId: { [Sequelize.Op.ne]: null },
+          IsBlocked: false,
+          PushNotificationsEnabled: true,
+        },
         attributes: ['TelegramChatId'],
         order: [['DateJoined', 'DESC'], ['Id', 'DESC']],
       });
       const seen = new Set();
       const recipients = [];
       for (const user of users) {
+        if (!userCanReceiveMarketingNotifications(user)) continue;
         const chatId = toChatId(user.TelegramChatId);
         if (!chatId) continue;
         if (chatId < 0) continue;

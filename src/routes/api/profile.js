@@ -55,6 +55,7 @@ export function createProfileRouter() {
           searchMode: user.SearchMode || 'not_urgent',
           minimumSalary: user.MinimumSalary,
           remoteOnly: !!user.RemoteOnly,
+          pushNotificationsEnabled: user.PushNotificationsEnabled !== false,
         },
       });
     } catch (err) {
@@ -141,6 +142,7 @@ export function createProfileRouter() {
         SearchMode: toSearchModeOrUndefined(req.body.searchMode),
         MinimumSalary: toIntOrNullOrUndefined(req.body.minimumSalary),
         RemoteOnly: toBoolOrUndefined(req.body.remoteOnly),
+        PushNotificationsEnabled: toBoolOrUndefined(req.body.pushNotificationsEnabled),
       };
       const skillIds = toSkillIdsOrNullOrUndefined(req.body.skills, normalizeSkillIds);
 
@@ -165,6 +167,7 @@ export function createProfileRouter() {
           searchMode: user.SearchMode || 'not_urgent',
           minimumSalary: user.MinimumSalary,
           remoteOnly: !!user.RemoteOnly,
+          pushNotificationsEnabled: user.PushNotificationsEnabled !== false,
         },
       });
     } catch (err) {

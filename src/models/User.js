@@ -54,6 +54,11 @@ export default function defineUser(sequelize) {
         allowNull: false,
         defaultValue: false,
       },
+      PushNotificationsEnabled: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+      },
       MuteBotUntil: {
         type: DataTypes.DATE,
         allowNull: true,

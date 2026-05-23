@@ -23,8 +23,38 @@
       h2 { font-size: 18px; }
       .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
       .row:last-child { border-bottom: none; }
+      .row-stack { display: grid; gap: 4px; flex: 1; min-width: 0; }
+      .row-title { font-weight: 600; }
+      .row-desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
       .muted { color: var(--muted); }
+      .bad { color: #ef4444; font-size: 13px; margin-top: 8px; }
       .hidden { display: none !important; }
+      .toggle {
+        position: relative;
+        width: 48px;
+        height: 28px;
+        flex-shrink: 0;
+        border: none;
+        padding: 0;
+        border-radius: 999px;
+        background: #273357;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .toggle::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: #eaf0ff;
+        transition: transform 0.2s;
+      }
+      .toggle.on { background: var(--accent); }
+      .toggle.on::after { transform: translateX(20px); }
+      .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
     </style>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
@@ -49,6 +79,25 @@
         <div class="row"><span id="chatIdLabel">Chat ID</span><span id="profileChatId" class="muted">loading...</span></div>
       </section>
 
+      <section class="card">
+        <h2 id="notificationsSectionTitle">Notifications</h2>
+        <div class="row">
+          <div class="row-stack">
+            <span id="pushNotificationsLabel" class="row-title">Push notifications</span>
+            <span id="pushNotificationsDesc" class="row-desc">Receive job updates and service announcements</span>
+          </div>
+          <button
+            id="pushNotificationsToggle"
+            type="button"
+            class="toggle on"
+            role="switch"
+            aria-checked="true"
+            aria-labelledby="pushNotificationsLabel"
+          ></button>
+        </div>
+        <p id="pushNotificationsMsg" class="bad hidden" role="alert"></p>
+      </section>
+
       <section id="jobSearchSettings" class="card hidden" aria-hidden="true"></section>
     </div>
 
@@ -60,68 +109,139 @@
         ru: {
           pageTitle: 'Профиль',
           userSection: 'Пользователь',
+          notificationsSection: 'Уведомления',
+          pushNotifications: 'Push-уведомления',
+          pushNotificationsDesc: 'Получать рассылки о вакансиях и новостях сервиса',
           telegram: 'Telegram',
           chatId: 'Chat ID',
           loading: 'загрузка...',
           noUsername: '(без username)',
           loadError: 'Не удалось загрузить профиль',
+          saveError: 'Не удалось сохранить настройку',
         },
         en: {
           pageTitle: 'Profile',
           userSection: 'User',
+          notificationsSection: 'Notifications',
+          pushNotifications: 'Push notifications',
+          pushNotificationsDesc: 'Receive job updates and service announcements',
           telegram: 'Telegram',
           chatId: 'Chat ID',
           loading: 'loading...',
           noUsername: '(no username)',
           loadError: 'Failed to load profile',
+          saveError: 'Failed to save setting',
         },
       };
+
+      let pushNotificationsEnabled = true;
+      let isSavingPush = false;
 
       function telegramLang() {
         const code = String(tg?.initDataUnsafe?.user?.language_code || '').toLowerCase();
         return code === 'ru' || code.startsWith('ru-') ? 'ru' : 'en';
       }
 
-      function t(lang) {
+      function strings(lang) {
         return I18N[lang === 'ru' ? 'ru' : 'en'];
       }
 
       function applyLocale(lang) {
-        const strings = t(lang);
+        const s = strings(lang);
         document.documentElement.lang = lang;
-        document.title = strings.pageTitle;
-        document.getElementById('pageTitle').textContent = strings.pageTitle;
-        document.getElementById('userSectionTitle').textContent = strings.userSection;
-        document.getElementById('telegramLabel').textContent = strings.telegram;
-        document.getElementById('chatIdLabel').textContent = strings.chatId;
+        document.title = s.pageTitle;
+        document.getElementById('pageTitle').textContent = s.pageTitle;
+        document.getElementById('userSectionTitle').textContent = s.userSection;
+        document.getElementById('notificationsSectionTitle').textContent = s.notificationsSection;
+        document.getElementById('pushNotificationsLabel').textContent = s.pushNotifications;
+        document.getElementById('pushNotificationsDesc').textContent = s.pushNotificationsDesc;
+        document.getElementById('telegramLabel').textContent = s.telegram;
+        document.getElementById('chatIdLabel').textContent = s.chatId;
         const profileUser = document.getElementById('profileUser');
         if (profileUser.dataset.noUsername === '1') {
-          profileUser.textContent = strings.noUsername;
+          profileUser.textContent = s.noUsername;
         }
+      }
+
+      function setPushMsg(text) {
+        const el = document.getElementById('pushNotificationsMsg');
+        if (!text) {
+          el.textContent = '';
+          el.classList.add('hidden');
+          return;
+        }
+        el.textContent = text;
+        el.classList.remove('hidden');
+      }
+
+      function renderPushToggle() {
+        const btn = document.getElementById('pushNotificationsToggle');
+        btn.classList.toggle('on', pushNotificationsEnabled);
+        btn.setAttribute('aria-checked', pushNotificationsEnabled ? 'true' : 'false');
+        btn.disabled = isSavingPush;
       }
 
       async function api(path, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
         if (tg?.initData) headers['x-init-data'] = tg.initData;
         const response = await fetch(path, { ...options, headers });
-        if (!response.ok) throw new Error(await response.text());
+        if (!response.ok) {
+          const body = await response.text();
+          let message = body;
+          try {
+            const parsed = JSON.parse(body);
+            message = parsed.error || body;
+          } catch {
+            // keep raw body
+          }
+          throw new Error(message);
+        }
         return response.json();
+      }
+
+      async function savePushNotifications(enabled) {
+        isSavingPush = true;
+        renderPushToggle();
+        setPushMsg('');
+        try {
+          const result = await api('/api/app/profile/settings', {
+            method: 'PATCH',
+            body: JSON.stringify({ pushNotificationsEnabled: enabled }),
+          });
+          pushNotificationsEnabled = result?.settings?.pushNotificationsEnabled !== false;
+        } finally {
+          isSavingPush = false;
+          renderPushToggle();
+        }
       }
 
       function applyProfile(profile) {
         const lang = telegramLang();
-        const strings = t(lang);
+        const s = strings(lang);
         const profileUser = document.getElementById('profileUser');
         if (profile.telegramUserName) {
           profileUser.textContent = `@${profile.telegramUserName}`;
           profileUser.dataset.noUsername = '0';
         } else {
-          profileUser.textContent = strings.noUsername;
+          profileUser.textContent = s.noUsername;
           profileUser.dataset.noUsername = '1';
         }
         document.getElementById('profileChatId').textContent = profile.telegramChatId;
+        pushNotificationsEnabled = profile?.settings?.pushNotificationsEnabled !== false;
+        renderPushToggle();
         applyLocale(lang);
       }
+
+      document.getElementById('pushNotificationsToggle').addEventListener('click', async () => {
+        if (isSavingPush) return;
+        const next = !pushNotificationsEnabled;
+        try {
+          await savePushNotifications(next);
+        } catch (err) {
+          renderPushToggle();
+          setPushMsg(`${strings(telegramLang()).saveError}: ${err.message}`);
+        }
+      });
 
       async function loadProfile() {
         const profile = await api('/api/app/profile');
@@ -129,7 +249,7 @@
       }
 
       loadProfile().catch((err) => {
-        alert(`${t(telegramLang()).loadError}: ${err.message}`);
+        alert(`${strings(telegramLang()).loadError}: ${err.message}`);
       });
     </script>
   </body>
