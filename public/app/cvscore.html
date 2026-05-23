@@ -65,8 +65,8 @@
     background: linear-gradient(135deg, rgba(255,101,132,0.12), rgba(255,101,132,0.05));
     border: 1px solid rgba(255,101,132,0.25); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px;
   }
-  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px; font-size: 14px; color: #c8c8e8; line-height: 1.7; }
   .section-title { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin: 20px 0 10px; }
+  .section-title:first-child { margin-top: 0; }
   .category-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
   .cat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   .cat-score { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--accent); }
@@ -115,9 +115,7 @@
     <span class="grade-badge" id="grade-badge">-</span>
   </div>
   <div class="content">
-    <div class="summary-card" id="summary-text">-</div>
-
-    <div class="section-title" id="txt-fixes-title">Critical Fixes</div>
+    <div class="section-title" id="txt-fixes-title">Recommendations to improve</div>
     <div class="list-card" id="fixes-list"></div>
 
     <div class="section-title" id="txt-strengths-title">Strengths</div>
@@ -139,31 +137,35 @@
       reportLabel:    'CV Analysis Report',
       breakdown:      'Score Breakdown',
       strengthsTitle: 'Strengths',
-      fixesTitle:     'Critical Fixes',
+      fixesTitle:     'Recommendations to improve',
       grade:          'Grade',
       noResult:       'No CV analysis found.<br>Please send your CV to the bot first.',
       noUser:         'Could not identify user.<br>Please open this from the bot.',
       networkError:   'Network error. Please try again.',
       apiFail:        'No result found. Send your CV to the bot first.',
+      noFixes:        'No specific recommendations — your resume looks solid on the main criteria.',
+      noStrengths:    'No standout strengths highlighted yet.',
     },
     ru: {
       loading:        'Загружаем отчёт…',
       reportLabel:    'Анализ резюме',
       breakdown:      'Разбивка по баллам',
       strengthsTitle: 'Сильные стороны',
-      fixesTitle:     'Необходимо улучшить',
+      fixesTitle:     'Рекомендации по улучшению',
       grade:          'Оценка',
       noResult:       'Анализ резюме не найден.<br>Отправьте резюме боту.',
       noUser:         'Не удалось определить пользователя.<br>Откройте эту страницу через бота.',
       networkError:   'Ошибка сети. Попробуйте ещё раз.',
       apiFail:        'Результат не найден. Отправьте резюме боту.',
+      noFixes:        'Отдельных рекомендаций нет — по основным критериям резюме выглядит уверенно.',
+      noStrengths:    'Явные сильные стороны пока не выделены.',
     },
     de: {
       loading:        'Bericht wird geladen…',
       reportLabel:    'Lebenslauf-Analyse',
       breakdown:      'Punkteübersicht',
       strengthsTitle: 'Stärken',
-      fixesTitle:     'Kritische Punkte',
+      fixesTitle:     'Verbesserungsempfehlungen',
       grade:          'Note',
       noResult:       'Keine Analyse gefunden.<br>Bitte sende deinen Lebenslauf an den Bot.',
       noUser:         'Benutzer nicht erkannt.<br>Öffne die Seite über den Bot.',
@@ -175,7 +177,7 @@
       reportLabel:    'Analyse du CV',
       breakdown:      'Détail des scores',
       strengthsTitle: 'Points forts',
-      fixesTitle:     'Points critiques',
+      fixesTitle:     'Recommandations d\'amélioration',
       grade:          'Note',
       noResult:       'Aucune analyse trouvée.<br>Envoie ton CV au bot.',
       noUser:         'Utilisateur introuvable.<br>Ouvre cette page depuis le bot.',
@@ -187,7 +189,7 @@
       reportLabel:    'Análisis de CV',
       breakdown:      'Desglose de puntuación',
       strengthsTitle: 'Puntos fuertes',
-      fixesTitle:     'Correcciones clave',
+      fixesTitle:     'Recomendaciones de mejora',
       grade:          'Calificación',
       noResult:       'No se encontró análisis.<br>Envía tu CV al bot primero.',
       noUser:         'No se pudo identificar al usuario.<br>Abre esto desde el bot.',
@@ -199,7 +201,7 @@
       reportLabel:    'CV Analizi',
       breakdown:      'Puan Dağılımı',
       strengthsTitle: 'Güçlü Yönler',
-      fixesTitle:     'Kritik Düzeltmeler',
+      fixesTitle:     'İyileştirme önerileri',
       grade:          'Derece',
       noResult:       'CV analizi bulunamadı.<br>Lütfen önce CV\'nizi bota gönderin.',
       noUser:         'Kullanıcı tanımlanamadı.<br>Botu üzerinden açın.',
@@ -211,7 +213,7 @@
       reportLabel:    'Түйіндеме талдауы',
       breakdown:      'Балл бойынша бөлінім',
       strengthsTitle: 'Күшті жақтары',
-      fixesTitle:     'Маңызды түзетулер',
+      fixesTitle:     'Жақсарту бойынша ұсыныстар',
       grade:          'Баға',
       noResult:       'Талдау табылмады.<br>Алдымен түйіндемеңізді ботқа жіберіңіз.',
       noUser:         'Пайдаланушы анықталмады.<br>Ботты арқылы ашыңыз.',
@@ -223,7 +225,7 @@
       reportLabel:    '简历分析报告',
       breakdown:      '分项评分',
       strengthsTitle: '优势',
-      fixesTitle:     '关键改进',
+      fixesTitle:     '改进建议',
       grade:          '等级',
       noResult:       '未找到简历分析。<br>请先将简历发送给机器人。',
       noUser:         '无法识别用户。<br>请通过机器人打开此页面。',
@@ -235,7 +237,7 @@
       reportLabel:    'تحليل السيرة الذاتية',
       breakdown:      'تفاصيل النقاط',
       strengthsTitle: 'نقاط القوة',
-      fixesTitle:     'إصلاحات حرجة',
+      fixesTitle:     'توصيات للتحسين',
       grade:          'التقدير',
       noResult:       'لم يُعثر على تحليل.<br>يرجى إرسال سيرتك الذاتية إلى البوت أولاً.',
       noUser:         'تعذّر التعرف على المستخدم.<br>افتح الصفحة عبر البوت.',
@@ -259,6 +261,13 @@
   document.getElementById('txt-fixes-title').textContent   = T.fixesTitle;
   document.getElementById('error-msg').innerHTML           = T.noResult;
 
+  function escapeHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
   function scoreColor(s) { if (s >= 75) return 'var(--accent3)'; if (s >= 50) return '#ffd166'; return 'var(--accent2)'; }
   function barColor(s) { if (s >= 75) return 'linear-gradient(90deg, #43e97b, #38f9d7)'; if (s >= 50) return 'linear-gradient(90deg, #f7971e, #ffd200)'; return 'linear-gradient(90deg, #ff6584, #ff8e53)'; }
   function ringColor(s) { if (s >= 75) return '#43e97b'; if (s >= 50) return '#ffd166'; return '#ff6584'; }
@@ -273,7 +282,6 @@
     document.getElementById('cand-name').textContent = d.name || 'Candidate';
     document.getElementById('cand-title').textContent = d.title || '';
     document.getElementById('grade-badge').textContent = `${T.grade}: ${d.grade || '-'}`;
-    document.getElementById('summary-text').textContent = d.summary || '';
     const score = Number(d.ats_score || 0);
     const circumference = 314;
     const fill = document.getElementById('ring-fill');
@@ -300,10 +308,16 @@
       catContainer.appendChild(el);
       setTimeout(() => { const b = document.getElementById(`bar-${i}`); if (b) b.style.width = `${pct}%`; }, 160 + i * 60);
     });
-    const strengths = document.getElementById('strengths-list');
-    strengths.innerHTML = (d.strengths || []).map((s) => `<div class="list-item"><span>${s}</span></div>`).join('');
     const fixes = document.getElementById('fixes-list');
-    fixes.innerHTML = (d.critical_fixes || []).map((f) => `<div class="list-item"><span>${f}</span></div>`).join('');
+    const fixItems = d.critical_fixes || [];
+    fixes.innerHTML = fixItems.length
+      ? fixItems.map((f) => `<div class="list-item"><span>${escapeHtml(f)}</span></div>`).join('')
+      : `<div class="list-item"><span style="color:var(--muted)">${escapeHtml(T.noFixes || I18N.en.noFixes)}</span></div>`;
+    const strengths = document.getElementById('strengths-list');
+    const strengthItems = d.strengths || [];
+    strengths.innerHTML = strengthItems.length
+      ? strengthItems.map((s) => `<div class="list-item"><span>${escapeHtml(s)}</span></div>`).join('')
+      : `<div class="list-item"><span style="color:var(--muted)">${escapeHtml(T.noStrengths || I18N.en.noStrengths)}</span></div>`;
   }
   async function loadReport() {
     if (!uid) return showError(T.noUser);
