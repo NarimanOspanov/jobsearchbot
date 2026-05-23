@@ -60,7 +60,11 @@
         <div class="mode-row">
           <label><input type="radio" name="receiverMode" value="single" checked /> One user</label>
           <label><input type="radio" name="receiverMode" value="all" /> All users</label>
+          <label><input type="radio" name="receiverMode" value="digest" /> Users with specified skills (24h digest)</label>
         </div>
+        <p id="digestModeHint" class="muted" style="display:none;margin:0 0 10px">
+          Sends each opted-in user a personalized message: per-skill counts if they have skills in profile, otherwise total remote positions for the last 24 hours. Includes an Open all Web App button.
+        </p>
         <div id="singleUserWrap" class="row">
           <input id="userSearchInput" placeholder="Search by username, name, or chatId" />
           <div id="userSuggestions" class="suggestions" style="display:none"></div>
@@ -136,7 +140,13 @@
       }
 
       function setModeUi() {
-        document.getElementById('singleUserWrap').style.display = mode() === 'single' ? '' : 'none';
+        const m = mode();
+        document.getElementById('singleUserWrap').style.display = m === 'single' ? '' : 'none';
+        const isDigest = m === 'digest';
+        document.getElementById('messageInput').closest('.row').style.display = isDigest ? 'none' : '';
+        document.getElementById('digestModeHint').style.display = isDigest ? '' : 'none';
+        const sendBtn = document.getElementById('sendBtn');
+        sendBtn.textContent = isDigest ? 'Send digest' : 'Send';
       }
 
       function renderSelectedUser() {
@@ -231,7 +241,7 @@
             <td>${esc(row.id)}</td>
             <td>${esc(row.initiatorChatId)}</td>
             <td style="white-space:pre-wrap;word-break:break-word;max-width:320px">${esc(row.text)}</td>
-            <td>${esc(row.receiverLabel || (row.receiverType === 'all' ? 'All users' : row.receiverChatId || '-'))}</td>
+            <td>${esc(row.receiverLabel || (row.receiverType === 'digest' ? '24h job digest' : row.receiverType === 'all' ? 'All users' : row.receiverChatId || '-'))}</td>
             <td><span class="status-pill">${esc(row.status)}</span>${row.error ? `<div class="muted">${esc(row.error)}</div>` : ''}</td>
             <td>${row.createdAt ? esc(new Date(row.createdAt).toLocaleString()) : '-'}</td>
           </tr>
@@ -240,10 +250,11 @@
 
       async function sendNotification() {
         const sendStatus = document.getElementById('sendStatus');
-        const message = String(document.getElementById('messageInput').value || '').trim();
-        if (!message) throw new Error('Message is required');
         const m = mode();
-        const payload = { mode: m, text: message };
+        const message = String(document.getElementById('messageInput').value || '').trim();
+        if (m !== 'digest' && !message) throw new Error('Message is required');
+        const payload = { mode: m };
+        if (m !== 'digest') payload.text = message;
         if (m === 'single') {
           if (!selectedUser?.telegramChatId) throw new Error('Select a user first');
           payload.receiverChatId = selectedUser.telegramChatId;

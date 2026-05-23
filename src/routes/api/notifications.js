@@ -5,6 +5,7 @@ import { adminMiniAppAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
 import { adminNotificationRunControl, runtimeBot } from '../../bot/state.js';
 import { userCanReceiveMarketingNotifications } from '../../services/userService.js';
+import { buildJobDigestNotificationsForUsers } from '../../services/jobDigestNotificationService.js';
 
 function normalizeNotificationText(value) {
   const raw = value == null ? '' : String(value);
@@ -53,13 +54,17 @@ function serializeAdminNotification(row) {
     receiverType,
     receiverChatId: plain.ReceiverChatId == null ? null : String(plain.ReceiverChatId),
     receiverLabel:
-      receiverType === 'all'
+      receiverType === 'digest'
         ? plain.ReceiverChatId == null
-          ? 'All users'
-          : `All users (${String(plain.ReceiverChatId)})`
-        : plain.ReceiverChatId == null
-          ? 'Unknown'
-          : String(plain.ReceiverChatId),
+          ? '24h job digest'
+          : `24h digest (${String(plain.ReceiverChatId)})`
+        : receiverType === 'all'
+          ? plain.ReceiverChatId == null
+            ? 'All users'
+            : `All users (${String(plain.ReceiverChatId)})`
+          : plain.ReceiverChatId == null
+            ? 'Unknown'
+            : String(plain.ReceiverChatId),
     status: String(plain.Status || ''),
     error: plain.Error || null,
     sentAt: plain.SentAt || null,
@@ -74,6 +79,18 @@ async function findCurrentAdminNotificationRun() {
     where: { Status: { [Sequelize.Op.in]: ['running', 'stopping'] } },
     order: [['StartedAt', 'DESC'], ['CreatedAt', 'DESC']],
   });
+}
+
+function telegramSendOptionsFromRow(row) {
+  const raw = String(row?.ReplyMarkupJson || '').trim();
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.reply_markup) return { reply_markup: parsed.reply_markup };
+  } catch {
+    // ignore invalid markup
+  }
+  return {};
 }
 
 async function processAdminNotificationRun(runId) {
@@ -98,7 +115,11 @@ async function processAdminNotificationRun(runId) {
       let isSent = false;
       let errorText = null;
       try {
-        await runtimeBot.telegram.sendMessage(receiverChatId, String(row.Text || ''));
+        await runtimeBot.telegram.sendMessage(
+          receiverChatId,
+          String(row.Text || ''),
+          telegramSendOptionsFromRow(row)
+        );
         isSent = true;
       } catch (err) {
         errorText = String(err?.response?.description || err?.message || err || 'Failed to send').slice(0, 500);
@@ -164,8 +185,8 @@ export function createNotificationsRouter() {
       const mode = String(req.body.mode || '').trim().toLowerCase();
       const text = normalizeNotificationText(req.body.text);
       const initiatorChatId = Number(req.miniAppUser?.id || 0);
-      if (!text) return res.status(400).json({ error: 'Text is required' });
       if (!runtimeBot.telegram) return res.status(503).json({ error: 'Telegram bot is unavailable' });
+      if (mode !== 'digest' && !text) return res.status(400).json({ error: 'Text is required' });
 
       if (mode === 'single') {
         const receiverChatId = toChatId(req.body.receiverChatId);
@@ -200,8 +221,8 @@ export function createNotificationsRouter() {
         return res.json({ ok: true, notification: serializeAdminNotification(reloaded) });
       }
 
-      if (mode !== 'all') {
-        return res.status(400).json({ error: 'mode must be "single" or "all"' });
+      if (mode !== 'all' && mode !== 'digest') {
+        return res.status(400).json({ error: 'mode must be "single", "all", or "digest"' });
       }
 
       const currentRun = await findCurrentAdminNotificationRun();
@@ -215,11 +236,10 @@ export function createNotificationsRouter() {
           IsBlocked: false,
           PushNotificationsEnabled: true,
         },
-        attributes: ['TelegramChatId'],
         order: [['DateJoined', 'DESC'], ['Id', 'DESC']],
       });
       const seen = new Set();
-      const recipients = [];
+      const eligibleUsers = [];
       for (const user of users) {
         if (!userCanReceiveMarketingNotifications(user)) continue;
         const chatId = toChatId(user.TelegramChatId);
@@ -227,10 +247,28 @@ export function createNotificationsRouter() {
         if (chatId < 0) continue;
         if (seen.has(chatId)) continue;
         seen.add(chatId);
-        recipients.push(chatId);
+        eligibleUsers.push(user);
       }
-      if (recipients.length === 0) {
+      if (eligibleUsers.length === 0) {
         return res.status(400).json({ error: 'No eligible recipients found' });
+      }
+
+      let notificationRows;
+      let runSummaryText = text;
+      if (mode === 'digest') {
+        const digests = await buildJobDigestNotificationsForUsers(eligibleUsers);
+        notificationRows = digests.map(({ user, text: digestText, replyMarkupJson }) => ({
+          chatId: toChatId(user.TelegramChatId),
+          text: digestText,
+          replyMarkupJson,
+        }));
+        runSummaryText = 'Remote jobs digest (24h)';
+      } else {
+        notificationRows = eligibleUsers.map((user) => ({
+          chatId: toChatId(user.TelegramChatId),
+          text,
+          replyMarkupJson: null,
+        }));
       }
 
       const runId = randomUUID();
@@ -238,8 +276,8 @@ export function createNotificationsRouter() {
       const run = await models.AdminNotificationRuns.create({
         Id: runId,
         InitiatorChatId: initiatorChatId,
-        Text: text,
-        Total: recipients.length,
+        Text: runSummaryText,
+        Total: notificationRows.length,
         Processed: 0,
         Sent: 0,
         Failed: 0,
@@ -249,13 +287,14 @@ export function createNotificationsRouter() {
         UpdatedAt: now,
       });
       await models.AdminNotifications.bulkCreate(
-        recipients.map((chatId) => ({
+        notificationRows.map((row) => ({
           Id: randomUUID(),
           RunId: runId,
           InitiatorChatId: initiatorChatId,
-          Text: text,
-          ReceiverType: 'all',
-          ReceiverChatId: chatId,
+          Text: row.text,
+          ReplyMarkupJson: row.replyMarkupJson,
+          ReceiverType: mode === 'digest' ? 'digest' : 'all',
+          ReceiverChatId: row.chatId,
           Status: 'queued',
           CreatedAt: now,
           UpdatedAt: now,

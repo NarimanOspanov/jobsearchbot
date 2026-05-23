@@ -21,6 +21,10 @@ export default function defineAdminNotification(sequelize) {
         type: DataTypes.TEXT,
         allowNull: false,
       },
+      ReplyMarkupJson: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       ReceiverType: {
         type: DataTypes.STRING(10),
         allowNull: false,
