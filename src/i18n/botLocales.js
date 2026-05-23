@@ -94,11 +94,21 @@ export const BOT_LOCALES = {
       'Страница откликов требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).',
 
     cvscore_private_only: 'Эта команда доступна только в личном чате с ботом.',
-    cvscore_intro:
-      '📄 *Работа с резюме*\n\nЧем могу помочь?\n\n🌟 *Просто улучшить резюме* — посмотрю глазами HR и исправлю так, чтобы твоё резюме не отсеяла автоматическая система до того, как его увидит живой человек.\n\n💼 *Под конкретную вакансию* — адаптирую резюме под требования вакансии и верну готовый PDF.\n\nЧто выбираешь? 👇',
+    cvscore_intro: [
+      'Привет! Загрузите резюме, и я помогу вам одним из двух способов:',
+      '',
+      '*Экспертная проверка резюме*',
+      'Разберу ваше резюме как опытный рекрутер — оценю содержание, структуру и подачу — и верну упрощённую ATS-совместимую версию, которая пройдёт автоматический отбор.',
+      '',
+      '*Адаптация под вакансию*',
+      'Вставьте описание вакансии, и я переработаю резюме под её требования — чтобы максимально увеличить шанс пройти ATS и попасть на стол к живому рекрутеру.',
+      '',
+      'Что выбираете? 👇',
+    ].join('\n'),
     cvscore_prompt:
-      'Скинь резюме файлом — PDF или TXT.\nПосмотрю, что можно улучшить, и верну тебе исправленную версию.',
-    cvscore_tailor_prompt: 'Окей, сначала загрузи резюме — файлом PDF или TXT.',
+      'Загрузите резюме файлом — PDF или TXT.\nЯ разберу его как опытный рекрутер и верну ATS-совместимую версию.',
+    cvscore_tailor_prompt:
+      'Сначала загрузите резюме файлом — PDF или TXT. Затем вы сможете вставить описание вакансии.',
     btn_try_hireagent: 'Отправить резюме и попробовать',
 
     hireagent_sim_disabled:
@@ -113,10 +123,15 @@ export const BOT_LOCALES = {
       'Для CV score сейчас поддерживаются PDF/TXT файлы. Пожалуйста, отправьте резюме в PDF.',
     cvscore_extract_failed:
       'Не удалось извлечь текст из резюме. Попробуйте отправить PDF с текстовым слоем.',
-    cvscore_received_choice:
-      '✅ Резюме получено! Что хотите сделать?\n\n🌟 *Просто улучшить резюме* — анализ и ATS-friendly версия.\n\n💼 *На основе требований вакансии* — CV под конкретную вакансию.',
-    btn_cv_improve_simple: '🌟 Просто улучшить резюме',
-    btn_cv_improve_job: '💼 На основе требований вакансии',
+    cvscore_received_choice: [
+      '✅ Резюме получено! Что хотите сделать?',
+      '',
+      '*Экспертная проверка резюме* — анализ и ATS-совместимая версия.',
+      '',
+      '*Адаптация под вакансию* — резюме под требования конкретной вакансии.',
+    ].join('\n'),
+    btn_cv_improve_simple: '✅ Проверить резюме',
+    btn_cv_improve_job: '🎯 Адаптировать под вакансию',
 
     position_resume_accepted:
       '✅ Ваше резюме по этой вакансии получено.\n\nРекрутер позиции рассмотрит его. Если решит двигаться дальше, свяжется с вами здесь в Telegram или по контактам, которые вы указали.\n\nПока можно посмотреть другие открытые вакансии.',
@@ -275,10 +290,21 @@ export const BOT_LOCALES = {
       'Applications page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).',
 
     cvscore_private_only: 'This command is only available in a private chat with the bot.',
-    cvscore_intro:
-      '📄 *CV Tools*\n\nI can help in two ways:\n\n🌟 *Just improve resume* — analyze as an HR expert and return an ATS-friendly version. ATS (Applicant Tracking System) are algorithms companies use to filter resumes before a human sees them.\n\n💼 *Based on job requirements* — tailor your CV to a specific job description and return a ready PDF.\n\nWhat would you like to do? 👇',
+    cvscore_intro: [
+      'Hi! Upload your resume, and I will help you in one of two ways:',
+      '',
+      '*Expert resume review*',
+      'I will review your resume like an experienced recruiter — evaluate content, structure, and presentation — and return a simplified ATS-compatible version that will pass automated screening.',
+      '',
+      '*Tailored to a job posting*',
+      'Paste the job description, and I will rework your resume to match its requirements — to maximize your chances of passing ATS and reaching a live recruiter.',
+      '',
+      'What would you like to do? 👇',
+    ].join('\n'),
     cvscore_prompt:
-      'Send your resume as a file (PDF/TXT).\nI will review it as an HR expert, give feedback, and return an improved ATS-friendly version.',
+      'Upload your resume as a file — PDF or TXT.\nI will review it like an experienced recruiter and return an ATS-compatible version.',
+    cvscore_tailor_prompt:
+      'First, upload your resume as a file — PDF or TXT. Then you can paste the job description.',
     btn_try_hireagent: 'Send resume and try',
 
     hireagent_sim_disabled:
@@ -292,10 +318,15 @@ export const BOT_LOCALES = {
     cvscore_pdf_only: 'CV score currently supports PDF/TXT files. Please send a PDF resume.',
     cvscore_extract_failed:
       'Could not extract text from the resume. Try sending a PDF with a text layer.',
-    cvscore_received_choice:
-      '✅ Resume received! What would you like to do?\n\n🌟 *Just improve resume* — analysis and ATS-friendly version.\n\n💼 *Based on job requirements* — CV tailored to a specific job.',
-    btn_cv_improve_simple: '🌟 Just improve resume',
-    btn_cv_improve_job: '💼 Based on job requirements',
+    cvscore_received_choice: [
+      '✅ Resume received! What would you like to do?',
+      '',
+      '*Expert resume review* — analysis and an ATS-compatible version.',
+      '',
+      '*Tailored to a job posting* — resume matched to a specific job description.',
+    ].join('\n'),
+    btn_cv_improve_simple: '✅ Review resume',
+    btn_cv_improve_job: '🎯 Tailor to a job',
 
     position_resume_accepted:
       '✅ We received your resume for this role.\n\nThe recruiter will review it. If they decide to move forward, they will contact you here in Telegram or using the contact details you provided.\n\nIn the meantime, feel free to browse other open positions.',
