@@ -683,11 +683,20 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const openJobSearchFromBot = async (ctx) => {
     const lang = langFromCtx(ctx);
     if (canUseSeekerJobsWebApp) {
-      await ctx.reply(tr(ctx, 'jobsearch_intro'), {
-        reply_markup: {
-          inline_keyboard: [[{ text: t(lang, 'btn_jobsearch'), web_app: { url: seekerJobsUrl } }]],
-        },
-      });
+      const replyMarkup = {
+        inline_keyboard: [[{ text: t(lang, 'btn_jobsearch'), web_app: { url: seekerJobsUrl } }]],
+      };
+      if (existsSync(startAvatarPath)) {
+        await ctx.replyWithPhoto(
+          { source: startAvatarPath },
+          {
+            caption: tr(ctx, 'jobsearch_intro'),
+            reply_markup: replyMarkup,
+          }
+        );
+        return;
+      }
+      await ctx.reply(tr(ctx, 'jobsearch_intro'), { reply_markup: replyMarkup });
       return;
     }
     await ctx.reply(tr(ctx, 'jobsearch_https_error'));

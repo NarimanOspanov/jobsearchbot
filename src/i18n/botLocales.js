@@ -83,7 +83,7 @@ export const BOT_LOCALES = {
     subscribe_access: 'Доступ к вакансиям открыт.',
 
     jobsearch_intro:
-      'Ищите удаленные вакансии, отмечайте релевантные роли и открывайте детали прямо в мини-приложении.',
+      'Вакансии с 100% удалёнкой (Global Remote) — тщательно отобранные с LinkedIn, Indeed и Telegram. Вакансии из разных сфер: IT и не-IT.',
     btn_jobsearch: 'Открыть поиск вакансий',
     jobsearch_https_error:
       'Страница поиска вакансий требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).',
@@ -281,7 +281,7 @@ export const BOT_LOCALES = {
     subscribe_access: 'Access to jobs is unlocked.',
 
     jobsearch_intro:
-      'Search remote jobs, mark relevant roles, and open details right in the mini app.',
+      '100% remote jobs (Global Remote) — carefully selected from LinkedIn, Indeed, and Telegram. Jobs across different fields: IT and non-IT.',
     btn_jobsearch: 'Open job search',
     jobsearch_https_error:
       'Job search page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).',
