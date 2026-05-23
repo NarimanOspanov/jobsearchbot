@@ -145,6 +145,10 @@
       apiFail:        'No result found. Send your CV to the bot first.',
       noFixes:        'No specific recommendations — your resume looks solid on the main criteria.',
       noStrengths:    'No standout strengths highlighted yet.',
+      categories: {
+        'ATS & Keywords': 'ATS & Keywords',
+        'Structure & Clarity': 'Structure & Clarity',
+      },
     },
     ru: {
       loading:        'Загружаем отчёт…',
@@ -159,6 +163,10 @@
       apiFail:        'Результат не найден. Отправьте резюме боту.',
       noFixes:        'Отдельных рекомендаций нет — по основным критериям резюме выглядит уверенно.',
       noStrengths:    'Явные сильные стороны пока не выделены.',
+      categories: {
+        'ATS & Keywords': 'ATS и ключевые слова',
+        'Structure & Clarity': 'Структура и ясность',
+      },
     },
     de: {
       loading:        'Bericht wird geladen…',
@@ -171,6 +179,10 @@
       noUser:         'Benutzer nicht erkannt.<br>Öffne die Seite über den Bot.',
       networkError:   'Netzwerkfehler. Bitte versuche es erneut.',
       apiFail:        'Kein Ergebnis gefunden. Sende deinen Lebenslauf an den Bot.',
+      categories: {
+        'ATS & Keywords': 'ATS & Schlüsselwörter',
+        'Structure & Clarity': 'Struktur & Klarheit',
+      },
     },
     fr: {
       loading:        'Chargement du rapport…',
@@ -183,6 +195,10 @@
       noUser:         'Utilisateur introuvable.<br>Ouvre cette page depuis le bot.',
       networkError:   'Erreur réseau. Réessaie.',
       apiFail:        'Résultat introuvable. Envoie ton CV au bot.',
+      categories: {
+        'ATS & Keywords': 'ATS et mots-clés',
+        'Structure & Clarity': 'Structure et clarté',
+      },
     },
     es: {
       loading:        'Cargando tu informe…',
@@ -195,6 +211,10 @@
       noUser:         'No se pudo identificar al usuario.<br>Abre esto desde el bot.',
       networkError:   'Error de red. Inténtalo de nuevo.',
       apiFail:        'Resultado no encontrado. Envía tu CV al bot.',
+      categories: {
+        'ATS & Keywords': 'ATS y palabras clave',
+        'Structure & Clarity': 'Estructura y claridad',
+      },
     },
     tr: {
       loading:        'Rapor yükleniyor…',
@@ -207,6 +227,10 @@
       noUser:         'Kullanıcı tanımlanamadı.<br>Botu üzerinden açın.',
       networkError:   'Ağ hatası. Tekrar deneyin.',
       apiFail:        'Sonuç bulunamadı. CV\'nizi bota gönderin.',
+      categories: {
+        'ATS & Keywords': 'ATS ve anahtar kelimeler',
+        'Structure & Clarity': 'Yapı ve netlik',
+      },
     },
     kk: {
       loading:        'Есеп жүктелуде…',
@@ -219,6 +243,10 @@
       noUser:         'Пайдаланушы анықталмады.<br>Ботты арқылы ашыңыз.',
       networkError:   'Желі қатесі. Қайталап көріңіз.',
       apiFail:        'Нәтиже табылмады. Түйіндемеңізді ботқа жіберіңіз.',
+      categories: {
+        'ATS & Keywords': 'ATS және кілт сөздер',
+        'Structure & Clarity': 'Құрылым және анықтық',
+      },
     },
     zh: {
       loading:        '正在加载报告…',
@@ -231,6 +259,10 @@
       noUser:         '无法识别用户。<br>请通过机器人打开此页面。',
       networkError:   '网络错误，请重试。',
       apiFail:        '未找到结果，请将简历发送给机器人。',
+      categories: {
+        'ATS & Keywords': 'ATS 与关键词',
+        'Structure & Clarity': '结构与清晰度',
+      },
     },
     ar: {
       loading:        'جارٍ تحميل التقرير…',
@@ -243,6 +275,10 @@
       noUser:         'تعذّر التعرف على المستخدم.<br>افتح الصفحة عبر البوت.',
       networkError:   'خطأ في الشبكة. حاول مرة أخرى.',
       apiFail:        'لم يُعثر على نتيجة. أرسل سيرتك الذاتية إلى البوت.',
+      categories: {
+        'ATS & Keywords': 'ATS والكلمات المفتاحية',
+        'Structure & Clarity': 'البنية والوضوح',
+      },
     },
   };
 
@@ -267,6 +303,10 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+  function translateCategoryName(name) {
+    const map = T.categories || I18N.en.categories;
+    return map[name] || name;
   }
   function scoreColor(s) { if (s >= 75) return 'var(--accent3)'; if (s >= 50) return '#ffd166'; return 'var(--accent2)'; }
   function barColor(s) { if (s >= 75) return 'linear-gradient(90deg, #43e97b, #38f9d7)'; if (s >= 50) return 'linear-gradient(90deg, #f7971e, #ffd200)'; return 'linear-gradient(90deg, #ff6584, #ff8e53)'; }
@@ -295,15 +335,16 @@
       const max = Number(cat.max || 100) || 100;
       const val = Number(cat.score || 0);
       const pct = Math.max(0, Math.min(100, Math.round((val / max) * 100)));
+      const catLabel = translateCategoryName(cat.name || 'Category');
       const el = document.createElement('div');
       el.className = 'category-item';
       el.innerHTML = `
         <div class="cat-header">
-          <span>${cat.name || 'Category'}</span>
+          <span>${escapeHtml(catLabel)}</span>
           <span class="cat-score" style="color:${scoreColor(pct)}">${val}<span style="color:var(--muted);font-size:11px">/${max}</span></span>
         </div>
         <div class="bar-track"><div class="bar-fill" id="bar-${i}" style="background:${barColor(pct)}"></div></div>
-        <div class="cat-feedback">${cat.feedback || ''}</div>
+        <div class="cat-feedback">${escapeHtml(cat.feedback || '')}</div>
       `;
       catContainer.appendChild(el);
       setTimeout(() => { const b = document.getElementById(`bar-${i}`); if (b) b.style.width = `${pct}%`; }, 160 + i * 60);
