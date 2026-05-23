@@ -6,13 +6,35 @@ import { canUseAiToolsForUser, buildMonetizationStatus } from '../../services/pl
 import { ensureUserByTelegramId } from '../../services/userService.js';
 import { cvScoreResultByUserId } from '../../bot/state.js';
 import { config } from '../../config.js';
+import { extractMiniAppInitData, verifyInitData } from '../../utils/telegramUtils.js';
+import { getRequiredChannelsState, serializeRequiredChannels } from '../../services/channelService.js';
 
 export function createResumeRouter() {
   const router = Router();
 
-  router.get('/api/cvscore-result', (req, res) => {
+  router.get('/api/cvscore-result', async (req, res) => {
     const uidRaw = String(req.query.uid || '').trim();
     if (!uidRaw) return res.status(400).json({ error: 'Missing uid' });
+
+    const initData = extractMiniAppInitData(req);
+    if (initData) {
+      const miniAppUser = verifyInitData(initData);
+      if (!miniAppUser?.id) return res.status(403).json({ error: 'Forbidden' });
+      if (String(miniAppUser.id) !== uidRaw) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      const channelsState = await getRequiredChannelsState(miniAppUser.id);
+      if (channelsState.reason === 'unavailable') {
+        return res.status(503).json({ error: 'Subscription check is temporarily unavailable' });
+      }
+      if (!channelsState.ok) {
+        return res.status(403).json({
+          error: 'subscribe_required',
+          channels: serializeRequiredChannels(channelsState.channels),
+        });
+      }
+    }
+
     const result = cvScoreResultByUserId.get(uidRaw);
     if (!result) return res.status(404).json({ error: 'No result found. Please send your CV first.' });
     return res.json(result);

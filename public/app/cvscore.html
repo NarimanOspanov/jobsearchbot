@@ -81,6 +81,24 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   #error-state { display: none; padding: 40px 20px; text-align: center; color: var(--muted); }
   #report { display: none; }
+  .subscribe-backdrop {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.75); align-items: center; justify-content: center; padding: 16px;
+  }
+  .subscribe-backdrop.on { display: flex; }
+  .subscribe-card {
+    width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; text-align: center;
+  }
+  .subscribe-card h3 { font-family: 'Syne', sans-serif; font-size: 18px; margin: 12px 0 8px; }
+  .subscribe-card p { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+  .subscribe-card button {
+    width: 100%; margin-top: 8px; padding: 12px; border-radius: 10px; border: none;
+    background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .subscribe-card button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .subscribe-card button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #subscribeGateMsg { margin-top: 10px; font-size: 13px; min-height: 1.2em; }
 </style>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
@@ -125,6 +143,16 @@
     <div id="categories-container"></div>
   </div>
 </div>
+<div id="subscribeRequiredModal" class="subscribe-backdrop" role="dialog" aria-modal="true">
+  <div class="subscribe-card">
+    <div style="font-size:28px">✈</div>
+    <h3 id="txt-subscribe-title">Subscribe to the channel</h3>
+    <p id="txt-subscribe-body">Subscribe to our Telegram channel to view your CV report.</p>
+    <button id="openRequiredChannelBtn" type="button">Open channel</button>
+    <button id="verifySubscriptionBtn" type="button" class="ghost">I subscribed — verify</button>
+    <p id="subscribeGateMsg" class="muted"></p>
+  </div>
+</div>
 <script>
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor('#0a0a0f'); tg.setBackgroundColor('#0a0a0f'); }
@@ -145,6 +173,13 @@
       apiFail:        'No result found. Send your CV to the bot first.',
       noFixes:        'No specific recommendations — your resume looks solid on the main criteria.',
       noStrengths:    'No standout strengths highlighted yet.',
+      subscribeTitle: 'Subscribe to the channel',
+      subscribeBody:  'Subscribe to our Telegram channel to view your CV report.',
+      openChannel:    'Open channel',
+      verifySubscribe:'I subscribed — verify',
+      subscribeStill: 'Subscription not confirmed yet. Subscribe and try again.',
+      channelMissing: 'Channel link is not configured.',
+      verifyFail:     'Could not verify subscription.',
       categories: {
         'ATS & Keywords': 'ATS & Keywords',
         'Structure & Clarity': 'Structure & Clarity',
@@ -163,6 +198,13 @@
       apiFail:        'Результат не найден. Отправьте резюме боту.',
       noFixes:        'Отдельных рекомендаций нет — по основным критериям резюме выглядит уверенно.',
       noStrengths:    'Явные сильные стороны пока не выделены.',
+      subscribeTitle: 'Подпишитесь на канал',
+      subscribeBody:  'Чтобы открыть отчёт по резюме, подпишитесь на наш Telegram-канал.',
+      openChannel:    'Открыть канал',
+      verifySubscribe:'Я подписался — проверить',
+      subscribeStill: 'Подписка не подтверждена. Подпишитесь и нажмите проверку снова.',
+      channelMissing: 'Ссылка на канал не настроена.',
+      verifyFail:     'Не удалось проверить подписку.',
       categories: {
         'ATS & Keywords': 'ATS и ключевые слова',
         'Structure & Clarity': 'Структура и ясность',
@@ -296,6 +338,19 @@
   document.getElementById('txt-strengths-title').textContent = T.strengthsTitle;
   document.getElementById('txt-fixes-title').textContent   = T.fixesTitle;
   document.getElementById('error-msg').innerHTML           = T.noResult;
+  const SUB = {
+    subscribeTitle: T.subscribeTitle || I18N.en.subscribeTitle,
+    subscribeBody: T.subscribeBody || I18N.en.subscribeBody,
+    openChannel: T.openChannel || I18N.en.openChannel,
+    verifySubscribe: T.verifySubscribe || I18N.en.verifySubscribe,
+    subscribeStill: T.subscribeStill || I18N.en.subscribeStill,
+    channelMissing: T.channelMissing || I18N.en.channelMissing,
+    verifyFail: T.verifyFail || I18N.en.verifyFail,
+  };
+  document.getElementById('txt-subscribe-title').textContent = SUB.subscribeTitle;
+  document.getElementById('txt-subscribe-body').textContent = SUB.subscribeBody;
+  document.getElementById('openRequiredChannelBtn').textContent = SUB.openChannel;
+  document.getElementById('verifySubscriptionBtn').textContent = SUB.verifySubscribe;
 
   function escapeHtml(str) {
     return String(str ?? '')
@@ -360,21 +415,131 @@
       ? strengthItems.map((s) => `<div class="list-item"><span>${escapeHtml(s)}</span></div>`).join('')
       : `<div class="list-item"><span style="color:var(--muted)">${escapeHtml(T.noStrengths || I18N.en.noStrengths)}</span></div>`;
   }
+  function getTgInitDataString() {
+    return String(tg?.initData || window.Telegram?.WebView?.initParams?.tgWebAppData || '').trim();
+  }
+
+  function attachMiniAppAuthHeaders(headers) {
+    const data = getTgInitDataString();
+    if (data) {
+      headers['x-init-data'] = data;
+      headers.Authorization = `tma ${data}`;
+    }
+  }
+
+  function setSubscribeMsg(text, isError) {
+    const el = document.getElementById('subscribeGateMsg');
+    el.textContent = text || '';
+    el.style.color = isError ? 'var(--accent2)' : 'var(--muted)';
+  }
+
+  function openSubscribeRequiredModal(payload) {
+    const channels = Array.isArray(payload?.channels) ? payload.channels : [];
+    const openBtn = document.getElementById('openRequiredChannelBtn');
+    const firstUrl = String(channels[0]?.joinUrl || '').trim();
+    openBtn.dataset.url = firstUrl;
+    openBtn.disabled = !firstUrl;
+    setSubscribeMsg(firstUrl ? '' : SUB.channelMissing, !firstUrl);
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('subscribeRequiredModal').classList.add('on');
+  }
+
+  function closeSubscribeRequiredModal() {
+    document.getElementById('subscribeRequiredModal').classList.remove('on');
+    setSubscribeMsg('');
+  }
+
+  function openTelegramLink(url) {
+    if (!url) return false;
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(url);
+      return true;
+    }
+    window.open(url, '_blank');
+    return true;
+  }
+
+  async function verifyRequiredChannels() {
+    const headers = { 'Content-Type': 'application/json' };
+    attachMiniAppAuthHeaders(headers);
+    const res = await fetch('/api/app/required-channels/verify', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({}),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload?.error || SUB.verifyFail);
+    if (payload?.ok) return true;
+    openSubscribeRequiredModal(payload);
+    return false;
+  }
+
   async function loadReport() {
     if (!uid) return showError(T.noUser);
     try {
-      const res = await fetch(`/api/cvscore-result?uid=${uid}`);
+      const headers = {};
+      attachMiniAppAuthHeaders(headers);
+      const res = await fetch(`/api/cvscore-result?uid=${encodeURIComponent(uid)}`, { headers });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        if (res.status === 403 && data?.error === 'subscribe_required') {
+          openSubscribeRequiredModal(data);
+          return;
+        }
         return showError(data.error || T.apiFail);
       }
       const data = await res.json();
+      closeSubscribeRequiredModal();
       renderReport(data);
     } catch {
       showError(T.networkError);
     }
   }
-  loadReport();
+
+  async function boot() {
+    if (!uid) {
+      showError(T.noUser);
+      return;
+    }
+    if (!getTgInitDataString()) {
+      await loadReport();
+      return;
+    }
+    try {
+      const ok = await verifyRequiredChannels();
+      if (!ok) return;
+      await loadReport();
+    } catch (err) {
+      showError(err?.message || T.networkError);
+    }
+  }
+
+  document.getElementById('openRequiredChannelBtn').addEventListener('click', () => {
+    const url = String(document.getElementById('openRequiredChannelBtn').dataset.url || '').trim();
+    if (!url) {
+      setSubscribeMsg(SUB.channelMissing, true);
+      return;
+    }
+    openTelegramLink(url);
+  });
+
+  document.getElementById('verifySubscriptionBtn').addEventListener('click', async () => {
+    setSubscribeMsg('');
+    try {
+      const ok = await verifyRequiredChannels();
+      if (!ok) {
+        setSubscribeMsg(SUB.subscribeStill, true);
+        return;
+      }
+      closeSubscribeRequiredModal();
+      document.getElementById('loading').style.display = 'flex';
+      await loadReport();
+    } catch (err) {
+      setSubscribeMsg(err?.message || SUB.verifyFail, true);
+    }
+  });
+
+  boot();
 </script>
 </body>
 </html>

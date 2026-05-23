@@ -845,6 +845,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       await ctx.reply(tr(ctx, 'cvscore_private_only'));
       return;
     }
+    const canProceed = await enforceStartRequiredChannelsGate(ctx);
+    if (!canProceed) return;
     const lang = langFromCtx(ctx);
     await ctx.replyWithPhoto(
       { source: new URL('../here_cv.png', import.meta.url).pathname },
@@ -863,6 +865,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.action('cvscore_improve', async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
+    const canProceed = await enforceStartRequiredChannelsGate(ctx);
+    if (!canProceed) return;
     const chatId = ctx.callbackQuery?.message?.chat?.id;
     if (!chatId) return;
     hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_roast' });
@@ -871,6 +875,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.action('cvscore_tailor', async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
+    const canProceed = await enforceStartRequiredChannelsGate(ctx);
+    if (!canProceed) return;
     const chatId = ctx.callbackQuery?.message?.chat?.id;
     if (!chatId) return;
     hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_tailor' });
@@ -960,6 +966,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const isCvRoastFlow = st?.step === 'awaiting_cv_roast';
     const isCvTailorFlow = st?.step === 'awaiting_cv_tailor';
     if (!isHireAgentCvFlow && !isPositionCvFlow && !isCvRoastFlow && !isCvTailorFlow) return next();
+    if (isCvRoastFlow || isCvTailorFlow) {
+      const canProceed = await enforceStartRequiredChannelsGate(ctx);
+      if (!canProceed) return;
+    }
     const resumeSource = pickResumeSourceFromMessage(ctx.message);
     if (!resumeSource) {
       await ctx.reply(tr(ctx, 'resume_unrecognized'));
