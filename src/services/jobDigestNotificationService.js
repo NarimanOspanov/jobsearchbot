@@ -10,12 +10,12 @@ import {
 
 const COPY = {
   en: {
-    title: 'Remote jobs for 24 hours',
+    title: 'For last day:',
     positions: (n) => `${n} positions`,
     openAll: 'Open all',
   },
   ru: {
-    title: 'Вакансии с удалёнкой за 24 часа',
+    title: 'За последний день:',
     positions: (n) => `${n} вакансий`,
     openAll: 'Открыть все',
   },
