@@ -294,7 +294,9 @@
       hintBtn.setAttribute('aria-label', sj(L, 'highlyRelevantHintTitle'));
     }
 
-    if (document.getElementById('advancedSearchBtn')) {
+    if (document.getElementById('advancedSearchBtnLabel')) {
+      setText('advancedSearchBtnLabel', 'showAllJobs');
+    } else if (document.getElementById('advancedSearchBtn')) {
       setText('advancedSearchBtn', 'showAllJobs');
     } else {
       setText('syncBtn', 'searchBtn');

@@ -15,7 +15,13 @@
         --border: #273357;
       }
       * { box-sizing: border-box; }
-      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+      }
       .wrap { width: 100%; max-width: 100%; margin: 0 auto; padding: 14px; display: grid; gap: 12px; box-sizing: border-box; }
       .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
       h1, h2, h3 { margin: 0 0 10px; }
@@ -123,28 +129,49 @@
       .date-range-row { margin-top: 8px; }
       .pager { display: inline-flex; align-items: center; gap: 8px; }
       .ghost-btn { background: #0f1730; border: 1px solid var(--border); }
-      .advanced-search-sticky {
+      .advanced-search-footer {
         position: fixed;
-        top: calc(env(safe-area-inset-top, 0px) + 8px);
-        left: 50%;
-        transform: translateX(-50%);
+        left: 0;
+        right: 0;
+        bottom: 0;
         z-index: 1200;
-        opacity: 0;
+        padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+        background: linear-gradient(180deg, rgba(13, 18, 34, 0) 0%, rgba(13, 18, 34, 0.92) 28%, var(--bg) 100%);
         pointer-events: none;
-        transition: opacity 0.22s ease;
       }
       #advancedSearchBtn {
-        background: rgba(15, 23, 48, 0.92);
-        border: 1px solid rgba(39, 51, 87, 0.95);
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        max-width: 560px;
+        margin: 0 auto;
+        padding: 14px 18px;
+        border-radius: 14px;
+        background: #10182d;
+        border: 1px solid var(--border);
         color: var(--text);
-        font-size: 12px;
-        font-weight: 600;
-        padding: 6px 10px;
-        border-radius: 999px;
-        backdrop-filter: blur(4px);
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1.2;
       }
       #advancedSearchBtn:hover {
         border-color: var(--accent);
+        background: #121c36;
+      }
+      #advancedSearchBtn:active {
+        transform: scale(0.99);
+      }
+      .advanced-search-btn-icon {
+        display: inline-flex;
+        flex-shrink: 0;
+      }
+      .advanced-search-btn-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: currentColor;
       }
       .secondary-cta-box {
         margin-top: 12px;
@@ -563,8 +590,13 @@
   <!-- /Yandex.Metrika counter -->
   </head>
   <body>
-    <div class="advanced-search-sticky">
-      <button id="advancedSearchBtn" type="button">Показать все вакансии</button>
+    <div class="advanced-search-footer">
+      <button id="advancedSearchBtn" type="button">
+        <span class="advanced-search-btn-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 2h4a2 2 0 0 1 2 2v2h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4V4a2 2 0 0 1 2-2zm4 4V4h-4v2h4z"/></svg>
+        </span>
+        <span id="advancedSearchBtnLabel">Показать все вакансии</span>
+      </button>
     </div>
     <div class="wrap">
       <p id="globalMsg" class="muted"></p>
@@ -757,7 +789,6 @@
       SeekerJobsI18n.applyStaticUi(uiLang);
       const devTelegramId = String(urlParams.get('devTelegramId') || '').trim();
       const initialLocationSearch = String(window.location.search || '');
-      const advancedSearchStickyEl = document.querySelector('.advanced-search-sticky');
 
       /**
        * Signed init payload for miniAppAuth.
@@ -1226,13 +1257,6 @@
           if (el) el.disabled = on || lockedFilters.has(id);
         });
         updateHighlyRelevantFilterState();
-      }
-      function updateAdvancedSearchStickyVisibility() {
-        if (!advancedSearchStickyEl) return;
-        const y = Math.max(0, window.scrollY || window.pageYOffset || 0);
-        const alpha = Math.min(1, y / 80);
-        advancedSearchStickyEl.style.opacity = String(alpha);
-        advancedSearchStickyEl.style.pointerEvents = alpha <= 0.02 ? 'none' : 'auto';
       }
       function updateSourceFilterVisibility() {
         const row = document.getElementById('sourceFilterRow');
@@ -2245,8 +2269,6 @@
           setMsg('dashMsg', err?.message || sj('errBotUsername'), true);
         }
       });
-      window.addEventListener('scroll', updateAdvancedSearchStickyVisibility, { passive: true });
-      updateAdvancedSearchStickyVisibility();
       document.getElementById('uploadResumeBtn').addEventListener('click', () => {
         uploadMainResumeFromUi()
           .then((ok) => {
