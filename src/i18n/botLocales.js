@@ -95,20 +95,20 @@ export const BOT_LOCALES = {
 
     cvscore_private_only: 'Эта команда доступна только в личном чате с ботом.',
     cvscore_intro: [
-      'Привет! Загрузите резюме, и я помогу вам одним из двух способов:',
+      'Привет! Я могу вам помочь одним из двух способов:',
       '',
-      '*Экспертная проверка резюме*',
-      'Разберу ваше резюме как опытный рекрутер — оценю содержание, структуру и подачу — и верну упрощённую ATS-совместимую версию, которая пройдёт автоматический отбор.',
+      'Экспертная проверка резюме',
+      'Разберу ваше резюме как опытный рекрутер — оценю содержание, структуру и подачу — и верну вам упрощённую ATS-совместимую версию, которая пройдёт автоматический отбор.',
       '',
-      '*Адаптация под вакансию*',
-      'Вставьте описание вакансии, и я переработаю резюме под её требования — чтобы максимально увеличить шанс пройти ATS и попасть на стол к живому рекрутеру.',
+      'Адаптация под вакансию',
+      'Пришлите описание вакансии — я переработаю ваше резюме под её требования, чтобы максимально увеличить шанс пройти ATS и попасть на стол к живому рекрутеру.',
       '',
       'Что выбираете? 👇',
     ].join('\n'),
     cvscore_prompt:
-      'Загрузите резюме файлом — PDF или TXT.\nЯ разберу его как опытный рекрутер и верну ATS-совместимую версию.',
+      'Загрузите резюме файлом — PDF или TXT.\nЯ внимательно изучу его и верну вам ATS-совместимую версию.',
     cvscore_tailor_prompt:
-      'Сначала загрузите резюме файлом — PDF или TXT. Затем вы сможете вставить описание вакансии.',
+      'Сначала загрузите резюме файлом — PDF или TXT. Затем пришлите описание вакансии — я адаптирую резюме под её требования.',
     btn_try_hireagent: 'Отправить резюме и попробовать',
 
     hireagent_sim_disabled:
@@ -117,18 +117,19 @@ export const BOT_LOCALES = {
     hireagent_decline_later:
       'Хорошо. Когда будете готовы — снова выберите «Делегировать отклики» в меню.',
 
-    resume_unrecognized: 'Не удалось распознать файл резюме. Отправьте PDF или изображение еще раз.',
-    resume_uploading: 'Получил, смотрю…',
+    resume_unrecognized:
+      'Не удалось распознать файл. Пожалуйста, отправьте резюме в формате PDF или изображением ещё раз.',
+    resume_uploading: 'Получила ваше резюме, изучаю…',
     cvscore_pdf_only:
-      'Для CV score сейчас поддерживаются PDF/TXT файлы. Пожалуйста, отправьте резюме в PDF.',
+      'Сейчас принимаю файлы PDF и TXT. Пожалуйста, отправьте резюме в формате PDF.',
     cvscore_extract_failed:
-      'Не удалось извлечь текст из резюме. Попробуйте отправить PDF с текстовым слоем.',
+      'Не удалось извлечь текст из резюме. Пожалуйста, попробуйте отправить PDF с текстовым слоем.',
     cvscore_received_choice: [
-      '✅ Резюме получено! Что хотите сделать?',
+      '✅ Резюме получено! Что вы хотите сделать?',
       '',
-      '*Экспертная проверка резюме* — анализ и ATS-совместимая версия.',
+      'Экспертная проверка резюме — разбор и ATS-совместимая версия.',
       '',
-      '*Адаптация под вакансию* — резюме под требования конкретной вакансии.',
+      'Адаптация под вакансию — резюме под требования выбранной вакансии.',
     ].join('\n'),
     btn_cv_improve_simple: '✅ Проверить резюме',
     btn_cv_improve_job: '🎯 Адаптировать под вакансию',
@@ -142,7 +143,7 @@ export const BOT_LOCALES = {
     hireagent_resume_submitted:
       'Резюме принято. Мы передали его на проверку — свяжемся с вами с обратной связью.',
     cvscore_process_failed:
-      'Не удалось обработать резюме для CV score. Попробуйте еще раз через минуту.',
+      'Не удалось обработать резюме. Пожалуйста, попробуйте ещё раз через минуту.',
     resume_save_failed:
       'Не удалось сохранить резюме. Проверьте настройки Azure Storage (AZURE_STORAGE_CONNECTION_STRING) и попробуйте снова.',
 
@@ -170,19 +171,20 @@ export const BOT_LOCALES = {
       'Оплата получена, но автозачисление не завершилось. Напишите в поддержку.',
 
     awaiting_cv_text: 'Пожалуйста, отправьте резюме файлом (PDF или изображение), а не текстом.',
-    cv_analyzing: 'Читаю резюме, сейчас всё разберу…',
-    cv_analyze_failed: 'Не удалось проанализировать резюме. Попробуйте ещё раз.',
-    cv_report_open: 'Открыть полный отчет CV Score:',
-    btn_cv_report: '📊 Открыть полный отчет',
-    cv_enhanced_ready: 'Готово! Вот ваша улучшенная ATS-friendly версия резюме:',
+    cv_analyzing: 'Изучаю ваше резюме — скоро подготовлю разбор…',
+    cv_analyze_failed: 'Не удалось проанализировать резюме. Пожалуйста, попробуйте ещё раз.',
+    cv_report_open: 'Готов полный отчёт по проверке вашего резюме:',
+    btn_cv_report: '📊 Открыть полный отчёт',
+    cv_enhanced_ready: 'Готово! Вот улучшенная ATS-совместимая версия вашего резюме:',
     btn_cv_download: '⬇ Скачать улучшенное резюме',
-    cv_enhance_failed: 'Не удалось сгенерировать улучшенное резюме. Попробуйте ещё раз.',
-    awaiting_job_desc: 'Окей, теперь отправь описание вакансии.',
+    cv_enhance_failed: 'Не удалось подготовить улучшенную версию. Пожалуйста, попробуйте ещё раз.',
+    awaiting_job_desc:
+      'Теперь пришлите описание вакансии — я адаптирую ваше резюме под её требования.',
     job_desc_too_short: 'Текст слишком короткий. Пожалуйста, вставьте полное описание вакансии.',
-    tailoring_cv: '⏳ Адаптирую резюме под вакансию…',
-    tailored_ready: '✅ Готово! Вот ваше адаптированное резюме:',
+    tailoring_cv: '⏳ Адаптирую ваше резюме под вакансию…',
+    tailored_ready: '✅ Готово! Вот адаптированная версия вашего резюме:',
     btn_tailored_download: '⬇ Скачать резюме',
-    tailored_failed: 'Не удалось сгенерировать резюме. Попробуйте ещё раз.',
+    tailored_failed: 'Не удалось подготовить резюме. Пожалуйста, попробуйте ещё раз.',
     choose_option_above: 'Пожалуйста, выберите один из вариантов выше.',
 
     hireagent_applying_start:
@@ -291,20 +293,20 @@ export const BOT_LOCALES = {
 
     cvscore_private_only: 'This command is only available in a private chat with the bot.',
     cvscore_intro: [
-      'Hi! Upload your resume, and I will help you in one of two ways:',
+      'Hi! I can help you in one of two ways:',
       '',
-      '*Expert resume review*',
+      'Expert resume review',
       'I will review your resume like an experienced recruiter — evaluate content, structure, and presentation — and return a simplified ATS-compatible version that will pass automated screening.',
       '',
-      '*Tailored to a job posting*',
+      'Tailored to a job posting',
       'Paste the job description, and I will rework your resume to match its requirements — to maximize your chances of passing ATS and reaching a live recruiter.',
       '',
       'What would you like to do? 👇',
     ].join('\n'),
     cvscore_prompt:
-      'Upload your resume as a file — PDF or TXT.\nI will review it like an experienced recruiter and return an ATS-compatible version.',
+      'Please upload your resume as a file — PDF or TXT.\nI will review it carefully and send you an ATS-compatible version.',
     cvscore_tailor_prompt:
-      'First, upload your resume as a file — PDF or TXT. Then you can paste the job description.',
+      'First, please upload your resume as a file — PDF or TXT. Then send the job description — I will tailor your resume to match it.',
     btn_try_hireagent: 'Send resume and try',
 
     hireagent_sim_disabled:
@@ -314,7 +316,7 @@ export const BOT_LOCALES = {
       'OK. When you are ready — choose “Delegate applications” in the menu again.',
 
     resume_unrecognized: 'Could not recognize the resume file. Send a PDF or image again.',
-    resume_uploading: 'Thanks! Uploading and analyzing your resume…',
+    resume_uploading: 'Received your resume — reviewing it now…',
     cvscore_pdf_only: 'CV score currently supports PDF/TXT files. Please send a PDF resume.',
     cvscore_extract_failed:
       'Could not extract text from the resume. Try sending a PDF with a text layer.',
@@ -364,16 +366,17 @@ export const BOT_LOCALES = {
       'Payment received, but auto-credit did not complete. Contact support.',
 
     awaiting_cv_text: 'Please send your resume as a file (PDF or image), not as text.',
-    cv_analyzing: 'Running HR analysis and improving resume structure…',
-    cv_analyze_failed: 'Could not analyze resume. Please try again.',
-    cv_report_open: 'Open full CV Score report:',
+    cv_analyzing: 'Reviewing your resume — preparing feedback shortly…',
+    cv_analyze_failed: 'Could not analyze your resume. Please try again.',
+    cv_report_open: 'Your full resume review report is ready:',
     btn_cv_report: '📊 Open full report',
-    cv_enhanced_ready: 'Done! Here is your improved ATS-friendly resume:',
+    cv_enhanced_ready: 'Done! Here is your improved ATS-compatible resume:',
     btn_cv_download: '⬇ Download improved resume',
-    cv_enhance_failed: 'Could not generate improved resume. Please try again.',
-    awaiting_job_desc: '📋 Send the job text you want to tailor the resume for:',
+    cv_enhance_failed: 'Could not prepare the improved version. Please try again.',
+    awaiting_job_desc:
+      'Please send the job description — I will tailor your resume to match its requirements.',
     job_desc_too_short: 'Text is too short. Please paste the full job description.',
-    tailoring_cv: '⏳ Tailoring resume to the job…',
+    tailoring_cv: '⏳ Tailoring your resume to the job…',
     tailored_ready: '✅ Done! Here is your tailored resume:',
     btn_tailored_download: '⬇ Download resume',
     tailored_failed: 'Could not generate resume. Please try again.',
