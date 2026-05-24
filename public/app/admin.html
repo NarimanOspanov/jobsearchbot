@@ -307,6 +307,27 @@
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
 
+      function getTgInitDataString() {
+        return String(tg?.initData || window.Telegram?.WebView?.initParams?.tgWebAppData || '').trim();
+      }
+
+      function attachMiniAppAuthHeaders(headers) {
+        const data = getTgInitDataString();
+        if (data) {
+          headers['x-init-data'] = data;
+          headers.Authorization = `tma ${data}`;
+        }
+      }
+
+      async function waitForTelegramInitData(maxMs = 15000) {
+        if (getTgInitDataString()) return;
+        const start = Date.now();
+        while (Date.now() - start < maxMs) {
+          if (getTgInitDataString()) return;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+
       const API_BASE = '';
       const USERS_URL = `/api/app/admin/users`;
       const SKILLS_URL = '/api/admin/skills';
@@ -506,6 +527,7 @@
       }
       async function api(url, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        attachMiniAppAuthHeaders(headers);
         const res = await fetch(url, { ...options, headers });
         if (!res.ok) throw new Error(await res.text());
         const ct = (res.headers.get('content-type') || '').toLowerCase();
@@ -889,6 +911,10 @@
       }
 
       async function boot() {
+        await waitForTelegramInitData();
+        if (!getTgInitDataString()) {
+          throw new Error('Open this page from the bot via /admin (Telegram auth required).');
+        }
         hydrateStateToInputs();
         await Promise.all([loadUsers(), loadSkills()]);
         renderSelectedUserInfo();
