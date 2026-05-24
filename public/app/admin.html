@@ -319,7 +319,7 @@
             <div class="skills-picker">
               <button id="sourcePickerBtn" type="button" class="skills-picker-btn">All sources</button>
               <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
-            </motion>
+            </div>
           </div>
           <div id="sourceFilterRow" class="row date-range-row">
             <label>Source
@@ -364,6 +364,18 @@
             </table>
           </div>
         </section>
+      </div>
+    </div>
+    <div id="highlyRelevantHintModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card" style="width:min(520px,95vw);height:auto;max-height:85vh">
+        <div class="modal-head">
+          <strong>Top matches</strong>
+          <button id="highlyRelevantHintClose" type="button" class="ghost-btn">Close</button>
+        </div>
+        <div class="modal-body" style="padding:12px">
+          <p style="margin:0 0 12px">When <strong>Top matches</strong> is enabled, only jobs with the highest relevance to selected roles are shown.</p>
+          <p style="margin:0">When disabled, you also see other suitable jobs that may be useful but are not in the top relevance tier.</p>
+        </div>
       </div>
     </div>
     <div id="cvModal" class="modal-backdrop" role="dialog" aria-modal="true">
@@ -452,7 +464,16 @@
       let isSyncing = false;
       let isJobBusy = false;
       let isUserInfoHidden = false;
-      let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0 };
+      let isSkillPickerOpen = false;
+      let isSourcePickerOpen = false;
+      let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
+
+      const APPLY_TYPE_OPTIONS = [
+        { value: 'linkedin', label: 'LinkedIn' },
+        { value: 'indeed', label: 'Indeed' },
+        { value: 'telegram', label: 'Telegram' },
+        { value: 'external', label: 'Company sites' },
+      ];
 
       function q() {
         const p = new URLSearchParams(location.search);
@@ -460,7 +481,8 @@
           seekerId: p.get('seekerId') || '',
           from: p.get('from') || '',
           to: p.get('to') || '',
-          skillId: p.get('skillId') || '',
+          skillIds: p.get('skillIds') || p.get('skillId') || '',
+          applyTypes: p.get('applyTypes') || '',
           source: p.get('source') || '',
           showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || '',
           jobId: p.get('jobId') || '',
@@ -483,6 +505,29 @@
       function isTruthyQueryParam(value) {
         const v = String(value || '').trim().toLowerCase();
         return v === 'true' || v === '1' || v === 'yes';
+      }
+      function normalizeSourceToken(value) {
+        const v = String(value || '').trim().toLowerCase();
+        if (v === 'linkedin') return 'Linkedin';
+        if (v === 'indeed') return 'Indeed';
+        if (v === 'hirehi') return 'hirehi';
+        return '';
+      }
+      function mapLegacyApplyTypeToken(value) {
+        const v = String(value || '').trim().toLowerCase();
+        if (!v) return '';
+        if (v === 'telegram' || v === 'telegram channels') return 'telegram';
+        if (v === 'external' || v === 'company sites') return 'external';
+        if (v === 'linkedin') return 'linkedin';
+        if (v === 'indeed') return 'indeed';
+        return '';
+      }
+      function localIsoDate(d) {
+        if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
       }
       function esc(v) {
         return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -589,17 +634,58 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'fromDate', 'toDate', 'skillId', 'sourceSel', 'showOnlyHighlyRelevant', 'openResumeBtn', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'sourceSel', 'openResumeBtn', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
+        updateHighlyRelevantFilterState();
+      }
+      function hasSelectedSkills() {
+        return Boolean(getSelectedSkillIdsCsv().trim());
+      }
+      function updateHighlyRelevantFilterState() {
+        const el = document.getElementById('showOnlyHighlyRelevant');
+        const wrap = document.getElementById('highlyRelevantFilterWrap');
+        if (!el || !wrap) return;
+        const wasVisible = wrap.classList.contains('is-visible');
+        if (!hasSelectedSkills()) {
+          el.checked = false;
+          el.disabled = false;
+          wrap.classList.remove('is-visible');
+          wrap.setAttribute('aria-hidden', 'true');
+          setQ({ showOnlyHighlyRelevant: '' });
+          return;
+        }
+        wrap.classList.add('is-visible');
+        wrap.setAttribute('aria-hidden', 'false');
+        el.disabled = isSyncing;
+        if (!wasVisible && !isTruthyQueryParam(q().showOnlyHighlyRelevant)) {
+          el.checked = true;
+          setQ({ showOnlyHighlyRelevant: 'true' });
+        }
+      }
+      function syncHighlyRelevantCheckboxFromQuery() {
+        const el = document.getElementById('showOnlyHighlyRelevant');
+        if (!el || !hasSelectedSkills()) return;
+        el.checked = isTruthyQueryParam(q().showOnlyHighlyRelevant);
+      }
+      function pagerSummaryText(pi) {
+        const page = Number(pi.page) || 1;
+        const pageSize = Number(pi.pageSize) || 100;
+        const count = Number(pi.count) || 0;
+        const total = Number(pi.totalRows) || 0;
+        if (total === 0 && count === 0) return 'No results';
+        if (count === 0) return total > 0 ? `0 of ${total}` : 'No results';
+        const from = (page - 1) * pageSize + 1;
+        const to = Math.min(from + count - 1, total > 0 ? total : from + count - 1);
+        return total > 0 ? `${from}–${to} of ${total}` : `${from}–${to}`;
       }
       function updatePagerUi() {
         const info = document.getElementById('pageInfo');
         const prev = document.getElementById('prevPageBtn');
         const next = document.getElementById('nextPageBtn');
         const sizeSel = document.getElementById('pageSizeSel');
-        if (info) info.textContent = `Page ${pageInfo.page} · ${pageInfo.count} item(s)`;
+        if (info) info.textContent = pagerSummaryText(pageInfo);
         if (prev) prev.disabled = isSyncing || pageInfo.page <= 1;
         if (next) next.disabled = isSyncing || !pageInfo.hasMore;
         if (sizeSel) sizeSel.value = String(pageInfo.pageSize);
@@ -732,16 +818,137 @@
       async function loadSkills() {
         const payload = await api(SKILLS_URL);
         skills = payload.skills || payload || [];
-        const sel = document.getElementById('skillId');
-        const labelOf = (s) => {
-          const roleName = String(s.roleName || s.RoleName || '').trim();
-          const name = String(s.name || s.Name || `${s.id}`).trim();
-          if (roleName && name) return `${roleName}:${name}`;
-          return roleName || name || String(s.id);
-        };
-        sel.innerHTML = '<option value="">All</option>' + skills.map((s) =>
-          `<option value="${s.id}">${esc(labelOf(s))}</option>`
-        ).join('');
+        const menu = document.getElementById('skillPickerMenu');
+        const grouped = new Map();
+        for (const s of skills) {
+          const roleName = String(s.roleName || s.RoleName || '').trim() || 'Other';
+          const skillName = String(s.name || s.Name || `${s.id}`).trim() || String(s.id);
+          if (!grouped.has(roleName)) grouped.set(roleName, []);
+          grouped.get(roleName).push({ id: s.id, name: skillName });
+        }
+        const sortedGroups = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
+        menu.innerHTML = sortedGroups.map(([roleName, items]) => {
+          const optionsHtml = items
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((item) =>
+              `<label class="skill-check"><input type="checkbox" value="${item.id}" />${esc(item.name)}</label>`
+            )
+            .join('');
+          return `<div class="skills-group"><div class="skills-group-title">${esc(roleName)}</div>${optionsHtml}</div>`;
+        }).join('');
+      }
+
+      function getSelectedSkillIdsCsv() {
+        const checked = document.querySelectorAll('#skillPickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => String(opt.value || '').trim())
+          .filter(Boolean)
+          .join(',');
+      }
+
+      function applySelectedSkillIdsCsv(csv) {
+        const selected = new Set(
+          String(csv || '')
+            .split(',')
+            .map((v) => v.trim())
+            .filter(Boolean)
+        );
+        document.querySelectorAll('#skillPickerMenu input[type="checkbox"]').forEach((opt) => {
+          opt.checked = selected.has(String(opt.value));
+        });
+        renderSkillPickerSummary();
+      }
+
+      function renderSkillPickerSummary() {
+        const csv = getSelectedSkillIdsCsv();
+        const btn = document.getElementById('skillPickerBtn');
+        if (!csv) {
+          btn.textContent = 'All roles';
+        } else {
+          const ids = [...new Set(csv.split(',').map((id) => id.trim()).filter(Boolean))];
+          btn.textContent = `${ids.length} role(s) selected`;
+        }
+        updateHighlyRelevantFilterState();
+      }
+
+      function openSkillPicker() {
+        isSkillPickerOpen = true;
+        document.getElementById('skillPickerMenu').classList.add('open');
+      }
+
+      function closeSkillPicker() {
+        isSkillPickerOpen = false;
+        document.getElementById('skillPickerMenu').classList.remove('open');
+      }
+
+      function renderSourcePickerOptions() {
+        const menu = document.getElementById('sourcePickerMenu');
+        menu.innerHTML = APPLY_TYPE_OPTIONS
+          .map(
+            (item) =>
+              `<label class="skill-check"><input type="checkbox" value="${attrEsc(item.value)}" />${esc(item.label)}</label>`
+          )
+          .join('');
+      }
+
+      function getSelectedSources() {
+        const checked = document.querySelectorAll('#sourcePickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => String(opt.value || '').trim())
+          .filter(Boolean);
+      }
+
+      function applySelectedApplyTypesCsv(csv) {
+        const selected = new Set(
+          String(csv || '')
+            .split(',')
+            .map((v) => mapLegacyApplyTypeToken(v))
+            .filter(Boolean)
+        );
+        document.querySelectorAll('#sourcePickerMenu input[type="checkbox"]').forEach((opt) => {
+          opt.checked = selected.has(String(opt.value || '').trim().toLowerCase());
+        });
+        renderSourcePickerSummary();
+      }
+
+      function renderSourcePickerSummary() {
+        const selected = getSelectedSources();
+        const btn = document.getElementById('sourcePickerBtn');
+        btn.textContent = selected.length ? `${selected.length} source(s) selected` : 'All sources';
+      }
+
+      function openSourcePicker() {
+        isSourcePickerOpen = true;
+        document.getElementById('sourcePickerMenu').classList.add('open');
+      }
+
+      function closeSourcePicker() {
+        isSourcePickerOpen = false;
+        document.getElementById('sourcePickerMenu').classList.remove('open');
+      }
+
+      function clearFiltersToLastWeek() {
+        const now = new Date();
+        const to = localIsoDate(now);
+        const fromDate = new Date(now);
+        fromDate.setDate(fromDate.getDate() - 7);
+        const from = localIsoDate(fromDate);
+        document.getElementById('fromDate').value = from > to ? to : from;
+        document.getElementById('toDate').value = to;
+        applySelectedSkillIdsCsv('');
+        applySelectedApplyTypesCsv('');
+        document.getElementById('sourceSel').value = '';
+        document.getElementById('showOnlyHighlyRelevant').checked = false;
+        setQ({
+          from: document.getElementById('fromDate').value,
+          to,
+          skillIds: '',
+          applyTypes: '',
+          source: '',
+          showOnlyHighlyRelevant: '',
+          page: '1',
+          jobId: '',
+        });
       }
 
       async function loadApplicationsByUser(userId) {
@@ -753,19 +960,37 @@
         const seekerId = q().seekerId;
         const from = document.getElementById('fromDate').value;
         const to = document.getElementById('toDate').value;
-        const skillId = document.getElementById('skillId').value;
-        const source = document.getElementById('sourceSel').value;
-        const showOnlyHighlyRelevant = document.getElementById('showOnlyHighlyRelevant').checked;
+        const skillIds = getSelectedSkillIdsCsv() || String(q().skillIds || '').trim();
+        const applyTypes = getSelectedSources().join(',');
+        const source = normalizeSourceToken(document.getElementById('sourceSel').value);
+        const showOnlyHighlyRelevant =
+          Boolean(skillIds.trim()) && document.getElementById('showOnlyHighlyRelevant').checked;
         const query = q();
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(query.pageSize || '100'), 10) || 100));
         if (!seekerId) throw new Error('Select seeker first.');
         if (!from || !to) throw new Error('Set from and to dates.');
 
-        setQ({ seekerId, from, to, skillId, source, showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '', page, pageSize });
+        setQ({
+          seekerId,
+          from,
+          to,
+          skillIds,
+          applyTypes,
+          source,
+          showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '',
+          page,
+          pageSize,
+        });
         setSyncBusy(true);
         try {
-          const posUrl = `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${skillId ? `&skillId=${encodeURIComponent(skillId)}` : ''}${source ? `&source=${encodeURIComponent(source)}` : ''}${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+          const posUrl =
+            `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
+            `${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}` +
+            `${applyTypes ? `&applyTypes=${encodeURIComponent(applyTypes)}` : ''}` +
+            `${source ? `&source=${encodeURIComponent(source)}` : ''}` +
+            `${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}` +
+            `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
           const data = await api(posUrl);
           positions = data.positions || [];
           pageInfo = {
@@ -773,6 +998,7 @@
             pageSize: Number(data.pageSize || pageSize),
             hasMore: !!data.hasMore,
             count: Number(data.count || positions.length),
+            totalRows: Number(data.totalRows || data.count || positions.length),
           };
           await loadApplicationsByUser(seekerId);
           renderJobs();
@@ -1011,10 +1237,10 @@
           return;
         }
         const now = new Date();
-        const to = now.toISOString().slice(0, 10);
+        const to = localIsoDate(now);
         const prev = new Date(now);
         prev.setDate(prev.getDate() - 7);
-        const from = prev.toISOString().slice(0, 10);
+        const from = localIsoDate(prev);
         document.getElementById('fromDate').value = from;
         document.getElementById('toDate').value = to;
       }
@@ -1025,12 +1251,15 @@
           throw new Error('Open this page from the bot via /admin (Telegram auth required).');
         }
         hydrateStateToInputs();
+        renderSourcePickerOptions();
         await Promise.all([loadUsers(), loadSkills()]);
         renderSelectedUserInfo();
         const s = q();
-        if (s.skillId) document.getElementById('skillId').value = s.skillId;
+        applySelectedApplyTypesCsv(s.applyTypes || '');
+        if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
+        else renderSkillPickerSummary();
         if (s.source) document.getElementById('sourceSel').value = s.source;
-        document.getElementById('showOnlyHighlyRelevant').checked = isTruthyQueryParam(s.showOnlyHighlyRelevant);
+        syncHighlyRelevantCheckboxFromQuery();
         document.getElementById('pageSizeSel').value = String(Math.min(200, Math.max(1, Number.parseInt(String(s.pageSize || '100'), 10) || 100)));
         updatePagerUi();
         if (s.seekerId && s.from && s.to) {
@@ -1057,18 +1286,59 @@
         setQ({ pageSize: nextSize, page: 1 });
         syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
       });
+      document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+        clearFiltersToLastWeek();
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('skillPickerBtn').addEventListener('click', () => {
+        if (isSkillPickerOpen) closeSkillPicker();
+        else openSkillPicker();
+      });
+      document.getElementById('sourcePickerBtn').addEventListener('click', () => {
+        if (isSourcePickerOpen) closeSourcePicker();
+        else openSourcePicker();
+      });
+      document.getElementById('skillPickerMenu').addEventListener('change', () => {
+        renderSkillPickerSummary();
+        setQ({ skillIds: getSelectedSkillIdsCsv(), page: 1 });
+      });
+      document.getElementById('sourcePickerMenu').addEventListener('change', () => {
+        renderSourcePickerSummary();
+        setQ({ applyTypes: getSelectedSources().join(','), page: 1 });
+      });
+      document.addEventListener('click', (event) => {
+        const skillBtn = document.getElementById('skillPickerBtn');
+        const skillMenu = document.getElementById('skillPickerMenu');
+        if (isSkillPickerOpen && skillBtn && skillMenu && !skillBtn.contains(event.target) && !skillMenu.contains(event.target)) {
+          closeSkillPicker();
+        }
+        const sourceBtn = document.getElementById('sourcePickerBtn');
+        const sourceMenu = document.getElementById('sourcePickerMenu');
+        if (isSourcePickerOpen && sourceBtn && sourceMenu && !sourceBtn.contains(event.target) && !sourceMenu.contains(event.target)) {
+          closeSourcePicker();
+        }
+      });
       document.getElementById('showOnlyHighlyRelevant').addEventListener('change', (event) => {
-        if (!document.getElementById('skillId').value) {
+        if (!hasSelectedSkills()) {
           event.target.checked = false;
           setQ({ showOnlyHighlyRelevant: '' });
           return;
         }
         setQ({ showOnlyHighlyRelevant: event.target.checked ? 'true' : '', page: 1 });
       });
-      document.getElementById('skillId').addEventListener('change', () => {
-        if (document.getElementById('skillId').value) return;
-        document.getElementById('showOnlyHighlyRelevant').checked = false;
-        setQ({ showOnlyHighlyRelevant: '' });
+      document.getElementById('sourceSel').addEventListener('change', () => {
+        setQ({ source: document.getElementById('sourceSel').value, page: 1 });
+      });
+      document.getElementById('highlyRelevantHintBtn').addEventListener('click', () => {
+        document.getElementById('highlyRelevantHintModal').classList.add('on');
+      });
+      document.getElementById('highlyRelevantHintClose').addEventListener('click', () => {
+        document.getElementById('highlyRelevantHintModal').classList.remove('on');
+      });
+      document.getElementById('highlyRelevantHintModal').addEventListener('click', (event) => {
+        if (event.target.id === 'highlyRelevantHintModal') {
+          document.getElementById('highlyRelevantHintModal').classList.remove('on');
+        }
       });
       document.getElementById('toggleUserInfoBtn').addEventListener('click', () => {
         setUserInfoVisibility(!isUserInfoHidden);
@@ -1089,6 +1359,9 @@
         if (event.key === 'Escape') {
           closeCvModal();
           closeJobModal();
+          closeSkillPicker();
+          closeSourcePicker();
+          document.getElementById('highlyRelevantHintModal').classList.remove('on');
         }
       });
 
