@@ -128,6 +128,11 @@
         line-height: 1.35;
       }
       .skill-tag.primary { border-color: #3b82f6; background: #152038; }
+      .skill-tag[data-justification] { cursor: pointer; }
+      .remote-reason-btn { margin-top: 6px; }
+      #jobModal .modal-head {
+        justify-content: flex-end;
+      }
       .user-info-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -288,9 +293,9 @@
         <section class="card layout-col">
           <div class="section-head-row">
             <h2>User information and applications</h2>
-            <button id="toggleUserInfoBtn" type="button" class="ghost-btn">Hide user info</button>
+            <button id="toggleUserInfoBtn" type="button" class="ghost-btn">Show user info</button>
           </div>
-          <div id="userInfoSection">
+          <div id="userInfoSection" style="display:none">
             <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
             <div class="row">
               <button id="openResumeBtn" type="button">Open resume</button>
@@ -321,7 +326,7 @@
               <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
             </div>
           </div>
-          <div id="sourceFilterRow" class="row date-range-row">
+          <div id="sourceFilterRow" class="row date-range-row" style="display:none" hidden>
             <label>Source
               <select id="sourceSel">
                 <option value="">All</option>
@@ -392,27 +397,29 @@
     <div id="jobModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-head">
-          <strong>Job details</strong>
-          <button id="jobModalClose" type="button">Close</button>
+          <button id="jobModalClose" type="button" class="ghost-btn" aria-label="Close">×</button>
         </div>
         <div class="modal-body" style="padding:12px;overflow:auto;background:#0a1020">
           <div id="jobInfo" class="muted">Select a job to continue.</div>
           <div id="jobActions" style="display:none">
-            <div class="row">
-              <label>Status
-                <select id="statusSel">
-                  <option value="new">new</option>
-                  <option value="applied">applied</option>
-                  <option value="skipped">skipped</option>
-                </select>
-              </label>
+            <div class="row" style="margin-bottom:12px">
               <button id="genBtn">Generate Tailored CV + Cover Letter</button>
               <span id="jobLoader" class="loader" aria-hidden="true"></span>
             </div>
-            <div class="artifacts" id="artifactLinks" style="margin-top:8px"></div>
-            <label>Cover Letter</label>
-            <textarea id="coverPreview" readonly></textarea>
-            <p id="jobMsg" class="muted"></p>
+            <div class="artifacts" id="artifactLinks" style="margin-bottom:16px"></div>
+            <div id="coverLetterBlock" style="display:none;margin-bottom:16px">
+              <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600">Cover letter</label>
+              <textarea id="coverPreview" readonly style="margin-bottom:0"></textarea>
+            </div>
+            <div id="statusRow" style="margin-bottom:12px">
+              <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600">Mark as</label>
+              <select id="statusSel" style="width:100%">
+                <option value="new">new</option>
+                <option value="applied">applied</option>
+                <option value="skipped">skipped</option>
+              </select>
+            </div>
+            <p id="jobMsg" class="muted" style="margin-top:8px"></p>
           </div>
           <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
             <div class="skills-block">
@@ -420,6 +427,17 @@
               <textarea id="notesText" aria-label="Admin notes"></textarea>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+    <div id="insightModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card" style="width:min(520px,95vw);height:auto;max-height:85vh">
+        <div class="modal-head">
+          <strong id="insightModalTitle">Details</strong>
+          <button id="insightModalClose" type="button" class="ghost-btn" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body" style="padding:12px">
+          <p id="insightModalText" class="job-summary" style="margin:0"></p>
         </div>
       </div>
     </div>
@@ -464,7 +482,7 @@
       let jobsSort = { key: 'id', dir: 'desc' };
       let isSyncing = false;
       let isJobBusy = false;
-      let isUserInfoHidden = false;
+      let isUserInfoHidden = true;
       let isSkillPickerOpen = false;
       let isSourcePickerOpen = false;
       let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
@@ -475,6 +493,27 @@
         { value: 'telegram', label: 'Telegram' },
         { value: 'external', label: 'Company sites' },
       ];
+      const APPLY_TYPE_LABELS = {
+        linkedin: 'LinkedIn',
+        indeed: 'Indeed',
+        telegram: 'Telegram',
+        external: 'Company sites',
+        thirdParty: 'Third-party site',
+      };
+
+      function getApplyTypeDisplay(position) {
+        const applyType = String(position?.applyType || '').trim().toLowerCase();
+        const source = String(position?.source || '').trim().toLowerCase();
+        if (applyType === 'easy_apply') {
+          if (source === 'linkedin') return 'LinkedIn';
+          if (source === 'indeed') return 'Indeed';
+        }
+        if (applyType === 'telegram') return 'Telegram';
+        if (applyType === 'external') return APPLY_TYPE_LABELS.thirdParty;
+        if (applyType === 'linkedin') return 'LinkedIn';
+        if (applyType === 'indeed') return 'Indeed';
+        return APPLY_TYPE_LABELS[applyType] || position?.applyType || '—';
+      }
 
       function q() {
         const p = new URLSearchParams(location.search);
@@ -560,12 +599,12 @@
             .map((s) => {
               const label = esc(skillDisplayLine(s));
               const tip = attrEsc(s.justification || '');
-              return `<span class="skill-tag ${cls}" title="${tip}">${label}</span>`;
+              return `<span class="skill-tag ${cls}" data-justification="${tip}" title="${tip}">${label}</span>`;
             })
             .join('');
         let out = '<div class="skills-block">';
-        out += `<h4>Primary skills</h4><div>${chips(primary, 'primary') || '<span class="muted">None</span>'}</div>`;
-        out += `<h4>Secondary skills</h4><div>${chips(secondary, '') || '<span class="muted">None</span>'}</div>`;
+        out += `<h4>Key skills</h4><div>${chips(primary, 'primary') || '<span class="muted">None</span>'}</div>`;
+        out += `<h4>Other skills</h4><div>${chips(secondary, '') || '<span class="muted">None</span>'}</div>`;
         out += '</div>';
         return out;
       }
@@ -720,6 +759,30 @@
       }
       function closeJobModal() {
         document.getElementById('jobModal').classList.remove('on');
+      }
+      function showInsight(title, text) {
+        document.getElementById('insightModalTitle').textContent = String(title || '').trim() || 'Details';
+        document.getElementById('insightModalText').textContent = String(text || '').trim() || 'No data';
+        document.getElementById('insightModal').classList.add('on');
+      }
+      function hideInsight() {
+        document.getElementById('insightModalTitle').textContent = '';
+        document.getElementById('insightModalText').textContent = '';
+        document.getElementById('insightModal').classList.remove('on');
+      }
+      function bindJobDetailInteractions(job) {
+        document.querySelectorAll('.skill-tag[data-justification]').forEach((el) => {
+          el.addEventListener('click', () => {
+            const justification = el.getAttribute('data-justification') || '';
+            showInsight('Skill insight', justification);
+          });
+        });
+        const remoteBtn = document.getElementById('showRemoteReasonBtn');
+        if (remoteBtn) {
+          remoteBtn.addEventListener('click', () => {
+            showInsight('Remote reason', job.remoteReasoning || 'No data');
+          });
+        }
       }
       async function api(url, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -1087,6 +1150,7 @@
         if (!job) {
           document.getElementById('jobNotesBlock').style.display = 'none';
           document.getElementById('jobActions').style.display = 'none';
+          setMsg('jobMsg', '');
           return;
         }
         selectedJob = job;
@@ -1095,30 +1159,37 @@
         document.getElementById('jobInfo').classList.remove('muted');
         document.getElementById('jobNotesBlock').style.display = 'block';
         document.getElementById('jobActions').style.display = 'block';
-        const remoteHtml = String(job.remoteReasoning || '').trim()
-          ? `<div class="skills-block" style="margin-top:10px"><div>${remoteTagHtml(job.remoteReasoning)}</div></div>`
+        hideInsight();
+        const remoteHtml = String(job.source || '').trim().toLowerCase() !== 'hirehi' && String(job.remoteReasoning || '').trim()
+          ? `<div class="skills-block"><h4>Remote</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Why remote match</button></div>`
           : '';
         const sumHtml = String(job.shortSummary || '').trim()
           ? `<div class="skills-block" style="margin-top:10px"><h4>Summary</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
           : '';
+        const applyTypeDisplay = String(getApplyTypeDisplay(job) || '').trim();
+        const applyCtaSuffix = applyTypeDisplay && applyTypeDisplay !== '—' ? ` (${esc(applyTypeDisplay)})` : '';
         document.getElementById('jobInfo').innerHTML =
           `<div class="job-detail">` +
           `<div><strong>${esc(job.title)}</strong></div>` +
           `<div class="sub">${esc(job.company)} · ${esc(job.location)}</div>` +
-          `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Open source job link</a></div>` +
+          `<div class="sub" style="margin-top:4px">ID: #${esc(job.id)}</div>` +
+          `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Apply now${applyCtaSuffix}</a></div>` +
           remoteHtml +
           sumHtml +
           renderJobSkillsHtml(job.skills) +
           `</div>`;
         document.getElementById('statusSel').value = selectedApplication?.Status || 'new';
         document.getElementById('notesText').value = selectedApplication?.Notes || '';
+        setMsg('jobMsg', '');
         renderArtifacts();
+        bindJobDetailInteractions(job);
         openJobModal();
       }
 
       function renderArtifacts() {
         const links = document.getElementById('artifactLinks');
         const cover = document.getElementById('coverPreview');
+        const coverBlock = document.getElementById('coverLetterBlock');
         const tailoredUrl = String(generatedMaterials?.tailoredCvUrl || selectedApplication?.TailoredCVURL || '').trim();
         const coverText = String(
           generatedMaterials?.coverLetter ?? selectedApplication?.CoverLetter ?? ''
@@ -1126,6 +1197,7 @@
         if (!tailoredUrl && !coverText) {
           links.innerHTML = '';
           cover.value = '';
+          if (coverBlock) coverBlock.style.display = 'none';
           return;
         }
         links.innerHTML = tailoredUrl
@@ -1141,6 +1213,7 @@
           });
         }
         cover.value = coverText;
+        if (coverBlock) coverBlock.style.display = coverText ? '' : 'none';
       }
 
       async function saveStatus() {
@@ -1294,6 +1367,7 @@
         renderSourcePickerOptions();
         await Promise.all([loadUsers(), loadSkills()]);
         renderSelectedUserInfo();
+        setUserInfoVisibility(true);
         const s = q();
         applySelectedApplyTypesCsv(s.applyTypes || '');
         if (s.skillIds) {
@@ -1402,10 +1476,15 @@
       document.getElementById('jobModal').addEventListener('click', (e) => {
         if (e.target.id === 'jobModal') closeJobModal();
       });
+      document.getElementById('insightModalClose').addEventListener('click', hideInsight);
+      document.getElementById('insightModal').addEventListener('click', (e) => {
+        if (e.target.id === 'insightModal') hideInsight();
+      });
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
           closeCvModal();
           closeJobModal();
+          hideInsight();
           closeSkillPicker();
           closeSourcePicker();
           document.getElementById('highlyRelevantHintModal').classList.remove('on');
