@@ -26,6 +26,9 @@
       input, select, button, textarea {
         border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 8px; font: inherit;
       }
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        filter: invert(1) brightness(1.4);
+      }
       button { cursor: pointer; background: var(--accent); border-color: var(--accent); }
       table { width: 100%; border-collapse: collapse; }
       th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
@@ -172,6 +175,91 @@
         align-items: center;
         gap: 8px;
       }
+      .pager-icon-btn {
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pager-icon-btn svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+      }
+      .skills-picker {
+        position: relative;
+        min-width: 280px;
+      }
+      .skills-picker-btn {
+        width: 100%;
+        text-align: left;
+        background: #0f1730;
+        border: 1px solid var(--border);
+      }
+      .skills-picker-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        max-height: 260px;
+        overflow: auto;
+        z-index: 30;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #10182d;
+        padding: 8px;
+        display: none;
+      }
+      .skills-picker-menu.open { display: block; }
+      .skills-group {
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(39, 51, 87, 0.45);
+      }
+      .skills-group:last-child {
+        margin-bottom: 0;
+        border-bottom: 0;
+      }
+      .skills-group-title {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
+      .skill-check {
+        display: block;
+        font-size: 13px;
+        padding: 2px 0;
+      }
+      .skill-check input { margin-right: 6px; }
+      .highly-relevant-filter {
+        display: none;
+        align-items: center;
+        gap: 6px;
+      }
+      .highly-relevant-filter.is-visible {
+        display: inline-flex;
+      }
+      .hint-btn {
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border-radius: 50%;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        flex-shrink: 0;
+        background: #0f1730;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .hint-btn:hover {
+        color: var(--text);
+        border-color: var(--accent);
+      }
     </style>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
@@ -216,7 +304,24 @@
             </span>
           </div>
           <div class="row date-range-row">
-            <label>Skill <select id="skillId"><option value="">All</option></select></label>
+            <label>Roles</label>
+            <div class="skills-picker">
+              <button id="skillPickerBtn" type="button" class="skills-picker-btn">All roles</button>
+              <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            </div>
+            <span id="highlyRelevantFilterWrap" class="highly-relevant-filter" aria-hidden="true">
+              <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
+              <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="What does Top matches mean?" aria-label="What does Top matches mean?">?</button>
+            </span>
+          </div>
+          <div class="row date-range-row">
+            <label>Search in</label>
+            <div class="skills-picker">
+              <button id="sourcePickerBtn" type="button" class="skills-picker-btn">All sources</button>
+              <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            </motion>
+          </div>
+          <div id="sourceFilterRow" class="row date-range-row">
             <label>Source
               <select id="sourceSel">
                 <option value="">All</option>
@@ -225,15 +330,19 @@
                 <option value="hirehi">hirehi</option>
               </select>
             </label>
-            <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
           </div>
           <div class="row date-range-row">
-            <button id="syncBtn">Search remote jobs</button>
+            <button id="syncBtn">Search</button>
+            <button id="clearFiltersBtn" type="button" class="ghost-btn">Reset filters</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
             <span class="pager">
-              <button id="prevPageBtn" type="button" class="ghost-btn">Prev</button>
-              <span id="pageInfo" class="muted">Page 1</span>
-              <button id="nextPageBtn" type="button" class="ghost-btn">Next</button>
+              <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Previous page">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+              </button>
+              <span id="pageInfo" class="muted pager-summary"></span>
+              <button id="nextPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Next page">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+              </button>
               <label>Page size
                 <select id="pageSizeSel">
                   <option value="50">50</option>
