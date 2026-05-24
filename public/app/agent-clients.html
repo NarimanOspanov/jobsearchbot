@@ -1343,21 +1343,6 @@
         openCvModal(`Resume: #${u.id}`, u.resumeUrl);
       }
 
-      function buildJobRequirementsText(job) {
-        const parts = [];
-        const title = String(job?.title || '').trim();
-        const company = String(job?.company || '').trim();
-        const location = String(job?.location || '').trim();
-        const summary = String(job?.shortSummary || job?.description || '').trim();
-        const contacts = String(job?.contacts || '').trim();
-        if (title) parts.push(`Job title: ${title}`);
-        if (company) parts.push(`Company: ${company}`);
-        if (location) parts.push(`Location: ${location}`);
-        if (summary) parts.push(summary);
-        if (contacts) parts.push(contacts);
-        return parts.join('\n\n').trim();
-      }
-
       async function generateMaterials() {
         if (isJobBusy) return;
         const seekerId = q().seekerId;
@@ -1368,33 +1353,24 @@
           const resumePayload = await api(`${API_BASE}/api/app/admin/users/${encodeURIComponent(seekerId)}/resume-text${agentQueryPrefix()}`);
           const mainResumeText = String(resumePayload.resumeText || '').trim();
           if (!mainResumeText) throw new Error('Resume text is empty for selected user.');
-          const jobDescription = buildJobRequirementsText(selectedJob);
-          if (!jobDescription) throw new Error('Job has no description to tailor against.');
 
-          const generateBody = {
+          const tailorPayload = {
             seekerId: Number(seekerId),
             screenlyJobId: Number(selectedJob.id),
-            jobTitle: selectedJob.title || '',
-            jobDescription,
             mainResumeText,
+            job: selectedJob,
           };
           const agentUserId = String(q().agentUserId || '').trim();
-          if (isBotAdminUser && agentUserId) generateBody.agentUserId = Number(agentUserId);
+          if (isBotAdminUser && agentUserId) tailorPayload.agentUserId = Number(agentUserId);
 
           const [tailored, cover] = await Promise.all([
             api(`${API_BASE}/api/tailored-resume/upload`, {
               method: 'POST',
-              body: JSON.stringify(generateBody),
+              body: JSON.stringify(tailorPayload),
             }),
             api(`${API_BASE}/api/cover-letter`, {
               method: 'POST',
-              body: JSON.stringify({
-                seekerId: Number(seekerId),
-                jobTitle: generateBody.jobTitle,
-                jobDescription: generateBody.jobDescription,
-                mainResumeText,
-                ...(generateBody.agentUserId ? { agentUserId: generateBody.agentUserId } : {}),
-              }),
+              body: JSON.stringify({ ...tailorPayload }),
             }),
           ]);
 

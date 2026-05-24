@@ -1,6 +1,6 @@
 import { config } from '../config.js';
 
-/** Build job requirements text (same shape as /cvscore tailor user paste). */
+/** Build job requirements text (same shape as /cvscore «Адаптация под вакансию» user paste). */
 export function buildJobRequirementsText(job) {
   const title = String(job?.title || '').trim();
   const company = String(job?.company || '').trim();
@@ -12,8 +12,21 @@ export function buildJobRequirementsText(job) {
   if (company) parts.push(`Company: ${company}`);
   if (location) parts.push(`Location: ${location}`);
   if (summary) parts.push(summary);
+  const skills = Array.isArray(job?.skills) ? job.skills : [];
+  const keySkills = skills
+    .filter((s) => s?.isHighlyRelevant === true)
+    .map((s) => String(s?.name || '').trim())
+    .filter(Boolean);
+  if (keySkills.length) parts.push(`Key skills: ${keySkills.join(', ')}`);
   if (contacts) parts.push(contacts);
   return parts.join('\n\n').trim();
+}
+
+/** Prefer explicit paste; else build from job-search job object (same as CVScore tailor input). */
+export function resolveJobRequirementsFromBody(body) {
+  const direct = String(body?.jobRequirements || body?.jobDescription || '').trim();
+  if (direct) return direct;
+  return buildJobRequirementsText(body?.job);
 }
 
 /**
