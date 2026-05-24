@@ -3,11 +3,44 @@ import { miniAppAuth } from '../../middleware/auth.js';
 import { generateTailoredResumeMarkdown, generateCoverLetterText } from '../../services/aiService.js';
 import { markdownToPdfBuffer } from '../../services/resumeService.js';
 import { canUseAiToolsForUser, buildMonetizationStatus } from '../../services/planService.js';
-import { ensureUserByTelegramId } from '../../services/userService.js';
+import {
+  assertCanAccessClient,
+  isBotAdminTelegramId,
+  resolveUserFromMiniApp,
+} from '../../services/agentAccessService.js';
+import { models } from '../../db.js';
 import { cvScoreResultByUserId } from '../../bot/state.js';
 import { config } from '../../config.js';
 import { extractMiniAppInitData, verifyInitData } from '../../utils/telegramUtils.js';
 import { getRequiredChannelsState, serializeRequiredChannels } from '../../services/channelService.js';
+
+async function resolveSeekerUserForAiGeneration(req, seekerId) {
+  const actorUser = await resolveUserFromMiniApp(req.miniAppUser);
+  if (!actorUser) {
+    return { ok: false, status: 403, error: 'Forbidden' };
+  }
+  if (Number(actorUser.Id) === seekerId) {
+    return { ok: true, seekerUser: actorUser };
+  }
+  const isBotAdmin = isBotAdminTelegramId(req.miniAppUser?.id);
+  const impersonateRaw = Number.parseInt(String(req.body?.agentUserId ?? ''), 10);
+  const impersonateAgentUserId =
+    isBotAdmin && Number.isSafeInteger(impersonateRaw) && impersonateRaw > 0 ? impersonateRaw : null;
+  const access = await assertCanAccessClient({
+    actorUserId: actorUser.Id,
+    clientUserId: seekerId,
+    isBotAdmin,
+    impersonateAgentUserId,
+  });
+  if (!access.ok) {
+    return { ok: false, status: access.status, error: access.error };
+  }
+  const seekerUser = await models.Users.findByPk(seekerId);
+  if (!seekerUser) {
+    return { ok: false, status: 404, error: 'User not found' };
+  }
+  return { ok: true, seekerUser };
+}
 
 export function createResumeRouter() {
   const router = Router();
@@ -98,21 +131,17 @@ export function createResumeRouter() {
       if (!jobTitle || !jobDescription || !mainResumeText) {
         return res.status(400).json({ error: 'jobTitle, jobDescription, and mainResumeText are required' });
       }
-      const { user } = await ensureUserByTelegramId(
-        req.miniAppUser.id,
-        req.miniAppUser.username ?? null,
-        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
-        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
-      );
-      if (!user || Number(user.Id) !== seekerId) {
-        return res.status(403).json({ error: 'Forbidden' });
+      const resolved = await resolveSeekerUserForAiGeneration(req, seekerId);
+      if (!resolved.ok) {
+        return res.status(resolved.status).json({ error: resolved.error });
       }
-      const canUseAiTools = await canUseAiToolsForUser(user.Id);
+      const { seekerUser } = resolved;
+      const canUseAiTools = await canUseAiToolsForUser(seekerUser.Id);
       if (!canUseAiTools) {
         return res.status(402).json({
           error: 'gold_required',
           message: 'AI-инструменты доступны в Premium или при наличии открытий.',
-          monetization: await buildMonetizationStatus(user.Id),
+          monetization: await buildMonetizationStatus(seekerUser.Id),
         });
       }
 
@@ -168,21 +197,17 @@ export function createResumeRouter() {
           error: 'seekerId, jobTitle, jobDescription, and mainResumeText are required',
         });
       }
-      const { user } = await ensureUserByTelegramId(
-        req.miniAppUser.id,
-        req.miniAppUser.username ?? null,
-        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
-        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
-      );
-      if (!user || Number(user.Id) !== seekerId) {
-        return res.status(403).json({ error: 'Forbidden' });
+      const resolved = await resolveSeekerUserForAiGeneration(req, seekerId);
+      if (!resolved.ok) {
+        return res.status(resolved.status).json({ error: resolved.error });
       }
-      const canUseAiTools = await canUseAiToolsForUser(user.Id);
+      const { seekerUser } = resolved;
+      const canUseAiTools = await canUseAiToolsForUser(seekerUser.Id);
       if (!canUseAiTools) {
         return res.status(402).json({
           error: 'gold_required',
           message: 'AI-инструменты доступны в Premium или при наличии открытий.',
-          monetization: await buildMonetizationStatus(user.Id),
+          monetization: await buildMonetizationStatus(seekerUser.Id),
         });
       }
       const coverLetter = await generateCoverLetterText({ jobTitle, jobDescription, mainResumeText });

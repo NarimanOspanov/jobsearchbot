@@ -1354,23 +1354,29 @@
           const mainResumeText = String(resumePayload.resumeText || '').trim();
           if (!mainResumeText) throw new Error('Resume text is empty for selected user.');
 
+          const generateBody = {
+            seekerId: Number(seekerId),
+            screenlyJobId: Number(selectedJob.id),
+            jobTitle: selectedJob.title || '',
+            jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
+            mainResumeText,
+          };
+          const agentUserId = String(q().agentUserId || '').trim();
+          if (isBotAdminUser && agentUserId) generateBody.agentUserId = Number(agentUserId);
+
           const [tailored, cover] = await Promise.all([
             api(`${API_BASE}/api/tailored-resume/upload`, {
               method: 'POST',
-              body: JSON.stringify({
-                seekerId: Number(seekerId),
-                screenlyJobId: Number(selectedJob.id),
-                jobTitle: selectedJob.title || '',
-                jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
-                mainResumeText,
-              }),
+              body: JSON.stringify(generateBody),
             }),
             api(`${API_BASE}/api/cover-letter`, {
               method: 'POST',
               body: JSON.stringify({
-                jobTitle: selectedJob.title || '',
-                jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
+                seekerId: Number(seekerId),
+                jobTitle: generateBody.jobTitle,
+                jobDescription: generateBody.jobDescription,
                 mainResumeText,
+                ...(generateBody.agentUserId ? { agentUserId: generateBody.agentUserId } : {}),
               }),
             }),
           ]);
