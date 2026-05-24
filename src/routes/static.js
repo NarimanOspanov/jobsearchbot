@@ -32,7 +32,11 @@ export function createStaticRouter() {
   router.get('/app/admin/companies', (_req, res) => res.sendFile(join(publicApp, 'admin-companies.html')));
   router.get('/app/admin/positions', (_req, res) => res.sendFile(join(publicApp, 'admin-positions.html')));
   router.get('/app/admin/notifications', (_req, res) => res.sendFile(join(publicApp, 'admin-notifications.html')));
-  router.get('/app/admin', (_req, res) => res.sendFile(join(publicApp, 'admin.html')));
+  router.get('/app/admin/agent-assignments', (_req, res) =>
+    res.sendFile(join(publicApp, 'admin-agent-assignments.html'))
+  );
+  router.get('/app/agent/clients', (_req, res) => res.sendFile(join(publicApp, 'agent-clients.html')));
+  router.get('/app/admin', (_req, res) => res.redirect(302, '/app/agent/clients'));
   router.get('/app/stat', (_req, res) => res.sendFile(join(publicApp, 'stats.html')));
   router.get('/app/stat2', (_req, res) => res.sendFile(join(publicApp, 'stat2.html')));
   router.get('/app/cvscore', (_req, res) => res.sendFile(join(publicApp, 'cvscore.html')));

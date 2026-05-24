@@ -1,0 +1,1555 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent clients</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+        --ok: #22c55e;
+        --bad: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { width: 100%; max-width: 100%; margin: 0 auto; padding: 14px; display: grid; gap: 12px; box-sizing: border-box; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+      h1, h2, h3 { margin: 0 0 10px; }
+      .muted { color: var(--muted); }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      input, select, button, textarea {
+        border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 8px; font: inherit;
+      }
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        filter: invert(1) brightness(1.4);
+      }
+      button { cursor: pointer; background: var(--accent); border-color: var(--accent); }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
+      th { color: var(--muted); font-weight: 600; }
+      #jobsBody tr { cursor: pointer; }
+      #jobsBody tr:hover { background: rgba(79, 124, 255, 0.08); }
+      .ok { color: var(--ok); }
+      .bad { color: var(--bad); }
+      .layout {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+      @media (min-width: 1024px) {
+        .layout {
+          grid-template-columns: minmax(240px, 28%) minmax(0, 72%);
+          min-height: calc(100vh - 100px);
+        }
+        .layout .card.layout-col {
+          min-height: 0;
+          max-height: calc(100vh - 100px);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .layout .layout-col-body {
+          flex: 1;
+          min-height: 0;
+          overflow: auto;
+        }
+      }
+      .users-list button { width: 100%; text-align: left; margin: 4px 0; }
+      .selected { outline: 2px solid var(--accent); }
+      .artifacts a { color: #8ab4ff; display: inline-block; margin-right: 10px; text-decoration: underline; font-weight: 600; }
+      a { color: #9ec5ff; text-decoration: underline; font-weight: 600; }
+      a:hover { color: #c7ddff; }
+      .loader {
+        display: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(158, 176, 209, 0.45);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
+      }
+      .loader.on { display: inline-block; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      button:disabled, input:disabled, select:disabled, textarea:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      textarea { width: 100%; min-height: 130px; }
+      .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+        display: none; align-items: center; justify-content: center; z-index: 9999;
+      }
+      .modal-backdrop.on { display: flex; }
+      .modal-card {
+        width: min(1100px, 95vw); height: min(85vh, 900px); background: #0a1020;
+        border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: grid;
+        grid-template-rows: auto 1fr;
+      }
+      .modal-head {
+        display: flex; justify-content: space-between; align-items: center; gap: 8px;
+        padding: 8px 10px; border-bottom: 1px solid var(--border);
+      }
+      .modal-body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+      .tag-remote {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        margin-left: 8px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #1e3a5f;
+        color: #93c5fd;
+        border: 1px solid #3b82f6;
+        cursor: help;
+        vertical-align: middle;
+      }
+      .job-detail { color: var(--text); }
+      .job-detail .sub { color: var(--muted); font-size: 13px; }
+      .job-summary { margin: 10px 0; line-height: 1.45; color: var(--text); }
+      .skills-block { margin-top: 12px; }
+      .skills-block h4 { margin: 8px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+      .skill-tag {
+        display: inline-block;
+        margin: 2px 6px 2px 0;
+        padding: 3px 8px;
+        border-radius: 6px;
+        background: #1a2540;
+        border: 1px solid var(--border);
+        font-size: 12px;
+        cursor: help;
+        line-height: 1.35;
+      }
+      .skill-tag.primary { border-color: #3b82f6; background: #152038; }
+      .skill-tag[data-justification] { cursor: pointer; }
+      .remote-reason-btn { margin-top: 6px; }
+      #jobModal .modal-head {
+        justify-content: flex-end;
+      }
+      .user-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .user-info-grid .item {
+        background: #0f1730;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+      }
+      .user-info-grid .k {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+      .date-range {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+      }
+      .date-range-row {
+        margin-top: 8px;
+      }
+      .section-separator {
+        height: 1px;
+        border: 0;
+        background: var(--border);
+        margin: 10px 0 8px;
+      }
+      .section-head-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .ghost-btn {
+        background: #0f1730;
+        border: 1px solid var(--border);
+      }
+      .pager {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .pager-icon-btn {
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pager-icon-btn svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+      }
+      .skills-picker {
+        position: relative;
+        min-width: 280px;
+      }
+      .skills-picker-btn {
+        width: 100%;
+        text-align: left;
+        background: #0f1730;
+        border: 1px solid var(--border);
+      }
+      .skills-picker-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        max-height: 260px;
+        overflow: auto;
+        z-index: 30;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #10182d;
+        padding: 8px;
+        display: none;
+      }
+      .skills-picker-menu.open { display: block; }
+      .skills-group {
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(39, 51, 87, 0.45);
+      }
+      .skills-group:last-child {
+        margin-bottom: 0;
+        border-bottom: 0;
+      }
+      .skills-group-title {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
+      .skill-check {
+        display: block;
+        font-size: 13px;
+        padding: 2px 0;
+      }
+      .skill-check input { margin-right: 6px; }
+      .highly-relevant-filter {
+        display: none;
+        align-items: center;
+        gap: 6px;
+      }
+      .highly-relevant-filter.is-visible {
+        display: inline-flex;
+      }
+      .hint-btn {
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border-radius: 50%;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        flex-shrink: 0;
+        background: #0f1730;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .hint-btn:hover {
+        color: var(--text);
+        border-color: var(--accent);
+      }
+    </style>
+  <!-- Yandex.Metrika counter -->
+  <script type="text/javascript">
+    (function(m,e,t,r,i,k,a){
+      m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+      m[i].l=1*new Date();
+      for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+      k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a);
+    })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=108983922', 'ym');
+
+    ym(108983922, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+  </script>
+  <!-- /Yandex.Metrika counter -->
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Agent clients</h1>
+      <p id="globalMsg" class="muted"></p>
+      <div id="agentPickerRow" class="row date-range-row" style="display:none">
+        <label>View as agent
+          <select id="agentPickerSel" style="min-width:240px"></select>
+        </label>
+      </div>
+
+      <div class="layout">
+        <section class="card layout-col">
+          <h2>Clients</h2>
+          <div id="usersList" class="users-list layout-col-body"></div>
+        </section>
+
+        <section class="card layout-col">
+          <div class="section-head-row">
+            <h2>Client applications</h2>
+            <button id="toggleUserInfoBtn" type="button" class="ghost-btn">Show user info</button>
+          </div>
+          <div id="userInfoSection" style="display:none">
+            <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
+            <div class="row">
+              <button id="openResumeBtn" type="button">Open resume</button>
+            </div>
+            <hr class="section-separator" />
+          </div>
+          <div class="row date-range-row">
+            <span class="date-range">
+              <label>From <input id="fromDate" type="date" /></label>
+              <label>To <input id="toDate" type="date" /></label>
+            </span>
+          </div>
+          <div class="row date-range-row">
+            <label>Roles</label>
+            <div class="skills-picker">
+              <button id="skillPickerBtn" type="button" class="skills-picker-btn">All roles</button>
+              <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            </div>
+            <span id="highlyRelevantFilterWrap" class="highly-relevant-filter" aria-hidden="true">
+              <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
+              <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="What does Top matches mean?" aria-label="What does Top matches mean?">?</button>
+            </span>
+          </div>
+          <div class="row date-range-row">
+            <label>Search in</label>
+            <div class="skills-picker">
+              <button id="sourcePickerBtn" type="button" class="skills-picker-btn">All sources</button>
+              <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            </div>
+          </div>
+          <div id="sourceFilterRow" class="row date-range-row" style="display:none" hidden>
+            <label>Source
+              <select id="sourceSel">
+                <option value="">All</option>
+                <option value="Linkedin">Linkedin</option>
+                <option value="Indeed">Indeed</option>
+                <option value="hirehi">hirehi</option>
+              </select>
+            </label>
+          </div>
+          <div class="row date-range-row">
+            <button id="syncBtn">Search</button>
+            <button id="clearFiltersBtn" type="button" class="ghost-btn">Reset filters</button>
+            <span id="syncLoader" class="loader" aria-hidden="true"></span>
+            <span class="pager">
+              <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Previous page">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+              </button>
+              <span id="pageInfo" class="muted pager-summary"></span>
+              <button id="nextPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Next page">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+              </button>
+              <label>Page size
+                <select id="pageSizeSel">
+                  <option value="50">50</option>
+                  <option value="100" selected>100</option>
+                  <option value="200">200</option>
+                </select>
+              </label>
+            </span>
+          </div>
+          <p id="dashMsg" class="muted"></p>
+          <div class="layout-col-body">
+            <table>
+              <thead>
+                <tr>
+                  <th>Id</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Apply type</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="jobsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div id="highlyRelevantHintModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card" style="width:min(520px,95vw);height:auto;max-height:85vh">
+        <div class="modal-head">
+          <strong>Top matches</strong>
+          <button id="highlyRelevantHintClose" type="button" class="ghost-btn">Close</button>
+        </div>
+        <div class="modal-body" style="padding:12px">
+          <p style="margin:0 0 12px">When <strong>Top matches</strong> is enabled, only jobs with the highest relevance to selected roles are shown.</p>
+          <p style="margin:0">When disabled, you also see other suitable jobs that may be useful but are not in the top relevance tier.</p>
+        </div>
+      </div>
+    </div>
+    <div id="cvModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="cvModalTitle">Document</strong>
+          <button id="cvModalClose" type="button">Close</button>
+        </div>
+        <div class="modal-body">
+          <iframe id="cvModalFrame" title="Document preview"></iframe>
+        </div>
+      </div>
+    </div>
+    <div id="jobModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <button id="jobModalClose" type="button" class="ghost-btn" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body" style="padding:12px;overflow:auto;background:#0a1020">
+          <div id="jobInfo" class="muted">Select a job to continue.</div>
+          <div id="jobActions" style="display:none">
+            <div class="row" style="margin-bottom:12px">
+              <button id="genBtn">Generate Tailored CV + Cover Letter</button>
+              <span id="jobLoader" class="loader" aria-hidden="true"></span>
+            </div>
+            <div class="artifacts" id="artifactLinks" style="margin-bottom:16px"></div>
+            <div id="coverLetterBlock" style="display:none;margin-bottom:16px">
+              <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600">Cover letter</label>
+              <textarea id="coverPreview" readonly style="margin-bottom:0"></textarea>
+            </div>
+            <div id="statusRow" style="margin-bottom:12px">
+              <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600">Mark as</label>
+              <select id="statusSel" style="width:100%">
+                <option value="new">new</option>
+                <option value="applied">applied</option>
+                <option value="skipped">skipped</option>
+              </select>
+            </div>
+            <p id="jobMsg" class="muted" style="margin-top:8px"></p>
+          </div>
+          <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
+            <div class="skills-block">
+              <h4>Admin notes</h4>
+              <textarea id="notesText" aria-label="Admin notes"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="insightModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card" style="width:min(520px,95vw);height:auto;max-height:85vh">
+        <div class="modal-head">
+          <strong id="insightModalTitle">Details</strong>
+          <button id="insightModalClose" type="button" class="ghost-btn" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body" style="padding:12px">
+          <p id="insightModalText" class="job-summary" style="margin:0"></p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+
+      function getTgInitDataString() {
+        return String(tg?.initData || window.Telegram?.WebView?.initParams?.tgWebAppData || '').trim();
+      }
+
+      function attachMiniAppAuthHeaders(headers) {
+        const data = getTgInitDataString();
+        if (data) {
+          headers['x-init-data'] = data;
+          headers.Authorization = `tma ${data}`;
+        }
+      }
+
+      async function waitForTelegramInitData(maxMs = 15000) {
+        if (getTgInitDataString()) return;
+        const start = Date.now();
+        while (Date.now() - start < maxMs) {
+          if (getTgInitDataString()) return;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+
+      const API_BASE = '';
+      const SKILLS_URL = '/api/admin/skills';
+      const POSITIONS_URL = '/api/admin/positions';
+
+      let users = [];
+      let agents = [];
+      let isBotAdminUser = false;
+      let isCareerAgentUser = false;
+      let skills = [];
+      let positions = [];
+      let applications = [];
+      let selectedJob = null;
+      let selectedApplication = null;
+      let generatedMaterials = null;
+      let jobsSort = { key: 'id', dir: 'desc' };
+      let isSyncing = false;
+      let isJobBusy = false;
+      let isUserInfoHidden = true;
+      let isSkillPickerOpen = false;
+      let isSourcePickerOpen = false;
+      let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
+
+      const APPLY_TYPE_OPTIONS = [
+        { value: 'linkedin', label: 'LinkedIn' },
+        { value: 'indeed', label: 'Indeed' },
+        { value: 'telegram', label: 'Telegram' },
+        { value: 'external', label: 'Company sites' },
+      ];
+      const APPLY_TYPE_LABELS = {
+        linkedin: 'LinkedIn',
+        indeed: 'Indeed',
+        telegram: 'Telegram',
+        external: 'Company sites',
+        thirdParty: 'Third-party site',
+      };
+
+      function getApplyTypeDisplay(position) {
+        const applyType = String(position?.applyType || '').trim().toLowerCase();
+        const source = String(position?.source || '').trim().toLowerCase();
+        if (applyType === 'easy_apply') {
+          if (source === 'linkedin') return 'LinkedIn';
+          if (source === 'indeed') return 'Indeed';
+        }
+        if (applyType === 'telegram') return 'Telegram';
+        if (applyType === 'external') return APPLY_TYPE_LABELS.thirdParty;
+        if (applyType === 'linkedin') return 'LinkedIn';
+        if (applyType === 'indeed') return 'Indeed';
+        return APPLY_TYPE_LABELS[applyType] || position?.applyType || '—';
+      }
+
+      function q() {
+        const p = new URLSearchParams(location.search);
+        return {
+          seekerId: p.get('seekerId') || '',
+          from: p.get('from') || '',
+          to: p.get('to') || '',
+          skillIds: p.get('skillIds') || p.get('skillId') || '',
+          applyTypes: p.get('applyTypes') || '',
+          source: p.get('source') || '',
+          showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || '',
+          jobId: p.get('jobId') || '',
+          agentUserId: p.get('agentUserId') || '',
+          page: p.get('page') || '1',
+          pageSize: p.get('pageSize') || '100',
+        };
+      }
+      function agentQuerySuffix() {
+        if (!isBotAdminUser) return '';
+        const aid = String(q().agentUserId || '').trim();
+        return aid ? `&agentUserId=${encodeURIComponent(aid)}` : '';
+      }
+      function agentQueryPrefix() {
+        if (!isBotAdminUser) return '';
+        const aid = String(q().agentUserId || '').trim();
+        return aid ? `?agentUserId=${encodeURIComponent(aid)}` : '';
+      }
+      function setQ(next) {
+        const p = new URLSearchParams(location.search);
+        Object.entries(next).forEach(([k, v]) => {
+          if (v == null || v === '') p.delete(k); else p.set(k, String(v));
+        });
+        history.replaceState(null, '', `?${p.toString()}`);
+      }
+      function setMsg(id, txt, isErr = false) {
+        const el = document.getElementById(id);
+        el.textContent = txt || '';
+        el.className = isErr ? 'bad' : 'muted';
+      }
+      function isTruthyQueryParam(value) {
+        const v = String(value || '').trim().toLowerCase();
+        return v === 'true' || v === '1' || v === 'yes';
+      }
+      function normalizeSourceToken(value) {
+        const v = String(value || '').trim().toLowerCase();
+        if (v === 'linkedin') return 'Linkedin';
+        if (v === 'indeed') return 'Indeed';
+        if (v === 'hirehi') return 'hirehi';
+        return '';
+      }
+      function mapLegacyApplyTypeToken(value) {
+        const v = String(value || '').trim().toLowerCase();
+        if (!v) return '';
+        if (v === 'telegram' || v === 'telegram channels') return 'telegram';
+        if (v === 'external' || v === 'company sites') return 'external';
+        if (v === 'linkedin') return 'linkedin';
+        if (v === 'indeed') return 'indeed';
+        return '';
+      }
+      function localIsoDate(d) {
+        if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+      function esc(v) {
+        return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      /** For HTML attribute values (e.g. title tooltips). */
+      function attrEsc(v) {
+        return String(v || '')
+          .replace(/\r\n|\r|\n/g, ' ')
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;');
+      }
+      function skillDisplayLine(s) {
+        const roleName = String(s.roleName || '').trim() || '—';
+        const name = String(s.name || '').trim() || '—';
+        return `${roleName} : ${name}`;
+      }
+      function remoteTagHtml(remoteReasoning) {
+        const r = String(remoteReasoning || '').trim();
+        if (!r) return '';
+        return `<span class="tag-remote" title="${attrEsc(r)}">Remote</span>`;
+      }
+      function renderJobSkillsHtml(skills) {
+        const list = Array.isArray(skills) ? skills : [];
+        const primary = list.filter((s) => s.isHighlyRelevant === true);
+        const secondary = list.filter((s) => s.isHighlyRelevant !== true);
+        const chips = (arr, cls) =>
+          arr
+            .map((s) => {
+              const label = esc(skillDisplayLine(s));
+              const tip = attrEsc(s.justification || '');
+              return `<span class="skill-tag ${cls}" data-justification="${tip}" title="${tip}">${label}</span>`;
+            })
+            .join('');
+        let out = '<div class="skills-block">';
+        out += `<h4>Key skills</h4><div>${chips(primary, 'primary') || '<span class="muted">None</span>'}</div>`;
+        out += `<h4>Other skills</h4><div>${chips(secondary, '') || '<span class="muted">None</span>'}</div>`;
+        out += '</div>';
+        return out;
+      }
+      function formatPostedDate(v) {
+        const s = String(v || '').trim();
+        if (!s) return '';
+        if (s.includes('T')) return s.split('T')[0];
+        return s;
+      }
+      function sortArrow(key) {
+        if (jobsSort.key !== key) return '';
+        return jobsSort.dir === 'asc' ? ' ▲' : ' ▼';
+      }
+      function asComparableDate(v) {
+        const t = new Date(String(v || '')).getTime();
+        return Number.isFinite(t) ? t : 0;
+      }
+      function compareJobs(a, b) {
+        const appA = appByScreenlyId(a.id);
+        const appB = appByScreenlyId(b.id);
+        const dir = jobsSort.dir === 'asc' ? 1 : -1;
+        let va = '';
+        let vb = '';
+        switch (jobsSort.key) {
+          case 'id':
+            return (Number(a.id) - Number(b.id)) * dir;
+          case 'title':
+            va = String(a.title || '').toLowerCase();
+            vb = String(b.title || '').toLowerCase();
+            break;
+          case 'company':
+            va = String(a.company || '').toLowerCase();
+            vb = String(b.company || '').toLowerCase();
+            break;
+          case 'location':
+            va = String(a.location || '').toLowerCase();
+            vb = String(b.location || '').toLowerCase();
+            break;
+          case 'posted':
+            return (asComparableDate(a.publishedAt) - asComparableDate(b.publishedAt)) * dir;
+          case 'status':
+            va = String(appA?.Status || 'new').toLowerCase();
+            vb = String(appB?.Status || 'new').toLowerCase();
+            break;
+          default:
+            va = String(a.title || '').toLowerCase();
+            vb = String(b.title || '').toLowerCase();
+            break;
+        }
+        if (va < vb) return -1 * dir;
+        if (va > vb) return 1 * dir;
+        return 0;
+      }
+      function setJobsSort(key) {
+        if (jobsSort.key === key) {
+          jobsSort.dir = jobsSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          jobsSort.key = key;
+          jobsSort.dir = (key === 'posted' || key === 'id') ? 'desc' : 'asc';
+        }
+        renderJobs();
+      }
+      function onLoading(id, on) {
+        const el = document.getElementById(id);
+        el.className = on ? 'loader on' : 'loader';
+      }
+      function setSyncBusy(on) {
+        isSyncing = on;
+        onLoading('syncLoader', on);
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'sourceSel', 'openResumeBtn', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.disabled = on;
+        });
+        updateHighlyRelevantFilterState();
+      }
+      function hasSelectedSkills() {
+        return Boolean(getSelectedSkillIdsCsv().trim());
+      }
+      function updateHighlyRelevantFilterState() {
+        const el = document.getElementById('showOnlyHighlyRelevant');
+        const wrap = document.getElementById('highlyRelevantFilterWrap');
+        if (!el || !wrap) return;
+        const wasVisible = wrap.classList.contains('is-visible');
+        if (!hasSelectedSkills()) {
+          el.checked = false;
+          el.disabled = false;
+          wrap.classList.remove('is-visible');
+          wrap.setAttribute('aria-hidden', 'true');
+          setQ({ showOnlyHighlyRelevant: '' });
+          return;
+        }
+        wrap.classList.add('is-visible');
+        wrap.setAttribute('aria-hidden', 'false');
+        el.disabled = isSyncing;
+        if (!wasVisible && !isTruthyQueryParam(q().showOnlyHighlyRelevant)) {
+          el.checked = true;
+          setQ({ showOnlyHighlyRelevant: 'true' });
+        }
+      }
+      function syncHighlyRelevantCheckboxFromQuery() {
+        const el = document.getElementById('showOnlyHighlyRelevant');
+        if (!el || !hasSelectedSkills()) return;
+        el.checked = isTruthyQueryParam(q().showOnlyHighlyRelevant);
+      }
+      function pagerSummaryText(pi) {
+        const page = Number(pi.page) || 1;
+        const pageSize = Number(pi.pageSize) || 100;
+        const count = Number(pi.count) || 0;
+        const total = Number(pi.totalRows) || 0;
+        if (total === 0 && count === 0) return 'No results';
+        if (count === 0) return total > 0 ? `0 of ${total}` : 'No results';
+        const from = (page - 1) * pageSize + 1;
+        const to = Math.min(from + count - 1, total > 0 ? total : from + count - 1);
+        return total > 0 ? `${from}–${to} of ${total}` : `${from}–${to}`;
+      }
+      function updatePagerUi() {
+        const info = document.getElementById('pageInfo');
+        const prev = document.getElementById('prevPageBtn');
+        const next = document.getElementById('nextPageBtn');
+        const sizeSel = document.getElementById('pageSizeSel');
+        if (info) info.textContent = pagerSummaryText(pageInfo);
+        if (prev) prev.disabled = isSyncing || pageInfo.page <= 1;
+        if (next) next.disabled = isSyncing || !pageInfo.hasMore;
+        if (sizeSel) sizeSel.value = String(pageInfo.pageSize);
+      }
+      function setJobBusy(on) {
+        isJobBusy = on;
+        onLoading('jobLoader', on);
+        ['statusSel', 'notesText', 'genBtn'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.disabled = on;
+        });
+      }
+      function setUserInfoVisibility(hidden) {
+        isUserInfoHidden = !!hidden;
+        const section = document.getElementById('userInfoSection');
+        const btn = document.getElementById('toggleUserInfoBtn');
+        if (section) section.style.display = isUserInfoHidden ? 'none' : '';
+        if (btn) btn.textContent = isUserInfoHidden ? 'Show user info' : 'Hide user info';
+      }
+      function openCvModal(title, url) {
+        document.getElementById('cvModalTitle').textContent = title || 'Document';
+        document.getElementById('cvModalFrame').src = url || 'about:blank';
+        document.getElementById('cvModal').classList.add('on');
+      }
+      function closeCvModal() {
+        document.getElementById('cvModal').classList.remove('on');
+        document.getElementById('cvModalFrame').src = 'about:blank';
+      }
+      function openJobModal() {
+        document.getElementById('jobModal').classList.add('on');
+      }
+      function closeJobModal() {
+        document.getElementById('jobModal').classList.remove('on');
+      }
+      function showInsight(title, text) {
+        document.getElementById('insightModalTitle').textContent = String(title || '').trim() || 'Details';
+        document.getElementById('insightModalText').textContent = String(text || '').trim() || 'No data';
+        document.getElementById('insightModal').classList.add('on');
+      }
+      function hideInsight() {
+        document.getElementById('insightModalTitle').textContent = '';
+        document.getElementById('insightModalText').textContent = '';
+        document.getElementById('insightModal').classList.remove('on');
+      }
+      function bindJobDetailInteractions(job) {
+        document.querySelectorAll('.skill-tag[data-justification]').forEach((el) => {
+          el.addEventListener('click', () => {
+            const justification = el.getAttribute('data-justification') || '';
+            showInsight('Skill insight', justification);
+          });
+        });
+        const remoteBtn = document.getElementById('showRemoteReasonBtn');
+        if (remoteBtn) {
+          remoteBtn.addEventListener('click', () => {
+            showInsight('Remote reason', job.remoteReasoning || 'No data');
+          });
+        }
+      }
+      async function api(url, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        attachMiniAppAuthHeaders(headers);
+        const res = await fetch(url, { ...options, headers });
+        if (!res.ok) throw new Error(await res.text());
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) return res.json();
+        return res.text();
+      }
+
+      async function loadAgents() {
+        if (!isBotAdminUser) return;
+        agents = await api('/api/app/admin/agents');
+        const row = document.getElementById('agentPickerRow');
+        const sel = document.getElementById('agentPickerSel');
+        if (!row || !sel) return;
+        if (!agents.length) {
+          row.style.display = 'none';
+          return;
+        }
+        row.style.display = '';
+        sel.innerHTML = agents
+          .map((a) => `<option value="${esc(a.id)}">${esc(a.displayName || `#${a.id}`)} (${esc(a.telegramChatId)})</option>`)
+          .join('');
+        const current = String(q().agentUserId || '').trim();
+        if (current && agents.some((a) => String(a.id) === current)) {
+          sel.value = current;
+        } else {
+          setQ({ agentUserId: agents[0].id });
+          sel.value = String(agents[0].id);
+        }
+      }
+
+      async function loadClients() {
+        let url = '/api/app/agent/clients?limit=200';
+        const aid = String(q().agentUserId || '').trim();
+        if (isBotAdminUser && aid) url += `&agentUserId=${encodeURIComponent(aid)}`;
+        const payload = await api(url);
+        users = Array.isArray(payload?.clients) ? payload.clients : [];
+        renderUsers();
+      }
+      function renderUsers() {
+        const root = document.getElementById('usersList');
+        const qs = q();
+        if (!users.length) {
+          root.innerHTML = '<p class="muted">No clients with resume data for this agent.</p>';
+          return;
+        }
+        root.innerHTML = users.map((u) => `
+          <button data-id="${u.id}" class="${String(u.id) === qs.seekerId ? 'selected' : ''}">
+            #${u.id}
+            ${esc(
+              [String(u.displayFirstName || '').trim(), String(u.displayLastName || '').trim()].filter(Boolean).join(' ')
+              || [String(u.firstName || '').trim(), String(u.lastName || '').trim()].filter(Boolean).join(' ')
+              || u.telegramUserName
+              || ''
+            )}
+            (${esc(u.telegramChatId)})
+          </button>
+        `).join('');
+        root.querySelectorAll('button[data-id]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            onUserSelected(btn.getAttribute('data-id')).catch((err) => {
+              setMsg('dashMsg', err.message, true);
+            });
+          });
+        });
+      }
+      function renderSelectedUserInfo() {
+        const el = document.getElementById('selectedUserInfo');
+        const u = getSelectedUser();
+        if (!u) {
+          el.className = 'muted';
+          el.innerHTML = 'Select a user to view user information.';
+          return;
+        }
+        const username = String(u.telegramUserName || '').trim();
+        const firstName = String(u.displayFirstName || u.firstName || '').trim();
+        const lastName = String(u.displayLastName || u.lastName || '').trim();
+        const email = String(u.displayEmail || '').trim();
+        const phoneNumber = String(u.displayPhoneNumber || '').trim();
+        const usernameNoAt = username.replace(/^@/, '');
+        const usernameHtml = usernameNoAt
+          ? `<a href="https://t.me/${encodeURIComponent(usernameNoAt)}" target="_blank" rel="noopener noreferrer">${esc(usernameNoAt)}</a>`
+          : '—';
+        el.className = 'job-detail';
+        el.innerHTML = `
+          <div class="user-info-grid">
+            <div class="item">
+              <div class="k">Telegram username</div>
+              <div>${usernameHtml}</div>
+            </div>
+            <div class="item">
+              <div class="k">First name</div>
+              <div>${esc(firstName || '—')}</div>
+            </div>
+            <div class="item">
+              <div class="k">Last name</div>
+              <div>${esc(lastName || '—')}</div>
+            </div>
+            <div class="item">
+              <div class="k">User Id</div>
+              <div>${esc(String(u.id || '—'))}</div>
+            </div>
+            <div class="item">
+              <div class="k">TelegramChatId</div>
+              <div>${esc(String(u.telegramChatId || '—'))}</div>
+            </div>
+            <div class="item">
+              <div class="k">Email</div>
+              <div>${esc(email || '—')}</div>
+            </div>
+            <div class="item">
+              <div class="k">Phone</div>
+              <div>${esc(phoneNumber || '—')}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      async function loadSkills() {
+        const payload = await api(SKILLS_URL);
+        skills = payload.skills || payload || [];
+        const menu = document.getElementById('skillPickerMenu');
+        const grouped = new Map();
+        for (const s of skills) {
+          const roleName = String(s.roleName || s.RoleName || '').trim() || 'Other';
+          const skillName = String(s.name || s.Name || `${s.id}`).trim() || String(s.id);
+          if (!grouped.has(roleName)) grouped.set(roleName, []);
+          grouped.get(roleName).push({ id: s.id, name: skillName });
+        }
+        const sortedGroups = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
+        menu.innerHTML = sortedGroups.map(([roleName, items]) => {
+          const optionsHtml = items
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((item) =>
+              `<label class="skill-check"><input type="checkbox" value="${item.id}" />${esc(item.name)}</label>`
+            )
+            .join('');
+          return `<div class="skills-group"><div class="skills-group-title">${esc(roleName)}</div>${optionsHtml}</div>`;
+        }).join('');
+      }
+
+      function getSelectedSkillIdsCsv() {
+        const checked = document.querySelectorAll('#skillPickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => String(opt.value || '').trim())
+          .filter(Boolean)
+          .join(',');
+      }
+
+      function applySelectedSkillIdsCsv(csv) {
+        const selected = new Set(
+          String(csv || '')
+            .split(',')
+            .map((v) => v.trim())
+            .filter(Boolean)
+        );
+        document.querySelectorAll('#skillPickerMenu input[type="checkbox"]').forEach((opt) => {
+          opt.checked = selected.has(String(opt.value));
+        });
+        renderSkillPickerSummary();
+      }
+
+      function renderSkillPickerSummary() {
+        const csv = getSelectedSkillIdsCsv();
+        const btn = document.getElementById('skillPickerBtn');
+        if (!csv) {
+          btn.textContent = 'All roles';
+        } else {
+          const ids = [...new Set(csv.split(',').map((id) => id.trim()).filter(Boolean))];
+          btn.textContent = `${ids.length} role(s) selected`;
+        }
+        updateHighlyRelevantFilterState();
+      }
+
+      function openSkillPicker() {
+        isSkillPickerOpen = true;
+        document.getElementById('skillPickerMenu').classList.add('open');
+      }
+
+      function closeSkillPicker() {
+        isSkillPickerOpen = false;
+        document.getElementById('skillPickerMenu').classList.remove('open');
+      }
+
+      function renderSourcePickerOptions() {
+        const menu = document.getElementById('sourcePickerMenu');
+        menu.innerHTML = APPLY_TYPE_OPTIONS
+          .map(
+            (item) =>
+              `<label class="skill-check"><input type="checkbox" value="${attrEsc(item.value)}" />${esc(item.label)}</label>`
+          )
+          .join('');
+      }
+
+      function getSelectedSources() {
+        const checked = document.querySelectorAll('#sourcePickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => String(opt.value || '').trim())
+          .filter(Boolean);
+      }
+
+      function applySelectedApplyTypesCsv(csv) {
+        const selected = new Set(
+          String(csv || '')
+            .split(',')
+            .map((v) => mapLegacyApplyTypeToken(v))
+            .filter(Boolean)
+        );
+        document.querySelectorAll('#sourcePickerMenu input[type="checkbox"]').forEach((opt) => {
+          opt.checked = selected.has(String(opt.value || '').trim().toLowerCase());
+        });
+        renderSourcePickerSummary();
+      }
+
+      function renderSourcePickerSummary() {
+        const selected = getSelectedSources();
+        const btn = document.getElementById('sourcePickerBtn');
+        btn.textContent = selected.length ? `${selected.length} source(s) selected` : 'All sources';
+      }
+
+      function openSourcePicker() {
+        isSourcePickerOpen = true;
+        document.getElementById('sourcePickerMenu').classList.add('open');
+      }
+
+      function closeSourcePicker() {
+        isSourcePickerOpen = false;
+        document.getElementById('sourcePickerMenu').classList.remove('open');
+      }
+
+      function clearFiltersToLastWeek() {
+        const now = new Date();
+        const to = localIsoDate(now);
+        const fromDate = new Date(now);
+        fromDate.setDate(fromDate.getDate() - 7);
+        const from = localIsoDate(fromDate);
+        document.getElementById('fromDate').value = from > to ? to : from;
+        document.getElementById('toDate').value = to;
+        applySelectedSkillIdsCsv('');
+        applySelectedApplyTypesCsv('');
+        document.getElementById('sourceSel').value = '';
+        document.getElementById('showOnlyHighlyRelevant').checked = false;
+        setQ({
+          from: document.getElementById('fromDate').value,
+          to,
+          skillIds: '',
+          applyTypes: '',
+          source: '',
+          showOnlyHighlyRelevant: '',
+          page: '1',
+          jobId: '',
+        });
+      }
+
+      async function loadApplicationsByUser(userId) {
+        applications = await api(`${API_BASE}/api/app/applications/by-user?userId=${encodeURIComponent(userId)}&limit=100&offset=0${agentQuerySuffix()}`);
+      }
+
+      async function syncJobs() {
+        if (isSyncing) return;
+        const seekerId = q().seekerId;
+        const from = document.getElementById('fromDate').value;
+        const to = document.getElementById('toDate').value;
+        const skillIds = getSelectedSkillIdsCsv() || String(q().skillIds || '').trim();
+        const applyTypes = getSelectedSources().join(',');
+        const source = normalizeSourceToken(document.getElementById('sourceSel').value);
+        const showOnlyHighlyRelevant =
+          Boolean(skillIds.trim()) && document.getElementById('showOnlyHighlyRelevant').checked;
+        const query = q();
+        const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
+        const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(query.pageSize || '100'), 10) || 100));
+        if (!seekerId) throw new Error('Select seeker first.');
+        if (!from || !to) throw new Error('Set from and to dates.');
+
+        setQ({
+          seekerId,
+          from,
+          to,
+          skillIds,
+          applyTypes,
+          source,
+          showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '',
+          page,
+          pageSize,
+        });
+        setSyncBusy(true);
+        try {
+          const posUrl =
+            `${POSITIONS_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
+            `${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}` +
+            `${applyTypes ? `&applyTypes=${encodeURIComponent(applyTypes)}` : ''}` +
+            `${source ? `&source=${encodeURIComponent(source)}` : ''}` +
+            `${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}` +
+            `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
+          const data = await api(posUrl);
+          positions = data.positions || [];
+          pageInfo = {
+            page: Number(data.page || page),
+            pageSize: Number(data.pageSize || pageSize),
+            hasMore: !!data.hasMore,
+            count: Number(data.count || positions.length),
+            totalRows: Number(data.totalRows || data.count || positions.length),
+          };
+          await loadApplicationsByUser(seekerId);
+          renderJobs();
+          updatePagerUi();
+          setMsg('dashMsg', `Loaded ${pageInfo.count} jobs (page ${pageInfo.page}).`);
+        } finally {
+          setSyncBusy(false);
+          updatePagerUi();
+        }
+      }
+
+      function appByScreenlyId(screenlyId) {
+        return applications.find((a) => Number(a.ScreenlyJobId) === Number(screenlyId)) || null;
+      }
+
+      function renderJobs() {
+        const body = document.getElementById('jobsBody');
+        const headRow = document.querySelector('table thead tr');
+        headRow.innerHTML = `
+          <th><button type="button" data-sort="id">Id${sortArrow('id')}</button></th>
+          <th><button type="button" data-sort="title">Title${sortArrow('title')}</button></th>
+          <th><button type="button" data-sort="company">Company${sortArrow('company')}</button></th>
+          <th><button type="button" data-sort="location">Location${sortArrow('location')}</button></th>
+          <th><button type="button" data-sort="posted">Posted${sortArrow('posted')}</button></th>
+          <th>Source</th>
+          <th>Apply type</th>
+          <th><button type="button" data-sort="status">Status${sortArrow('status')}</button></th>
+        `;
+        headRow.querySelectorAll('button[data-sort]').forEach((btn) => {
+          btn.addEventListener('click', () => setJobsSort(btn.getAttribute('data-sort')));
+        });
+
+        if (!positions.length) {
+          body.innerHTML = '<tr><td colspan="8" class="muted">No jobs loaded.</td></tr>';
+          return;
+        }
+        const sorted = [...positions].sort(compareJobs);
+        body.innerHTML = sorted.map((p) => {
+          const app = appByScreenlyId(p.id);
+          return `<tr data-open="${p.id}">
+            <td>${esc(p.id)}</td>
+            <td>${esc(p.title)}</td>
+            <td>${esc(p.company)}</td>
+            <td>${esc(p.location)}</td>
+            <td>${esc(formatPostedDate(p.publishedAt))}</td>
+            <td>${esc(p.source || '—')}</td>
+            <td>${esc(p.applyType || '—')}</td>
+            <td>${esc(app?.Status || 'new')}</td>
+          </tr>`;
+        }).join('');
+        body.querySelectorAll('tr[data-open]').forEach((row) => {
+          row.addEventListener('click', () => {
+            const id = Number(row.getAttribute('data-open'));
+            setQ({ jobId: id });
+            openJobById(id);
+          });
+        });
+      }
+
+      async function ensureApplication(seekerId, job) {
+        let app = appByScreenlyId(job.id);
+        if (app) return app;
+        app = await api(`${API_BASE}/api/app/applications`, {
+          method: 'POST',
+          body: JSON.stringify({
+            userId: Number(seekerId),
+            screenlyJobId: Number(job.id),
+            vacancyTitle: job.title,
+            companyName: job.company,
+            source: job.source,
+            appliedAt: new Date().toISOString(),
+            metaJson: {
+              positionId: job.id,
+              applyUrl: job.applyUrl || null,
+              location: job.location || null,
+              shortSummary: job.shortSummary || null,
+            },
+          }),
+        });
+        await loadApplicationsByUser(seekerId);
+        return appByScreenlyId(job.id) || app;
+      }
+
+      function openJobById(id) {
+        const job = positions.find((x) => Number(x.id) === Number(id));
+        if (!job) {
+          document.getElementById('jobNotesBlock').style.display = 'none';
+          document.getElementById('jobActions').style.display = 'none';
+          setMsg('jobMsg', '');
+          return;
+        }
+        selectedJob = job;
+        selectedApplication = appByScreenlyId(job.id);
+        generatedMaterials = null;
+        document.getElementById('jobInfo').classList.remove('muted');
+        document.getElementById('jobNotesBlock').style.display = 'block';
+        document.getElementById('jobActions').style.display = 'block';
+        hideInsight();
+        const remoteHtml = String(job.source || '').trim().toLowerCase() !== 'hirehi' && String(job.remoteReasoning || '').trim()
+          ? `<div class="skills-block"><h4>Remote</h4><button id="showRemoteReasonBtn" type="button" class="ghost-btn remote-reason-btn">Why remote match</button></div>`
+          : '';
+        const sumHtml = String(job.shortSummary || '').trim()
+          ? `<div class="skills-block" style="margin-top:10px"><h4>Summary</h4><p class="job-summary" style="margin:0">${esc(job.shortSummary)}</p></div>`
+          : '';
+        const applyTypeDisplay = String(getApplyTypeDisplay(job) || '').trim();
+        const applyCtaSuffix = applyTypeDisplay && applyTypeDisplay !== '—' ? ` (${esc(applyTypeDisplay)})` : '';
+        document.getElementById('jobInfo').innerHTML =
+          `<div class="job-detail">` +
+          `<div><strong>${esc(job.title)}</strong></div>` +
+          `<div class="sub">${esc(job.company)} · ${esc(job.location)}</div>` +
+          `<div class="sub" style="margin-top:4px">ID: #${esc(job.id)}</div>` +
+          `<div style="margin-top:6px"><a href="${esc(job.applyUrl || '#')}" target="_blank" rel="noopener noreferrer">Apply now${applyCtaSuffix}</a></div>` +
+          remoteHtml +
+          sumHtml +
+          renderJobSkillsHtml(job.skills) +
+          `</div>`;
+        document.getElementById('statusSel').value = selectedApplication?.Status || 'new';
+        document.getElementById('notesText').value = selectedApplication?.Notes || '';
+        setMsg('jobMsg', '');
+        renderArtifacts();
+        bindJobDetailInteractions(job);
+        openJobModal();
+      }
+
+      function renderArtifacts() {
+        const links = document.getElementById('artifactLinks');
+        const cover = document.getElementById('coverPreview');
+        const coverBlock = document.getElementById('coverLetterBlock');
+        const tailoredUrl = String(generatedMaterials?.tailoredCvUrl || selectedApplication?.TailoredCVURL || '').trim();
+        const coverText = String(
+          generatedMaterials?.coverLetter ?? selectedApplication?.CoverLetter ?? ''
+        ).trim();
+        if (!tailoredUrl && !coverText) {
+          links.innerHTML = '';
+          cover.value = '';
+          if (coverBlock) coverBlock.style.display = 'none';
+          return;
+        }
+        links.innerHTML = tailoredUrl
+          ? `
+            <button type="button" id="openTailoredCvBtn">Tailored CV (open)</button>
+            <a href="${esc(tailoredUrl)}" download target="_blank" rel="noopener noreferrer">Download Tailored CV</a>
+          `
+          : '';
+        const openBtn = document.getElementById('openTailoredCvBtn');
+        if (openBtn) {
+          openBtn.addEventListener('click', () => {
+            openCvModal('Tailored CV', tailoredUrl);
+          });
+        }
+        cover.value = coverText;
+        if (coverBlock) coverBlock.style.display = coverText ? '' : 'none';
+      }
+
+      async function saveStatus() {
+        if (isJobBusy) return;
+        const seekerId = q().seekerId;
+        if (!selectedJob) throw new Error('Open a job first.');
+        if (!seekerId) throw new Error('Select seeker first.');
+        setJobBusy(true);
+        try {
+          const app = await ensureApplication(seekerId, selectedJob);
+          const updated = await api(`${API_BASE}/api/app/applications/${app.Id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              status: document.getElementById('statusSel').value,
+              notes: document.getElementById('notesText').value,
+            }),
+          });
+          selectedApplication = updated;
+          await loadApplicationsByUser(seekerId);
+          renderJobs();
+          renderArtifacts();
+          setMsg('jobMsg', 'Status saved.');
+        } finally {
+          setJobBusy(false);
+        }
+      }
+
+      function getSelectedUser() {
+        const seekerId = q().seekerId;
+        if (!seekerId) return null;
+        return users.find((u) => String(u.id) === String(seekerId)) || null;
+      }
+
+      function userSkillIdsCsv(user) {
+        if (!user || !Array.isArray(user.skills)) return '';
+        return user.skills
+          .map((id) => String(id || '').trim())
+          .filter((id) => /^\d+$/.test(id))
+          .join(',');
+      }
+
+      function applyUserSkillsToFilters(user, { force = false } = {}) {
+        const skillCsv = userSkillIdsCsv(user);
+        const currentSkillIds = String(q().skillIds || '').trim();
+        if (!force && currentSkillIds) {
+          syncHighlyRelevantCheckboxFromQuery();
+          return false;
+        }
+        if (skillCsv) {
+          applySelectedSkillIdsCsv(skillCsv);
+          document.getElementById('showOnlyHighlyRelevant').checked = true;
+          setQ({ skillIds: skillCsv, showOnlyHighlyRelevant: 'true', page: '1' });
+          return true;
+        }
+        applySelectedSkillIdsCsv('');
+        document.getElementById('showOnlyHighlyRelevant').checked = false;
+        setQ({ skillIds: '', showOnlyHighlyRelevant: '', page: '1' });
+        renderSkillPickerSummary();
+        return false;
+      }
+
+      async function onUserSelected(userId) {
+        if (!userId) return;
+        hydrateStateToInputs();
+        const user = users.find((u) => String(u.id) === String(userId)) || null;
+        setQ({ seekerId: userId, jobId: '' });
+        applyUserSkillsToFilters(user, { force: true });
+        renderUsers();
+        renderSelectedUserInfo();
+        try {
+          await syncJobs();
+        } catch (err) {
+          setMsg('dashMsg', err.message, true);
+        }
+      }
+
+      function openSelectedUserResume() {
+        const u = getSelectedUser();
+        if (!u || !u.resumeUrl) {
+          setMsg('dashMsg', 'Selected user has no resumeUrl.', true);
+          return;
+        }
+        openCvModal(`Resume: #${u.id}`, u.resumeUrl);
+      }
+
+      async function generateMaterials() {
+        if (isJobBusy) return;
+        const seekerId = q().seekerId;
+        if (!selectedJob) throw new Error('Open a job first.');
+        if (!seekerId) throw new Error('Select seeker first.');
+        setJobBusy(true);
+        try {
+          const resumePayload = await api(`${API_BASE}/api/app/admin/users/${encodeURIComponent(seekerId)}/resume-text${agentQueryPrefix()}`);
+          const mainResumeText = String(resumePayload.resumeText || '').trim();
+          if (!mainResumeText) throw new Error('Resume text is empty for selected user.');
+
+          const [tailored, cover] = await Promise.all([
+            api(`${API_BASE}/api/tailored-resume/upload`, {
+              method: 'POST',
+              body: JSON.stringify({
+                seekerId: Number(seekerId),
+                screenlyJobId: Number(selectedJob.id),
+                jobTitle: selectedJob.title || '',
+                jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
+                mainResumeText,
+              }),
+            }),
+            api(`${API_BASE}/api/cover-letter`, {
+              method: 'POST',
+              body: JSON.stringify({
+                jobTitle: selectedJob.title || '',
+                jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
+                mainResumeText,
+              }),
+            }),
+          ]);
+
+          generatedMaterials = {
+            tailoredCvUrl: tailored.tailoredCvUrl,
+            coverLetter: cover.coverLetter,
+          };
+          renderArtifacts();
+          setMsg('jobMsg', 'Tailored CV + cover letter generated.');
+        } finally {
+          setJobBusy(false);
+        }
+      }
+
+      function hydrateStateToInputs() {
+        const s = q();
+        if (s.from && s.to) {
+          document.getElementById('fromDate').value = s.from;
+          document.getElementById('toDate').value = s.to;
+          return;
+        }
+        const now = new Date();
+        const to = localIsoDate(now);
+        const prev = new Date(now);
+        prev.setDate(prev.getDate() - 7);
+        const from = localIsoDate(prev);
+        document.getElementById('fromDate').value = from;
+        document.getElementById('toDate').value = to;
+      }
+
+      async function boot() {
+        await waitForTelegramInitData();
+        if (!getTgInitDataString()) {
+          throw new Error('Open this page from the bot via /clients (Telegram auth required).');
+        }
+        const profile = await api('/api/app/profile');
+        isBotAdminUser = !!profile?.isBotAdmin;
+        isCareerAgentUser = !!profile?.isCareerAgent;
+        if (!isBotAdminUser && !isCareerAgentUser) {
+          throw new Error('You are not assigned as a career agent. Ask an admin to assign clients to you.');
+        }
+        hydrateStateToInputs();
+        renderSourcePickerOptions();
+        if (isBotAdminUser) await loadAgents();
+        await Promise.all([loadClients(), loadSkills()]);
+        renderSelectedUserInfo();
+        setUserInfoVisibility(true);
+        const s = q();
+        applySelectedApplyTypesCsv(s.applyTypes || '');
+        if (s.skillIds) {
+          applySelectedSkillIdsCsv(s.skillIds);
+          syncHighlyRelevantCheckboxFromQuery();
+        } else if (s.seekerId) {
+          const bootUser = users.find((u) => String(u.id) === String(s.seekerId));
+          applyUserSkillsToFilters(bootUser, { force: true });
+        } else {
+          renderSkillPickerSummary();
+        }
+        if (s.source) document.getElementById('sourceSel').value = s.source;
+        document.getElementById('pageSizeSel').value = String(Math.min(200, Math.max(1, Number.parseInt(String(s.pageSize || '100'), 10) || 100)));
+        updatePagerUi();
+        if (s.seekerId) {
+          hydrateStateToInputs();
+          await syncJobs();
+          if (s.jobId) openJobById(Number(s.jobId));
+        }
+      }
+
+      document.getElementById('syncBtn').addEventListener('click', () => syncJobs().catch((e) => setMsg('dashMsg', e.message, true)));
+      document.getElementById('prevPageBtn').addEventListener('click', () => {
+        const cur = q();
+        const nextPage = Math.max(1, (Number.parseInt(String(cur.page || '1'), 10) || 1) - 1);
+        setQ({ page: nextPage });
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('nextPageBtn').addEventListener('click', () => {
+        const cur = q();
+        const nextPage = (Number.parseInt(String(cur.page || '1'), 10) || 1) + 1;
+        setQ({ page: nextPage });
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('pageSizeSel').addEventListener('change', () => {
+        const nextSize = Math.min(200, Math.max(1, Number.parseInt(document.getElementById('pageSizeSel').value, 10) || 100));
+        setQ({ pageSize: nextSize, page: 1 });
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+        clearFiltersToLastWeek();
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('skillPickerBtn').addEventListener('click', () => {
+        if (isSkillPickerOpen) closeSkillPicker();
+        else openSkillPicker();
+      });
+      document.getElementById('sourcePickerBtn').addEventListener('click', () => {
+        if (isSourcePickerOpen) closeSourcePicker();
+        else openSourcePicker();
+      });
+      document.getElementById('skillPickerMenu').addEventListener('change', () => {
+        renderSkillPickerSummary();
+        setQ({ skillIds: getSelectedSkillIdsCsv(), page: 1 });
+      });
+      document.getElementById('sourcePickerMenu').addEventListener('change', () => {
+        renderSourcePickerSummary();
+        setQ({ applyTypes: getSelectedSources().join(','), page: 1 });
+      });
+      document.addEventListener('click', (event) => {
+        const skillBtn = document.getElementById('skillPickerBtn');
+        const skillMenu = document.getElementById('skillPickerMenu');
+        if (isSkillPickerOpen && skillBtn && skillMenu && !skillBtn.contains(event.target) && !skillMenu.contains(event.target)) {
+          closeSkillPicker();
+        }
+        const sourceBtn = document.getElementById('sourcePickerBtn');
+        const sourceMenu = document.getElementById('sourcePickerMenu');
+        if (isSourcePickerOpen && sourceBtn && sourceMenu && !sourceBtn.contains(event.target) && !sourceMenu.contains(event.target)) {
+          closeSourcePicker();
+        }
+      });
+      document.getElementById('showOnlyHighlyRelevant').addEventListener('change', (event) => {
+        if (!hasSelectedSkills()) {
+          event.target.checked = false;
+          setQ({ showOnlyHighlyRelevant: '' });
+          return;
+        }
+        setQ({ showOnlyHighlyRelevant: event.target.checked ? 'true' : '', page: 1 });
+      });
+      document.getElementById('sourceSel').addEventListener('change', () => {
+        setQ({ source: document.getElementById('sourceSel').value, page: 1 });
+      });
+      document.getElementById('highlyRelevantHintBtn').addEventListener('click', () => {
+        document.getElementById('highlyRelevantHintModal').classList.add('on');
+      });
+      document.getElementById('highlyRelevantHintClose').addEventListener('click', () => {
+        document.getElementById('highlyRelevantHintModal').classList.remove('on');
+      });
+      document.getElementById('highlyRelevantHintModal').addEventListener('click', (event) => {
+        if (event.target.id === 'highlyRelevantHintModal') {
+          document.getElementById('highlyRelevantHintModal').classList.remove('on');
+        }
+      });
+      document.getElementById('toggleUserInfoBtn').addEventListener('click', () => {
+        setUserInfoVisibility(!isUserInfoHidden);
+      });
+      document.getElementById('agentPickerSel')?.addEventListener('change', () => {
+        const agentUserId = document.getElementById('agentPickerSel').value;
+        setQ({ agentUserId, seekerId: '', jobId: '', page: 1 });
+        loadClients().catch((e) => setMsg('globalMsg', e.message, true));
+      });
+      document.getElementById('statusSel').addEventListener('change', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('notesText').addEventListener('blur', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('genBtn').addEventListener('click', () => generateMaterials().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('openResumeBtn').addEventListener('click', openSelectedUserResume);
+      document.getElementById('cvModalClose').addEventListener('click', closeCvModal);
+      document.getElementById('cvModal').addEventListener('click', (e) => {
+        if (e.target.id === 'cvModal') closeCvModal();
+      });
+      document.getElementById('jobModalClose').addEventListener('click', closeJobModal);
+      document.getElementById('jobModal').addEventListener('click', (e) => {
+        if (e.target.id === 'jobModal') closeJobModal();
+      });
+      document.getElementById('insightModalClose').addEventListener('click', hideInsight);
+      document.getElementById('insightModal').addEventListener('click', (e) => {
+        if (e.target.id === 'insightModal') hideInsight();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeCvModal();
+          closeJobModal();
+          hideInsight();
+          closeSkillPicker();
+          closeSourcePicker();
+          document.getElementById('highlyRelevantHintModal').classList.remove('on');
+        }
+      });
+
+      boot().catch((err) => {
+        setMsg('globalMsg', `Failed to initialize admin panel: ${err.message}`, true);
+      });
+    </script>
+  </body>
+</html>

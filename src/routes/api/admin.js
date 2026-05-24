@@ -5,6 +5,7 @@ import { config } from '../../config.js';
 import { models, sequelize } from '../../db.js';
 import { buildAdminUserContactProjection } from '../../services/userService.js';
 import { extractResumeTextFromUrl } from '../../services/resumeService.js';
+import { resolveUserFromMiniApp, assertCanAccessClient } from '../../services/agentAccessService.js';
 
 export function createAdminRouter() {
   const router = Router();
@@ -301,9 +302,28 @@ export function createAdminRouter() {
       const telegramUserId = Number(req.miniAppUser?.id);
       const adminIds = config.botAdminTelegramIds;
       const isAdmin = Number.isSafeInteger(telegramUserId) && adminIds.size > 0 && adminIds.has(telegramUserId);
+      const requester = await resolveUserFromMiniApp(req.miniAppUser);
+      if (!requester) return res.status(403).json({ error: 'Forbidden' });
       if (!isAdmin) {
-        const requester = await models.Users.findOne({ where: { TelegramChatId: telegramUserId }, attributes: ['Id'] });
-        if (!requester || Number(requester.Id) !== id) return res.status(403).json({ error: 'Forbidden' });
+        if (Number(requester.Id) !== id) {
+          const access = await assertCanAccessClient({
+            actorUserId: requester.Id,
+            clientUserId: id,
+            isBotAdmin: false,
+          });
+          if (!access.ok) return res.status(access.status).json({ error: access.error });
+        }
+      } else {
+        const impersonateAgentUserId = Number.parseInt(String(req.query.agentUserId || ''), 10);
+        if (Number.isSafeInteger(impersonateAgentUserId) && impersonateAgentUserId > 0) {
+          const access = await assertCanAccessClient({
+            actorUserId: requester.Id,
+            clientUserId: id,
+            isBotAdmin: true,
+            impersonateAgentUserId,
+          });
+          if (!access.ok) return res.status(access.status).json({ error: access.error });
+        }
       }
       const user = await models.Users.findByPk(id);
       if (!user) return res.status(404).json({ error: 'User not found' });

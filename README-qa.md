@@ -89,7 +89,10 @@ Test each command in a **private chat** with the bot.
 
 | Command | Expected |
 |---------|----------|
-| `/admin` | Admin panel link |
+| `/admin_commands` | List all administrator bot commands |
+| `/admin` | Admin menu: agent clients + manage assignments |
+| `/clients`, `/agent_clients` | Agent clients workspace (admin or assigned career agent) |
+| `/admin_assignments` | Agent–client assignment management (admin only) |
 | `/admin_companies` | Company list |
 | `/admin_positions` | Position list with deep-link apply URLs |
 | `/admin_notifications` | Notification panel link |
@@ -223,6 +226,16 @@ curl "BASE/api/app/admin/stat2?period=7" \
 # Expected: 200 { success, period, totals, series }
 
 # User list
+curl "BASE/api/app/agent/clients?limit=50" \
+  -H "x-init-data: INIT_DATA"
+
+curl "BASE/api/app/admin/agent-clients" \
+  -H "x-init-data: INIT_DATA"
+
+curl -X POST BASE/api/app/admin/agent-clients \
+  -H "Content-Type: application/json" -H "x-init-data: INIT_DATA" \
+  -d '{"agentUserId":1,"clientUserId":2}'
+
 curl "BASE/api/app/admin/users?limit=10" \
   -H "X-Dev-Telegram-Id: <ADMIN_ID>"
 
@@ -248,7 +261,9 @@ Open each URL while logged in via Telegram WebApp. Verify the page loads and cor
 | `/app/pricing` | Plans listed with correct prices and features |
 | `/app/companies` | Company list loads |
 | `/app/cvscore?uid=<chatId>` | Score report renders after `/cvscore` bot flow |
-| `/app/admin` | Admin panel loads (admin only) |
+| `/app/agent/clients` | Agent clients page (career agent or admin) |
+| `/app/admin/agent-assignments` | Assignment CRUD (admin only) |
+| `/app/admin` | Redirects to `/app/agent/clients` |
 | `/app/stat2` | Stats chart renders (admin only) |
 
 ---

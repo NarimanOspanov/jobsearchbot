@@ -60,6 +60,7 @@ import {
   removeUserDataByTelegramChatId,
   runResumeEnrichmentInBackground,
 } from './services/userService.js';
+import { countAgentAssignments, isBotAdminTelegramId } from './services/agentAccessService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
 import {
   tr,
@@ -86,6 +87,7 @@ import { createApplicationsRouter } from './routes/api/applications.js';
 import { createCompaniesRouter } from './routes/api/companies.js';
 import { createPositionsRouter } from './routes/api/positions.js';
 import { createAdminRouter } from './routes/api/admin.js';
+import { createAgentClientsRouter } from './routes/api/agentClients.js';
 import { createNotificationsRouter } from './routes/api/notifications.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -144,6 +146,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const profileUrl = appBaseUrl ? `${appBaseUrl}/app/profile` : '';
   const companiesUrl = appBaseUrl ? `${appBaseUrl}/app/companies` : '';
   const adminUrl = appBaseUrl ? `${appBaseUrl}/app/admin` : '';
+  const agentClientsUrl = appBaseUrl ? `${appBaseUrl}/app/agent/clients` : '';
+  const adminAgentAssignmentsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/agent-assignments` : '';
   const adminCompaniesUrl = appBaseUrl ? `${appBaseUrl}/app/admin/companies` : '';
   const adminPositionsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/positions` : '';
   const adminNotificationsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/notifications` : '';
@@ -155,6 +159,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseCompaniesWebApp = isValidTelegramWebAppUrl(companiesUrl);
   const canUsePricingWebApp = isValidTelegramWebAppUrl(pricingTmaUrl);
   const canUseAdminWebApp = isValidTelegramWebAppUrl(adminUrl);
+  const canUseAgentClientsWebApp = isValidTelegramWebAppUrl(agentClientsUrl);
+  const canUseAdminAgentAssignmentsWebApp = isValidTelegramWebAppUrl(adminAgentAssignmentsUrl);
   const canUseAdminCompaniesWebApp = isValidTelegramWebAppUrl(adminCompaniesUrl);
   const canUseAdminPositionsWebApp = isValidTelegramWebAppUrl(adminPositionsUrl);
   const canUseAdminNotificationsWebApp = isValidTelegramWebAppUrl(adminNotificationsUrl);
@@ -1157,9 +1163,43 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
   });
 
-  bot.command('admin', async (ctx) => {
+  async function canOpenAgentClients(ctx) {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return false;
+    if (isBotAdminTelegramId(telegramId)) return true;
+    const { user } = await ensureUserByTelegramId(
+      telegramId,
+      ctx.from?.username ?? null,
+      ctx.from?.first_name ?? null,
+      ctx.from?.last_name ?? null
+    );
+    if (!user) return false;
+    return (await countAgentAssignments(user.Id)) > 0;
+  }
+
+  const openAgentClients = async (ctx) => {
     if (ctx.chat?.type !== 'private') {
-      await ctx.reply('Admin panel is available only in private chat.');
+      await ctx.reply('Agent clients page is available only in private chat.');
+      return;
+    }
+    if (!(await canOpenAgentClients(ctx))) {
+      await ctx.reply('Unauthorized.');
+      return;
+    }
+    if (canUseAgentClientsWebApp) {
+      await ctx.reply('Open agent clients:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Agent clients', web_app: { url: agentClientsUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Agent clients page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  };
+
+  const openAdminAgentAssignments = async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Agent assignments page is available only in private chat.');
       return;
     }
     const adminIds = config.botAdminTelegramIds;
@@ -1167,15 +1207,61 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       await ctx.reply('Unauthorized.');
       return;
     }
-    if (canUseAdminWebApp) {
-      await ctx.reply('Open admin panel:', {
+    if (canUseAdminAgentAssignmentsWebApp) {
+      await ctx.reply('Manage agent–client assignments:', {
         reply_markup: {
-          inline_keyboard: [[{ text: 'Admin Panel', web_app: { url: adminUrl } }]],
+          inline_keyboard: [
+            [{ text: 'Manage assignments', web_app: { url: adminAgentAssignmentsUrl } }],
+          ],
         },
       });
       return;
     }
-    await ctx.reply('Admin page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+    await ctx.reply('Assignments page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  };
+
+  bot.command('admin', async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Admin menu is available only in private chat.');
+      return;
+    }
+    const adminIds = config.botAdminTelegramIds;
+    if (adminIds.size > 0 && (!ctx.from?.id || !adminIds.has(ctx.from.id))) {
+      await ctx.reply('Unauthorized.');
+      return;
+    }
+    if (!canUseAgentClientsWebApp && !canUseAdminAgentAssignmentsWebApp) {
+      await ctx.reply('Admin pages require public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+      return;
+    }
+    const rows = [];
+    if (canUseAgentClientsWebApp) {
+      rows.push([{ text: 'Agent clients', web_app: { url: agentClientsUrl } }]);
+    }
+    if (canUseAdminAgentAssignmentsWebApp) {
+      rows.push([{ text: 'Manage assignments', web_app: { url: adminAgentAssignmentsUrl } }]);
+    }
+    await ctx.reply('Admin menu:', { reply_markup: { inline_keyboard: rows } });
+  });
+
+  bot.command('clients', async (ctx) => {
+    await openAgentClients(ctx);
+  });
+
+  bot.command('agent_clients', async (ctx) => {
+    await openAgentClients(ctx);
+  });
+
+  bot.hears(/^\/agent-clients(?:@\w+)?$/, async (ctx) => {
+    await openAgentClients(ctx);
+  });
+
+  bot.command('admin_assignments', async (ctx) => {
+    await openAdminAgentAssignments(ctx);
+  });
+
+  bot.hears(/^\/admin-assignments(?:@\w+)?$/, async (ctx) => {
+    await openAdminAgentAssignments(ctx);
   });
 
   const openAdminCompanies = async (ctx) => {
@@ -1304,6 +1390,43 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     return true;
   };
+
+  const buildAdminCommandsHelpText = () =>
+    [
+      '<b>Administrator commands</b>',
+      '',
+      '<b>Menu</b>',
+      '<code>/admin</code> — main menu (agent clients + manage assignments)',
+      '<code>/admin_commands</code> — show this list',
+      '',
+      '<b>Career agents</b>',
+      '<code>/admin_assignments</code> — assign agents to job seekers',
+      '<code>/clients</code> — agent clients workspace (admins and assigned agents)',
+      '<i>Aliases:</i> <code>/agent_clients</code>, <code>/agent-clients</code>',
+      '',
+      '<b>Web App panels</b>',
+      '<code>/admin_companies</code> — remote companies list',
+      '<code>/admin_positions</code> — local positions + apply deeplinks',
+      '<code>/admin_notifications</code> — push notifications to users',
+      '<i>Hyphen aliases work too</i> (e.g. <code>/admin-companies</code>)',
+      '',
+      '<b>Statistics</b>',
+      '<code>/stat</code> — job import stats (external page)',
+      '<code>/stat2</code> [days] — Stat2 dashboard (default 7 days)',
+      '',
+      '<b>Maintenance</b>',
+      '<code>/refreshmenus</code> — refresh bot command menus for all users',
+      '<code>/removeuser</code> &lt;telegramChatId&gt; — delete user and applications',
+    ].join('\n');
+
+  const replyAdminCommandsHelp = async (ctx) => {
+    const ok = await ensurePrivateAdminForHiddenCommand(ctx, '/admin_commands');
+    if (!ok) return;
+    await ctx.reply(buildAdminCommandsHelpText(), { parse_mode: 'HTML' });
+  };
+
+  bot.command('admin_commands', replyAdminCommandsHelp);
+  bot.hears(/^\/admin-commands(?:@\w+)?$/, replyAdminCommandsHelp);
 
   const parsePeriodDays = (raw, fallback = 7) => {
     const parsed = Number.parseInt(String(raw || ''), 10);
@@ -1542,6 +1665,7 @@ async function main() {
   app.use(createCompaniesRouter());
   app.use(createPositionsRouter());
   app.use(createAdminRouter());
+  app.use(createAgentClientsRouter());
   app.use(createNotificationsRouter());
 
   await new Promise((resolve) => app.listen(port, resolve));

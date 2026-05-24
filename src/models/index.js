@@ -15,6 +15,7 @@ import definePosition from './Position.js';
 import defineUserApplication from './UserApplication.js';
 import defineAdminNotification from './AdminNotification.js';
 import defineAdminNotificationRun from './AdminNotificationRun.js';
+import defineAgentClient from './AgentClient.js';
 
 /**
  * Initialize only the User model for empty bot runtime.
@@ -37,6 +38,7 @@ export function initModels(sequelize) {
   const UserApplication = defineUserApplication(sequelize);
   const AdminNotification = defineAdminNotification(sequelize);
   const AdminNotificationRun = defineAdminNotificationRun(sequelize);
+  const AgentClient = defineAgentClient(sequelize);
 
   User.hasMany(Application, { foreignKey: 'UserId' });
   Application.belongsTo(User, { foreignKey: 'UserId' });
@@ -64,6 +66,10 @@ export function initModels(sequelize) {
   UserApplication.belongsTo(User, { foreignKey: 'UserId' });
   Position.hasMany(UserApplication, { foreignKey: 'PositionId' });
   UserApplication.belongsTo(Position, { foreignKey: 'PositionId' });
+  User.hasMany(AgentClient, { as: 'AgentAssignments', foreignKey: 'AgentUserId' });
+  AgentClient.belongsTo(User, { as: 'Agent', foreignKey: 'AgentUserId' });
+  User.hasOne(AgentClient, { as: 'ClientAssignment', foreignKey: 'ClientUserId' });
+  AgentClient.belongsTo(User, { as: 'Client', foreignKey: 'ClientUserId' });
   return {
     User,
     Application,
@@ -99,5 +105,7 @@ export function initModels(sequelize) {
     AdminNotifications: AdminNotification,
     AdminNotificationRun,
     AdminNotificationRuns: AdminNotificationRun,
+    AgentClient,
+    AgentClients: AgentClient,
   };
 }

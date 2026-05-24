@@ -1,5 +1,10 @@
 import { config } from '../config.js';
 import { verifyInitData, extractMiniAppInitData } from '../utils/telegramUtils.js';
+import {
+  countAgentAssignments,
+  isBotAdminTelegramId,
+  resolveUserFromMiniApp,
+} from '../services/agentAccessService.js';
 
 export async function miniAppAuth(req, res, next) {
   const initData = extractMiniAppInitData(req);
@@ -39,6 +44,50 @@ export async function adminMiniAppAuth(req, res, next) {
     if (!Number.isSafeInteger(userId) || !adminIds.has(userId)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
+    return next();
+  });
+}
+
+/** Same as adminMiniAppAuth (explicit alias for assignment CRUD). */
+export const adminOnlyMiniAppAuth = adminMiniAppAuth;
+
+/** Loads actor user and flags; does not require career-agent role (use for per-resource access checks). */
+export async function miniAppActorAuth(req, res, next) {
+  await miniAppAuth(req, res, async () => {
+    const telegramUserId = Number(req.miniAppUser?.id);
+    if (!Number.isSafeInteger(telegramUserId) || telegramUserId <= 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const actorUser = await resolveUserFromMiniApp(req.miniAppUser);
+    if (!actorUser) return res.status(403).json({ error: 'User not found' });
+    req.actorUser = actorUser;
+    req.isBotAdmin = isBotAdminTelegramId(telegramUserId);
+    req.isCareerAgent = (await countAgentAssignments(actorUser.Id)) > 0;
+    return next();
+  });
+}
+
+export async function agentMiniAppAuth(req, res, next) {
+  await miniAppAuth(req, res, async () => {
+    const telegramUserId = Number(req.miniAppUser?.id);
+    if (!Number.isSafeInteger(telegramUserId) || telegramUserId <= 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const actorUser = await resolveUserFromMiniApp(req.miniAppUser);
+    if (!actorUser) return res.status(403).json({ error: 'User not found' });
+
+    const isBotAdmin = isBotAdminTelegramId(telegramUserId);
+    const assignmentCount = await countAgentAssignments(actorUser.Id);
+    const isCareerAgent = assignmentCount > 0;
+
+    if (!isBotAdmin && !isCareerAgent) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    req.actorUser = actorUser;
+    req.isBotAdmin = isBotAdmin;
+    req.isCareerAgent = isCareerAgent;
     return next();
   });
 }

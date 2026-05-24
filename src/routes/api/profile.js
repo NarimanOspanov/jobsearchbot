@@ -16,6 +16,7 @@ import {
   toSkillIdsOrNullOrUndefined,
 } from '../../utils/validators.js';
 import { resolveBotLanguage } from '../../utils/userLanguage.js';
+import { isCareerAgentUser } from '../../services/agentAccessService.js';
 
 export function createProfileRouter() {
   const router = Router();
@@ -35,12 +36,14 @@ export function createProfileRouter() {
         Number.isSafeInteger(telegramUserId) &&
         adminIds.size > 0 &&
         adminIds.has(telegramUserId);
+      const isCareerAgent = await isCareerAgentUser(user.Id);
       res.json({
         id: user.Id,
         telegramChatId: String(user.TelegramChatId),
         telegramUserName: user.TelegramUserName,
         language: resolveBotLanguage(req.miniAppUser?.language_code),
         isBotAdmin,
+        isCareerAgent,
         resumeUrl: user.ResumeURL,
         skills: user.skills,
         monetization,

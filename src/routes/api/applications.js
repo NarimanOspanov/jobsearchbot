@@ -1,13 +1,34 @@
 import { Router } from 'express';
 import { Sequelize } from 'sequelize';
-import { miniAppAuth } from '../../middleware/auth.js';
+import { miniAppAuth, miniAppActorAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
 import { ensureUserByTelegramId } from '../../services/userService.js';
+import { assertCanAccessClient } from '../../services/agentAccessService.js';
 import {
   toIntOrNullOrUndefined,
   toScoreOrNullOrUndefined,
   toStringOrUndefined,
 } from '../../utils/validators.js';
+
+function parseImpersonateAgentUserId(req) {
+  const n = Number.parseInt(String(req.query.agentUserId || req.body?.agentUserId || ''), 10);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+async function enforceAgentClientAccess(req, res, clientUserId) {
+  if (Number(req.actorUser.Id) === Number(clientUserId)) return true;
+  const access = await assertCanAccessClient({
+    actorUserId: req.actorUser.Id,
+    clientUserId,
+    isBotAdmin: req.isBotAdmin,
+    impersonateAgentUserId: parseImpersonateAgentUserId(req),
+  });
+  if (!access.ok) {
+    res.status(access.status).json({ error: access.error });
+    return false;
+  }
+  return true;
+}
 
 export function createApplicationsRouter() {
   const router = Router();
@@ -48,12 +69,13 @@ export function createApplicationsRouter() {
     }
   });
 
-  router.get('/api/app/applications/by-user', async (req, res) => {
+  router.get('/api/app/applications/by-user', miniAppActorAuth, async (req, res) => {
     try {
       const userId = Number.parseInt(String(req.query.userId), 10);
       if (!Number.isSafeInteger(userId) || userId <= 0) {
         return res.status(400).json({ error: 'userId is required and must be a positive integer' });
       }
+      if (!(await enforceAgentClientAccess(req, res, userId))) return;
       const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '20'), 10) || 20));
       const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
       const rows = await models.Applications.findAll({
@@ -69,12 +91,13 @@ export function createApplicationsRouter() {
     }
   });
 
-  router.post('/api/app/applications', async (req, res) => {
+  router.post('/api/app/applications', miniAppActorAuth, async (req, res) => {
     try {
       const userId = Number.parseInt(String(req.body.userId), 10);
       if (!Number.isSafeInteger(userId) || userId <= 0) {
         return res.status(400).json({ error: 'userId is required and must be a positive integer' });
       }
+      if (!(await enforceAgentClientAccess(req, res, userId))) return;
       const user = await models.Users.findByPk(userId);
       if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -103,13 +126,14 @@ export function createApplicationsRouter() {
     }
   });
 
-  router.patch('/api/app/applications/:id', async (req, res) => {
+  router.patch('/api/app/applications/:id', miniAppActorAuth, async (req, res) => {
     try {
       const id = Number.parseInt(String(req.params.id), 10);
       if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
 
       const row = await models.Applications.findByPk(id);
       if (!row) return res.status(404).json({ error: 'Application not found' });
+      if (!(await enforceAgentClientAccess(req, res, row.UserId))) return;
 
       const updates = {};
 
