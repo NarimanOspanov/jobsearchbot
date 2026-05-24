@@ -1299,6 +1299,21 @@
         openCvModal(`Resume: #${u.id}`, u.resumeUrl);
       }
 
+      function buildJobRequirementsText(job) {
+        const parts = [];
+        const title = String(job?.title || '').trim();
+        const company = String(job?.company || '').trim();
+        const location = String(job?.location || '').trim();
+        const summary = String(job?.shortSummary || job?.description || '').trim();
+        const contacts = String(job?.contacts || '').trim();
+        if (title) parts.push(`Job title: ${title}`);
+        if (company) parts.push(`Company: ${company}`);
+        if (location) parts.push(`Location: ${location}`);
+        if (summary) parts.push(summary);
+        if (contacts) parts.push(contacts);
+        return parts.join('\n\n').trim();
+      }
+
       async function generateMaterials() {
         if (isJobBusy) return;
         const seekerId = q().seekerId;
@@ -1309,6 +1324,8 @@
           const resumePayload = await api(`${API_BASE}/api/app/admin/users/${encodeURIComponent(seekerId)}/resume-text`);
           const mainResumeText = String(resumePayload.resumeText || '').trim();
           if (!mainResumeText) throw new Error('Resume text is empty for selected user.');
+          const jobDescription = buildJobRequirementsText(selectedJob);
+          if (!jobDescription) throw new Error('Job has no description to tailor against.');
 
           const [tailored, cover] = await Promise.all([
             api(`${API_BASE}/api/tailored-resume/upload`, {
@@ -1317,7 +1334,7 @@
                 seekerId: Number(seekerId),
                 screenlyJobId: Number(selectedJob.id),
                 jobTitle: selectedJob.title || '',
-                jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
+                jobDescription,
                 mainResumeText,
               }),
             }),
@@ -1326,7 +1343,7 @@
               body: JSON.stringify({
                 seekerId: Number(seekerId),
                 jobTitle: selectedJob.title || '',
-                jobDescription: `${selectedJob.shortSummary || ''}\n\n${selectedJob.contacts || ''}`,
+                jobDescription,
                 mainResumeText,
               }),
             }),

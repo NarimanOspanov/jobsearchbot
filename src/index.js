@@ -61,6 +61,7 @@ import {
   runResumeEnrichmentInBackground,
 } from './services/userService.js';
 import { countAgentAssignments, isBotAdminTelegramId } from './services/agentAccessService.js';
+import { generateTailoredCvSimple } from './services/tailoredCvService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
 import {
   tr,
@@ -1524,15 +1525,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       hireAgentStateByChatId.set(chatId, { step: 'idle' });
       await ctx.reply(tr(ctx, 'tailoring_cv'));
       try {
-        const res = await runWithTyping(ctx.telegram, chatId, () =>
-          fetch('https://tailered-cv.onrender.com/generate-simple', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ existingCvText: st.resumeText, jobRequirements: text }),
-          })
+        const { url: cvUrl } = await runWithTyping(ctx.telegram, chatId, () =>
+          generateTailoredCvSimple({ existingCvText: st.resumeText, jobRequirements: text })
         );
-        if (!res.ok) throw new Error('Tailored CV API error');
-        const { url: cvUrl } = await res.json();
         const lang = langFromCtx(ctx);
         await ctx.reply(tr(ctx, 'tailored_ready'), {
           reply_markup: {

@@ -10,7 +10,7 @@ import {
 } from '../../services/agentAccessService.js';
 import { models } from '../../db.js';
 import { cvScoreResultByUserId } from '../../bot/state.js';
-import { config } from '../../config.js';
+import { generateTailoredCvSimple } from '../../services/tailoredCvService.js';
 import { extractMiniAppInitData, verifyInitData } from '../../utils/telegramUtils.js';
 import { getRequiredChannelsState, serializeRequiredChannels } from '../../services/channelService.js';
 
@@ -145,40 +145,18 @@ export function createResumeRouter() {
         });
       }
 
-      const tailoredBase = String(config.tailoredCvServiceUrl || '').trim().replace(/\/$/, '');
-      if (!tailoredBase) {
-        return res.status(503).json({ error: 'Tailored CV service URL is not configured' });
-      }
-      // Same upstream as /cvscore "improve for job" (generate-simple), not the legacy /generate path.
-      const upstreamRes = await fetch(`${tailoredBase}/generate-simple`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          existingCvText: mainResumeText,
-          jobRequirements: jobDescription,
-        }),
+      const { url: tailoredCvUrl } = await generateTailoredCvSimple({
+        existingCvText: mainResumeText,
+        jobRequirements: jobDescription,
       });
-      const upstreamRaw = await upstreamRes.text();
-      let upstreamJson = {};
-      try {
-        upstreamJson = upstreamRaw ? JSON.parse(upstreamRaw) : {};
-      } catch {
-        upstreamJson = {};
-      }
-      if (!upstreamRes.ok) {
-        const msg = upstreamJson?.error || upstreamRaw || upstreamRes.statusText || 'Upstream error';
-        return res.status(upstreamRes.status >= 400 && upstreamRes.status < 600 ? upstreamRes.status : 502).json({
-          error: String(msg).slice(0, 500),
-        });
-      }
-      const tailoredCvUrl = upstreamJson?.url != null ? String(upstreamJson.url).trim() : '';
-      if (!tailoredCvUrl) {
-        return res.status(502).json({ error: 'Tailored CV service returned no url' });
-      }
       return res.status(200).json({ tailoredCvUrl });
     } catch (err) {
       console.error('POST /api/tailored-resume/upload:', err);
-      return res.status(500).json({ error: 'Failed to generate/upload tailored resume' });
+      const status =
+        Number.isFinite(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+      return res.status(status).json({
+        error: err?.message || 'Failed to generate/upload tailored resume',
+      });
     }
   });
 
