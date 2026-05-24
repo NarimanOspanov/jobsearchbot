@@ -145,16 +145,15 @@ export function createResumeRouter() {
         });
       }
 
-      const generateBase = String(config.generateTailoredUrl || '').trim().replace(/\/$/, '');
-      if (!generateBase) {
-        return res.status(503).json({ error: 'GENERATE_TAILORED_URL is not configured' });
+      const tailoredBase = String(config.tailoredCvServiceUrl || '').trim().replace(/\/$/, '');
+      if (!tailoredBase) {
+        return res.status(503).json({ error: 'Tailored CV service URL is not configured' });
       }
-      const upstreamRes = await fetch(`${generateBase}/generate`, {
+      // Same upstream as /cvscore "improve for job" (generate-simple), not the legacy /generate path.
+      const upstreamRes = await fetch(`${tailoredBase}/generate-simple`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          seekerId,
-          screenlyJobId,
           existingCvText: mainResumeText,
           jobRequirements: jobDescription,
         }),

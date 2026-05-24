@@ -45,7 +45,13 @@ export const config = {
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',
   webhookUrl: getEnv('WEBHOOK_URL') || defaultWebhookUrl,
-  /** Base URL for tailored CV microservice (POST `${base}/generate`). */
+  /** Base URL for tailored CV microservice (same host as /cvscore bot flows). */
+  tailoredCvServiceUrl: (
+    getEnv('TAILORED_CV_SERVICE_URL') ||
+    getEnv('GENERATE_TAILORED_URL') ||
+    'https://tailered-cv.onrender.com'
+  ).replace(/\/$/, ''),
+  /** @deprecated Use tailoredCvServiceUrl; kept for older configs. */
   generateTailoredUrl: getEnv('GENERATE_TAILORED_URL').replace(/\/$/, ''),
   // MSSQL (Azure SQL) – override with DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_PORT
   db: {
