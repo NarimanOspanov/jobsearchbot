@@ -460,6 +460,7 @@
       let applications = [];
       let selectedJob = null;
       let selectedApplication = null;
+      let generatedMaterials = null;
       let jobsSort = { key: 'id', dir: 'desc' };
       let isSyncing = false;
       let isJobBusy = false;
@@ -1091,6 +1092,7 @@
         }
         selectedJob = job;
         selectedApplication = appByScreenlyId(job.id);
+        generatedMaterials = null;
         document.getElementById('jobInfo').classList.remove('muted');
         document.getElementById('jobNotesBlock').style.display = 'block';
         document.getElementById('jobActions').style.display = 'block';
@@ -1118,24 +1120,28 @@
       function renderArtifacts() {
         const links = document.getElementById('artifactLinks');
         const cover = document.getElementById('coverPreview');
-        if (!selectedApplication) {
+        const tailoredUrl = String(generatedMaterials?.tailoredCvUrl || selectedApplication?.TailoredCVURL || '').trim();
+        const coverText = String(
+          generatedMaterials?.coverLetter ?? selectedApplication?.CoverLetter ?? ''
+        ).trim();
+        if (!tailoredUrl && !coverText) {
           links.innerHTML = '';
           cover.value = '';
           return;
         }
-        links.innerHTML = selectedApplication.TailoredCVURL
+        links.innerHTML = tailoredUrl
           ? `
             <button type="button" id="openTailoredCvBtn">Tailored CV (open)</button>
-            <a href="${esc(selectedApplication.TailoredCVURL)}" download target="_blank" rel="noopener noreferrer">Download Tailored CV</a>
+            <a href="${esc(tailoredUrl)}" download target="_blank" rel="noopener noreferrer">Download Tailored CV</a>
           `
           : '';
         const openBtn = document.getElementById('openTailoredCvBtn');
         if (openBtn) {
           openBtn.addEventListener('click', () => {
-            openCvModal('Tailored CV', selectedApplication.TailoredCVURL);
+            openCvModal('Tailored CV', tailoredUrl);
           });
         }
-        cover.value = selectedApplication.CoverLetter || '';
+        cover.value = coverText;
       }
 
       async function saveStatus() {
@@ -1185,7 +1191,6 @@
         if (!seekerId) throw new Error('Select seeker first.');
         setJobBusy(true);
         try {
-          const app = await ensureApplication(seekerId, selectedJob);
           const resumePayload = await api(`${API_BASE}/api/app/admin/users/${encodeURIComponent(seekerId)}/resume-text`);
           const mainResumeText = String(resumePayload.resumeText || '').trim();
           if (!mainResumeText) throw new Error('Resume text is empty for selected user.');
@@ -1211,19 +1216,12 @@
             }),
           ]);
 
-          const updated = await api(`${API_BASE}/api/app/applications/${app.Id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              tailoredCvUrl: tailored.tailoredCvUrl,
-              coverLetter: cover.coverLetter,
-              notes: document.getElementById('notesText').value,
-            }),
-          });
-          selectedApplication = updated;
-          await loadApplicationsByUser(seekerId);
-          renderJobs();
+          generatedMaterials = {
+            tailoredCvUrl: tailored.tailoredCvUrl,
+            coverLetter: cover.coverLetter,
+          };
           renderArtifacts();
-          setMsg('jobMsg', 'Tailored CV + cover letter generated and saved.');
+          setMsg('jobMsg', 'Tailored CV + cover letter generated.');
         } finally {
           setJobBusy(false);
         }

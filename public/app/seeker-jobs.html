@@ -792,6 +792,7 @@
       let applications = [];
       let selectedJob = null;
       let selectedApplication = null;
+      let generatedMaterials = null;
       let isSyncing = false;
       let isJobBusy = false;
       let openingJobId = null;
@@ -1855,6 +1856,7 @@
         }
         selectedJob = job;
         selectedApplication = appByScreenlyId(job.id);
+        generatedMaterials = null;
         document.getElementById('jobInfo').classList.remove('muted');
         const showAdminJobModal = isBotAdminUser;
         document.getElementById('jobActions').style.display = 'block';
@@ -1898,16 +1900,19 @@
         const links = document.getElementById('artifactLinks');
         const cover = document.getElementById('coverPreview');
         const coverBlock = document.getElementById('coverLetterBlock');
-        if (!selectedApplication) {
+        const tailoredUrl = String(generatedMaterials?.tailoredCvUrl || selectedApplication?.TailoredCVURL || '').trim();
+        const coverText = String(
+          generatedMaterials?.coverLetter ?? selectedApplication?.CoverLetter ?? ''
+        ).trim();
+        if (!tailoredUrl && !coverText) {
           links.innerHTML = '';
           if (cover) cover.value = '';
           if (coverBlock) coverBlock.style.display = 'none';
           return;
         }
-        links.innerHTML = selectedApplication.TailoredCVURL
-          ? `<a href="${esc(selectedApplication.TailoredCVURL)}" download target="_blank" rel="noopener noreferrer" class="ghost-btn" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;padding:6px 12px">${esc(sj('downloadTailoredCv'))}</a>`
+        links.innerHTML = tailoredUrl
+          ? `<a href="${esc(tailoredUrl)}" download target="_blank" rel="noopener noreferrer" class="ghost-btn" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;padding:6px 12px">${esc(sj('downloadTailoredCv'))}</a>`
           : '';
-        const coverText = String(selectedApplication.CoverLetter || '').trim();
         if (cover) cover.value = coverText;
         if (coverBlock) coverBlock.style.display = coverText ? '' : 'none';
       }
@@ -1946,7 +1951,6 @@
         }
         setJobBusy(true);
         try {
-          const app = await ensureApplication(selectedJob);
           const resumePayload = await api(`${API_BASE}/api/app/admin/users/${encodeURIComponent(seekerId)}/resume-text`);
           const mainResumeText = String(resumePayload.resumeText || '').trim();
           if (!mainResumeText) throw new Error(sj('errResumeText'));
@@ -1973,17 +1977,10 @@
             }),
           ]);
 
-          const updated = await api(`${API_BASE}/api/app/applications/${app.Id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              tailoredCvUrl: tailored.tailoredCvUrl,
-              coverLetter: cover.coverLetter,
-              notes: document.getElementById('notesText').value,
-            }),
-          });
-          selectedApplication = updated;
-          await loadApplicationsByUser();
-          renderJobs();
+          generatedMaterials = {
+            tailoredCvUrl: tailored.tailoredCvUrl,
+            coverLetter: cover.coverLetter,
+          };
           renderArtifacts();
           setMsg('jobMsg', sj('materialsGenerated'));
         } catch (err) {
