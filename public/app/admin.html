@@ -757,10 +757,9 @@
         `).join('');
         root.querySelectorAll('button[data-id]').forEach((btn) => {
           btn.addEventListener('click', () => {
-            const id = btn.getAttribute('data-id');
-            setQ({ seekerId: id });
-            renderUsers();
-            renderSelectedUserInfo();
+            onUserSelected(btn.getAttribute('data-id')).catch((err) => {
+              setMsg('dashMsg', err.message, true);
+            });
           });
         });
       }
@@ -1175,6 +1174,49 @@
         return users.find((u) => String(u.id) === String(seekerId)) || null;
       }
 
+      function userSkillIdsCsv(user) {
+        if (!user || !Array.isArray(user.skills)) return '';
+        return user.skills
+          .map((id) => String(id || '').trim())
+          .filter((id) => /^\d+$/.test(id))
+          .join(',');
+      }
+
+      function applyUserSkillsToFilters(user, { force = false } = {}) {
+        const skillCsv = userSkillIdsCsv(user);
+        const currentSkillIds = String(q().skillIds || '').trim();
+        if (!force && currentSkillIds) {
+          syncHighlyRelevantCheckboxFromQuery();
+          return false;
+        }
+        if (skillCsv) {
+          applySelectedSkillIdsCsv(skillCsv);
+          document.getElementById('showOnlyHighlyRelevant').checked = true;
+          setQ({ skillIds: skillCsv, showOnlyHighlyRelevant: 'true', page: '1' });
+          return true;
+        }
+        applySelectedSkillIdsCsv('');
+        document.getElementById('showOnlyHighlyRelevant').checked = false;
+        setQ({ skillIds: '', showOnlyHighlyRelevant: '', page: '1' });
+        renderSkillPickerSummary();
+        return false;
+      }
+
+      async function onUserSelected(userId) {
+        if (!userId) return;
+        hydrateStateToInputs();
+        const user = users.find((u) => String(u.id) === String(userId)) || null;
+        setQ({ seekerId: userId, jobId: '' });
+        applyUserSkillsToFilters(user, { force: true });
+        renderUsers();
+        renderSelectedUserInfo();
+        try {
+          await syncJobs();
+        } catch (err) {
+          setMsg('dashMsg', err.message, true);
+        }
+      }
+
       function openSelectedUserResume() {
         const u = getSelectedUser();
         if (!u || !u.resumeUrl) {
@@ -1254,13 +1296,20 @@
         renderSelectedUserInfo();
         const s = q();
         applySelectedApplyTypesCsv(s.applyTypes || '');
-        if (s.skillIds) applySelectedSkillIdsCsv(s.skillIds);
-        else renderSkillPickerSummary();
+        if (s.skillIds) {
+          applySelectedSkillIdsCsv(s.skillIds);
+          syncHighlyRelevantCheckboxFromQuery();
+        } else if (s.seekerId) {
+          const bootUser = users.find((u) => String(u.id) === String(s.seekerId));
+          applyUserSkillsToFilters(bootUser, { force: true });
+        } else {
+          renderSkillPickerSummary();
+        }
         if (s.source) document.getElementById('sourceSel').value = s.source;
-        syncHighlyRelevantCheckboxFromQuery();
         document.getElementById('pageSizeSel').value = String(Math.min(200, Math.max(1, Number.parseInt(String(s.pageSize || '100'), 10) || 100)));
         updatePagerUi();
-        if (s.seekerId && s.from && s.to) {
+        if (s.seekerId) {
+          hydrateStateToInputs();
           await syncJobs();
           if (s.jobId) openJobById(Number(s.jobId));
         }

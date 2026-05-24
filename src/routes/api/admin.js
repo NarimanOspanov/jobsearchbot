@@ -245,6 +245,7 @@ export function createAdminRouter() {
           dateJoined: u.DateJoined,
           isBlocked: !!u.IsBlocked,
           resumeUrl: u.ResumeURL || null,
+          skills: Array.isArray(u.skills) ? u.skills : [],
           ...projection,
         };
       }));
@@ -272,6 +273,7 @@ export function createAdminRouter() {
         timezone: u.Timezone,
         promocode: u.Promocode,
         resumeUrl: u.ResumeURL || null,
+        skills: Array.isArray(u.skills) ? u.skills : [],
         settings: {
           hhEnabled: !!u.HhEnabled,
           linkedInEnabled: !!u.LinkedInEnabled,
