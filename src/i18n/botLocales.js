@@ -106,12 +106,19 @@ export const BOT_LOCALES = {
       'Что выбираете? 👇',
     ].join('\n'),
     cvscore_prompt:
-      'Загрузите новое резюме файлом — PDF или TXT — или нажмите кнопку ниже, чтобы использовать уже сохранённое.\nЯ внимательно изучу его и верну вам ATS-совместимую версию.',
+      'Загрузите резюме файлом — PDF или TXT.\nЯ внимательно изучу его и верну вам ATS-совместимую версию.',
     cvscore_tailor_prompt:
-      'Загрузите резюме файлом — PDF или TXT (новое заменит сохранённое), или нажмите кнопку ниже.\n\nОписание вакансии можно указать в подписи (Подпись) к файлу или прислать отдельным сообщением после загрузки.',
-    cvscore_has_saved_resume:
-      'У вас уже есть сохранённое резюме. Можно использовать его или загрузить новое (новое станет основным).',
-    btn_cv_use_saved: '📄 Использовать сохранённое резюме',
+      'Загрузите резюме файлом — PDF или TXT.\n\nОписание вакансии можно указать в подписи (Подпись) к файлу или прислать отдельным сообщением после загрузки.',
+    cvscore_has_saved_resume_roast:
+      'У вас уже есть сохранённое резюме.\n\nТекущее резюме: <a href="{resumeUrl}">открыть PDF</a>\n\nВыберите: использовать его или загрузить новое (новый файл станет основным). Я верну ATS-совместимую версию.',
+    cvscore_has_saved_resume_tailor:
+      'У вас уже есть сохранённое резюме.\n\nТекущее резюме: <a href="{resumeUrl}">открыть PDF</a>\n\nВыберите: использовать его или загрузить новое (новый файл станет основным).\n\nОписание вакансии можно указать в подписи (Подпись) к файлу или прислать отдельным сообщением.',
+    btn_cv_use_saved: 'Использовать сохранённое резюме',
+    btn_cv_upload_new: 'Загрузить новое',
+    cvscore_upload_new_roast:
+      'Отправьте новый файл резюме — PDF или TXT. Он заменит сохранённое, и я подготовлю ATS-совместимую версию.',
+    cvscore_upload_new_tailor:
+      'Отправьте новый файл резюме — PDF или TXT. Он заменит сохранённое.\n\nОписание вакансии — в подписи (Подпись) к файлу или следующим сообщением.',
     cvscore_saved_resume_missing:
       'Сохранённое резюме не найдено или недоступно. Загрузите PDF или TXT файлом.',
     btn_try_hireagent: 'Отправить резюме и попробовать',
@@ -309,12 +316,19 @@ export const BOT_LOCALES = {
       'What would you like to do? 👇',
     ].join('\n'),
     cvscore_prompt:
-      'Upload a new resume as PDF or TXT, or tap the button below to use your saved resume.\nI will review it and send you an ATS-compatible version.',
+      'Please upload your resume as a file — PDF or TXT.\nI will review it and send you an ATS-compatible version.',
     cvscore_tailor_prompt:
-      'Upload your resume as PDF or TXT (a new file replaces the saved one), or tap the button below.\n\nYou can put the job description in the file caption or send it in a separate message after upload.',
-    cvscore_has_saved_resume:
-      'You already have a saved resume. Use it or upload a new one (the new file becomes your main resume).',
-    btn_cv_use_saved: '📄 Use saved resume',
+      'Upload your resume as PDF or TXT.\n\nYou can put the job description in the file caption or send it in a separate message after upload.',
+    cvscore_has_saved_resume_roast:
+      'You already have a saved resume.\n\nCurrent resume: <a href="{resumeUrl}">open PDF</a>\n\nChoose to use it or upload a new one (the new file becomes your main resume). I will return an ATS-compatible version.',
+    cvscore_has_saved_resume_tailor:
+      'You already have a saved resume.\n\nCurrent resume: <a href="{resumeUrl}">open PDF</a>\n\nChoose to use it or upload a new one (the new file becomes your main resume).\n\nJob description: file caption or a follow-up message.',
+    btn_cv_use_saved: 'Use saved resume',
+    btn_cv_upload_new: 'Upload new',
+    cvscore_upload_new_roast:
+      'Send a new resume file — PDF or TXT. It will replace the saved one, and I will prepare an ATS-compatible version.',
+    cvscore_upload_new_tailor:
+      'Send a new resume file — PDF or TXT. It will replace the saved one.\n\nJob description: in the file caption or your next message.',
     cvscore_saved_resume_missing:
       'Saved resume was not found or could not be read. Please upload a PDF or TXT file.',
     btn_try_hireagent: 'Send resume and try',

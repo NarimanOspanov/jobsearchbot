@@ -806,11 +806,20 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const promptKey = flow === 'roast' ? 'cvscore_prompt' : 'cvscore_tailor_prompt';
 
     if (hasSaved) {
-      await ctx.reply(tr(ctx, 'cvscore_has_saved_resume'), {
+      const resumeUrl = String(user.ResumeURL || '').trim();
+      const bodyKey = flow === 'roast' ? 'cvscore_has_saved_resume_roast' : 'cvscore_has_saved_resume_tailor';
+      await ctx.reply(tr(ctx, bodyKey, { resumeUrl }), {
+        parse_mode: 'HTML',
         reply_markup: {
-          inline_keyboard: [[{ text: t(lang, 'btn_cv_use_saved'), callback_data: `cvscore_use_saved:${flow}` }]],
+          inline_keyboard: [
+            [
+              { text: t(lang, 'btn_cv_use_saved'), callback_data: `cvscore_use_saved:${flow}` },
+              { text: t(lang, 'btn_cv_upload_new'), callback_data: `cvscore_upload_new:${flow}` },
+            ],
+          ],
         },
       });
+      return;
     }
     await ctx.reply(tr(ctx, promptKey));
   }
@@ -937,6 +946,17 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const canProceed = await enforceStartRequiredChannelsGate(ctx);
     if (!canProceed) return;
     await promptCvscoreResumeSource(ctx, 'tailor');
+  });
+
+  bot.action(/^cvscore_upload_new:(roast|tailor)$/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const flow = ctx.match[1];
+    const chatId = ctx.callbackQuery?.message?.chat?.id;
+    if (!chatId) return;
+    const step = flow === 'roast' ? 'awaiting_cv_roast' : 'awaiting_cv_tailor';
+    hireAgentStateByChatId.set(chatId, { step });
+    const promptKey = flow === 'roast' ? 'cvscore_upload_new_roast' : 'cvscore_upload_new_tailor';
+    await ctx.reply(tr(ctx, promptKey));
   });
 
   bot.action(/^cvscore_use_saved:(roast|tailor)$/, async (ctx) => {
