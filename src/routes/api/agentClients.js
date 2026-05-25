@@ -190,9 +190,6 @@ export function createAgentClientsRouter() {
       if (!Number.isSafeInteger(clientUserId) || clientUserId <= 0) {
         return res.status(400).json({ error: 'clientUserId is required' });
       }
-      if (agentUserId === clientUserId) {
-        return res.status(400).json({ error: 'Agent and client must be different users' });
-      }
 
       const [agent, client] = await Promise.all([
         models.Users.findByPk(agentUserId),
@@ -245,9 +242,6 @@ export function createAgentClientsRouter() {
       }
       if (!Number.isSafeInteger(nextClientId) || nextClientId <= 0) {
         return res.status(400).json({ error: 'Invalid clientUserId' });
-      }
-      if (nextAgentId === nextClientId) {
-        return res.status(400).json({ error: 'Agent and client must be different users' });
       }
 
       const [agent, client] = await Promise.all([
