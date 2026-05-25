@@ -109,10 +109,8 @@ export const BOT_LOCALES = {
       'Загрузите резюме файлом — PDF или TXT.\nЯ внимательно изучу его и верну вам ATS-совместимую версию.',
     cvscore_tailor_prompt:
       'Загрузите резюме файлом — PDF или TXT.\n\nОписание вакансии можно указать в подписи (Подпись) к файлу или прислать отдельным сообщением после загрузки.',
-    cvscore_has_saved_resume_roast:
-      'У вас уже есть сохранённое резюме.\n\nТекущее резюме: <a href="{resumeUrl}">открыть PDF</a>\n\nВыберите: использовать его или загрузить новое (новый файл станет основным). Я верну ATS-совместимую версию.',
-    cvscore_has_saved_resume_tailor:
-      'У вас уже есть сохранённое резюме.\n\nТекущее резюме: <a href="{resumeUrl}">открыть PDF</a>\n\nВыберите: использовать его или загрузить новое (новый файл станет основным).\n\nОписание вакансии можно указать в подписи (Подпись) к файлу или прислать отдельным сообщением.',
+    cvscore_has_saved_resume:
+      'Ранее вы загружали <a href="{resumeUrl}">резюме</a>.\nИспользовать его или загрузить новое?',
     btn_cv_use_saved: 'Использовать сохранённое резюме',
     btn_cv_upload_new: 'Загрузить новое',
     cvscore_upload_new_roast:
@@ -319,10 +317,8 @@ export const BOT_LOCALES = {
       'Please upload your resume as a file — PDF or TXT.\nI will review it and send you an ATS-compatible version.',
     cvscore_tailor_prompt:
       'Upload your resume as PDF or TXT.\n\nYou can put the job description in the file caption or send it in a separate message after upload.',
-    cvscore_has_saved_resume_roast:
-      'You already have a saved resume.\n\nCurrent resume: <a href="{resumeUrl}">open PDF</a>\n\nChoose to use it or upload a new one (the new file becomes your main resume). I will return an ATS-compatible version.',
-    cvscore_has_saved_resume_tailor:
-      'You already have a saved resume.\n\nCurrent resume: <a href="{resumeUrl}">open PDF</a>\n\nChoose to use it or upload a new one (the new file becomes your main resume).\n\nJob description: file caption or a follow-up message.',
+    cvscore_has_saved_resume:
+      'You previously uploaded a <a href="{resumeUrl}">resume</a>.\nUse it or upload a new one?',
     btn_cv_use_saved: 'Use saved resume',
     btn_cv_upload_new: 'Upload new',
     cvscore_upload_new_roast:

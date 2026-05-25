@@ -807,15 +807,13 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
     if (hasSaved) {
       const resumeUrl = String(user.ResumeURL || '').trim();
-      const bodyKey = flow === 'roast' ? 'cvscore_has_saved_resume_roast' : 'cvscore_has_saved_resume_tailor';
-      await ctx.reply(tr(ctx, bodyKey, { resumeUrl }), {
+      await ctx.reply(tr(ctx, 'cvscore_has_saved_resume', { resumeUrl }), {
         parse_mode: 'HTML',
+        disable_web_page_preview: true,
         reply_markup: {
           inline_keyboard: [
-            [
-              { text: t(lang, 'btn_cv_use_saved'), callback_data: `cvscore_use_saved:${flow}` },
-              { text: t(lang, 'btn_cv_upload_new'), callback_data: `cvscore_upload_new:${flow}` },
-            ],
+            [{ text: t(lang, 'btn_cv_use_saved'), callback_data: `cvscore_use_saved:${flow}` }],
+            [{ text: t(lang, 'btn_cv_upload_new'), callback_data: `cvscore_upload_new:${flow}` }],
           ],
         },
       });
