@@ -116,6 +116,40 @@
       .job-summary { margin: 10px 0; line-height: 1.45; color: var(--text); }
       .skills-block { margin-top: 12px; }
       .skills-block h4 { margin: 8px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+      .screenshot-proof-block { margin-bottom: 12px; }
+      .screenshot-proof-block.applied-highlight {
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(96, 165, 250, 0.35);
+        background: rgba(96, 165, 250, 0.08);
+      }
+      .screenshot-paste-zone {
+        min-height: 72px;
+        padding: 10px 12px;
+        border: 1px dashed rgba(148, 163, 184, 0.45);
+        border-radius: 8px;
+        font-size: 13px;
+        color: var(--muted);
+        outline: none;
+        cursor: text;
+      }
+      .screenshot-paste-zone:focus {
+        border-color: rgba(96, 165, 250, 0.6);
+        color: var(--text);
+      }
+      .screenshot-preview {
+        margin-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .screenshot-preview img {
+        max-width: 120px;
+        max-height: 80px;
+        border-radius: 6px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+      }
       .skill-tag {
         display: inline-block;
         margin: 2px 6px 2px 0;
@@ -423,6 +457,17 @@
                 <option value="applied">applied</option>
                 <option value="skipped">skipped</option>
               </select>
+            </div>
+            <div id="screenshotProofBlock" class="screenshot-proof-block">
+              <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600">Proof of application</label>
+              <div id="screenshotPasteZone" class="screenshot-paste-zone" tabindex="0">
+                Paste screenshot here (Ctrl+V) or choose a file below.
+              </div>
+              <div class="row" style="margin-top:8px;gap:8px">
+                <input id="screenshotFileInput" type="file" accept="image/png,image/jpeg,image/webp" style="display:none" />
+                <button id="screenshotChooseBtn" type="button" class="ghost-btn">Choose file</button>
+              </div>
+              <div id="screenshotPreview" class="screenshot-preview"></div>
             </div>
             <p id="jobMsg" class="muted" style="margin-top:8px"></p>
           </div>
@@ -1227,6 +1272,7 @@
         document.getElementById('notesText').value = selectedApplication?.Notes || '';
         setMsg('jobMsg', '');
         renderArtifacts();
+        renderScreenshotArtifact();
         bindJobDetailInteractions(job);
         openJobModal();
       }
@@ -1262,7 +1308,76 @@
         const payload = {};
         if (tailoredUrl) payload.tailoredCvUrl = tailoredUrl;
         if (coverText) payload.coverLetter = coverText;
+        const screenshotUrl = String(selectedApplication?.ScreenshotArtifactURL || '').trim();
+        if (screenshotUrl) payload.screenshotArtifactUrl = screenshotUrl;
         return payload;
+      }
+
+      function getScreenshotArtifactUrl() {
+        return String(selectedApplication?.ScreenshotArtifactURL || '').trim();
+      }
+
+      function renderScreenshotArtifact() {
+        const block = document.getElementById('screenshotProofBlock');
+        const preview = document.getElementById('screenshotPreview');
+        const status = document.getElementById('statusSel')?.value || '';
+        if (!block || !preview) return;
+        block.classList.toggle('applied-highlight', status === 'applied');
+        const url = getScreenshotArtifactUrl();
+        if (!url) {
+          preview.innerHTML = '';
+          return;
+        }
+        preview.innerHTML = `
+          <img src="${esc(url)}" alt="Application screenshot" />
+          <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">View screenshot</a>
+        `;
+      }
+
+      async function uploadScreenshotFile(file) {
+        if (!file || isJobBusy) return;
+        const seekerId = q().seekerId;
+        if (!selectedJob || !seekerId) throw new Error('Open a job first.');
+        const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+          throw new Error('Use PNG, JPEG, or WEBP screenshot.');
+        }
+        if (file.size > 10 * 1024 * 1024) throw new Error('Screenshot must be under 10 MB.');
+        setJobBusy(true);
+        try {
+          const app = await ensureApplication(seekerId, selectedJob);
+          const resolveExtension = () => {
+            const name = String(file.name || '').toLowerCase();
+            const extMatch = name.match(/\.([a-z0-9]+)$/);
+            if (extMatch?.[1]) return extMatch[1];
+            if (file.type === 'image/png') return 'png';
+            if (file.type === 'image/webp') return 'webp';
+            return 'jpg';
+          };
+          const safeFileName = `screenshot-${Date.now()}.${resolveExtension()}`;
+          const headers = {
+            'Content-Type': 'application/octet-stream',
+            'x-file-name': safeFileName,
+            'x-file-type': file.type || 'application/octet-stream',
+          };
+          attachMiniAppAuthHeaders(headers);
+          const bytes = await file.arrayBuffer();
+          const response = await fetch(
+            `${API_BASE}/api/app/applications/${encodeURIComponent(app.Id)}/screenshot-upload`,
+            { method: 'POST', headers, body: bytes }
+          );
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(typeof payload?.error === 'string' ? payload.error : 'Screenshot upload failed');
+          }
+          const screenshotArtifactUrl = String(payload?.screenshotArtifactUrl || '').trim();
+          if (!screenshotArtifactUrl) throw new Error('Screenshot upload returned no URL');
+          selectedApplication = { ...app, ...selectedApplication, ScreenshotArtifactURL: screenshotArtifactUrl };
+          renderScreenshotArtifact();
+          setMsg('jobMsg', 'Screenshot saved.');
+        } finally {
+          setJobBusy(false);
+        }
       }
 
       async function saveStatus() {
@@ -1289,6 +1404,7 @@
           await loadApplicationsByUser(seekerId);
           renderJobs();
           renderArtifacts();
+          renderScreenshotArtifact();
           setMsg('jobMsg', 'Status saved.');
         } finally {
           setJobBusy(false);
@@ -1529,7 +1645,31 @@
         setQ({ agentUserId, seekerId: '', jobId: '', page: 1 });
         loadClients().catch((e) => setMsg('globalMsg', e.message, true));
       });
-      document.getElementById('statusSel').addEventListener('change', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('statusSel').addEventListener('change', () => {
+        renderScreenshotArtifact();
+        saveStatus().catch((e) => setMsg('jobMsg', e.message, true));
+      });
+      document.getElementById('screenshotChooseBtn').addEventListener('click', () => {
+        document.getElementById('screenshotFileInput')?.click();
+      });
+      document.getElementById('screenshotFileInput').addEventListener('change', () => {
+        const file = document.getElementById('screenshotFileInput').files?.[0];
+        if (!file) return;
+        uploadScreenshotFile(file).catch((e) => setMsg('jobMsg', e.message, true));
+        document.getElementById('screenshotFileInput').value = '';
+      });
+      document.getElementById('screenshotPasteZone').addEventListener('paste', (event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+          if (!item.type.startsWith('image/')) continue;
+          const file = item.getAsFile();
+          if (!file) continue;
+          event.preventDefault();
+          uploadScreenshotFile(file).catch((e) => setMsg('jobMsg', e.message, true));
+          return;
+        }
+      });
       document.getElementById('notesText').addEventListener('blur', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
       document.getElementById('genBtn').addEventListener('click', () => generateMaterials().catch((e) => setMsg('jobMsg', e.message, true)));
       document.getElementById('openResumeBtn').addEventListener('click', openSelectedUserResume);

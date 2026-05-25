@@ -58,6 +58,10 @@ export default function defineApplication(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      ScreenshotArtifactURL: {
+        type: DataTypes.STRING(2048),
+        allowNull: true,
+      },
     },
     {
       tableName: 'Applications',

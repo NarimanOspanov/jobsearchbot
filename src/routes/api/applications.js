@@ -1,9 +1,10 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { Sequelize } from 'sequelize';
 import { miniAppAuth, miniAppActorAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
 import { ensureUserByTelegramId } from '../../services/userService.js';
 import { assertCanAccessClient } from '../../services/agentAccessService.js';
+import { resumeStorage } from '../../services/resumeStorage.js';
 import {
   toIntOrNullOrUndefined,
   toScoreOrNullOrUndefined,
@@ -182,6 +183,10 @@ export function createApplicationsRouter() {
       if (req.body.coverLetter !== undefined) {
         updates.CoverLetter = req.body.coverLetter == null ? null : String(req.body.coverLetter);
       }
+      if (req.body.screenshotArtifactUrl !== undefined) {
+        updates.ScreenshotArtifactURL =
+          toStringOrUndefined(req.body.screenshotArtifactUrl, 2048) ?? null;
+      }
 
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: 'No valid fields to update' });
@@ -194,6 +199,60 @@ export function createApplicationsRouter() {
       res.status(500).json({ error: 'Failed to update application' });
     }
   });
+
+  router.post(
+    '/api/app/applications/:id/screenshot-upload',
+    miniAppActorAuth,
+    express.raw({ type: 'application/octet-stream', limit: '10mb' }),
+    async (req, res) => {
+      try {
+        const id = Number.parseInt(String(req.params.id), 10);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+          return res.status(400).json({ error: 'Invalid id' });
+        }
+
+        const row = await models.Applications.findByPk(id);
+        if (!row) return res.status(404).json({ error: 'Application not found' });
+        if (!(await enforceAgentClientAccess(req, res, row.UserId))) return;
+
+        const bodyBuffer = Buffer.isBuffer(req.body) ? req.body : null;
+        if (!bodyBuffer || bodyBuffer.length === 0) {
+          return res.status(400).json({ error: 'Screenshot file bytes are required' });
+        }
+
+        const headerFileNameRaw = String(req.headers['x-file-name'] || '').trim();
+        const headerMimeTypeRaw = String(req.headers['x-file-type'] || '').trim().toLowerCase();
+        const fileName = headerFileNameRaw || `screenshot-${id}-${Date.now()}.png`;
+        const mimeType = headerMimeTypeRaw || 'application/octet-stream';
+        const isSupported =
+          mimeType.includes('png') ||
+          mimeType.includes('jpeg') ||
+          mimeType.includes('jpg') ||
+          mimeType.includes('webp');
+        if (!isSupported) {
+          return res.status(400).json({
+            error: 'Unsupported screenshot type. Use PNG, JPEG, or WEBP.',
+          });
+        }
+
+        const screenlyJobId = Number(row.ScreenlyJobId);
+        const screenshotArtifactUrl = await resumeStorage.uploadApplicationScreenshotBuffer({
+          userId: row.UserId,
+          screenlyJobId: Number.isSafeInteger(screenlyJobId) ? screenlyJobId : 0,
+          applicationId: id,
+          fileName,
+          mimeType,
+          buffer: bodyBuffer,
+        });
+
+        await row.update({ ScreenshotArtifactURL: screenshotArtifactUrl });
+        return res.json({ screenshotArtifactUrl });
+      } catch (err) {
+        console.error('POST /api/app/applications/:id/screenshot-upload:', err);
+        return res.status(500).json({ error: 'Failed to upload application screenshot' });
+      }
+    }
+  );
 
   return router;
 }

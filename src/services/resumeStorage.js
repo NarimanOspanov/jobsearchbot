@@ -65,7 +65,24 @@ export function createResumeStorage(config) {
     });
   }
 
-  return { uploadResumeBuffer, uploadTailoredResumeBuffer };
+  async function uploadApplicationScreenshotBuffer({
+    userId,
+    screenlyJobId,
+    applicationId,
+    fileName,
+    mimeType,
+    buffer,
+  }) {
+    return uploadToContainer(tailoredContainerName, {
+      folder: `screenshots/${userId}-${screenlyJobId}`,
+      fileId: `app-${applicationId}-${Date.now()}`,
+      fileName: fileName || `screenshot-${applicationId}.png`,
+      mimeType: mimeType || 'image/png',
+      buffer,
+    });
+  }
+
+  return { uploadResumeBuffer, uploadTailoredResumeBuffer, uploadApplicationScreenshotBuffer };
 }
 
 export const resumeStorage = createResumeStorage(config);
