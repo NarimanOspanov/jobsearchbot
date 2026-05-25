@@ -428,8 +428,8 @@
           </div>
           <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
             <div class="skills-block">
-              <h4>Admin notes</h4>
-              <textarea id="notesText" aria-label="Admin notes"></textarea>
+              <h4>Agent note</h4>
+              <textarea id="notesText" aria-label="Agent note"></textarea>
             </div>
           </div>
         </div>
@@ -1245,19 +1245,23 @@
           return;
         }
         links.innerHTML = tailoredUrl
-          ? `
-            <button type="button" id="openTailoredCvBtn">Tailored CV (open)</button>
-            <a href="${esc(tailoredUrl)}" download target="_blank" rel="noopener noreferrer">Download Tailored CV</a>
-          `
+          ? `<a href="${esc(tailoredUrl)}" download target="_blank" rel="noopener noreferrer">Download Tailored CV</a>`
           : '';
-        const openBtn = document.getElementById('openTailoredCvBtn');
-        if (openBtn) {
-          openBtn.addEventListener('click', () => {
-            openCvModal('Tailored CV', tailoredUrl);
-          });
-        }
         cover.value = coverText;
         if (coverBlock) coverBlock.style.display = coverText ? '' : 'none';
+      }
+
+      function getApplicationArtifactsForSave() {
+        const tailoredUrl = String(
+          generatedMaterials?.tailoredCvUrl || selectedApplication?.TailoredCVURL || ''
+        ).trim();
+        const coverText = String(
+          generatedMaterials?.coverLetter ?? selectedApplication?.CoverLetter ?? ''
+        ).trim();
+        const payload = {};
+        if (tailoredUrl) payload.tailoredCvUrl = tailoredUrl;
+        if (coverText) payload.coverLetter = coverText;
+        return payload;
       }
 
       async function saveStatus() {
@@ -1268,14 +1272,19 @@
         setJobBusy(true);
         try {
           const app = await ensureApplication(seekerId, selectedJob);
+          const artifacts = getApplicationArtifactsForSave();
           const updated = await api(`${API_BASE}/api/app/applications/${app.Id}`, {
             method: 'PATCH',
             body: JSON.stringify({
               status: document.getElementById('statusSel').value,
               notes: document.getElementById('notesText').value,
+              ...artifacts,
             }),
           });
           selectedApplication = updated;
+          if (artifacts.tailoredCvUrl || artifacts.coverLetter) {
+            generatedMaterials = null;
+          }
           await loadApplicationsByUser(seekerId);
           renderJobs();
           renderArtifacts();
