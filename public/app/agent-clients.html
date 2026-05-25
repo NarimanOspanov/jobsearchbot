@@ -116,6 +116,10 @@
       .job-summary { margin: 10px 0; line-height: 1.45; color: var(--text); }
       .skills-block { margin-top: 12px; }
       .skills-block h4 { margin: 8px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+      .client-comment-block { margin: 12px 0; }
+      .client-comment-label { display: block; }
+      .client-comment-label .k { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
+      .client-comment-block textarea { min-height: 88px; }
       .screenshot-proof-block { margin-bottom: 12px; }
       .screenshot-proof-block.applied-highlight {
         padding: 10px;
@@ -336,6 +340,21 @@
           </div>
           <div id="userInfoSection" style="display:none">
             <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
+            <div id="clientCommentBlock" class="client-comment-block" style="display:none">
+              <label class="client-comment-label">
+                <span class="k">Do not apply to (companies)</span>
+                <textarea
+                  id="clientCommentText"
+                  rows="4"
+                  placeholder="Current employer: Acme Inc. Other companies to skip: ..."
+                  aria-label="Do not apply to companies"
+                ></textarea>
+              </label>
+              <div class="row">
+                <button id="saveClientCommentBtn" type="button">Save</button>
+                <span id="clientCommentMsg" class="muted"></span>
+              </div>
+            </div>
             <div class="row">
               <button id="openResumeBtn" type="button">Open resume</button>
             </div>
@@ -922,6 +941,7 @@
         if (!u) {
           el.className = 'muted';
           el.innerHTML = 'Select a user to view user information.';
+          syncClientCommentUi(null);
           return;
         }
         const username = String(u.telegramUserName || '').trim();
@@ -966,6 +986,49 @@
             </div>
           </div>
         `;
+        syncClientCommentUi(u);
+      }
+
+      function syncClientCommentUi(user) {
+        const block = document.getElementById('clientCommentBlock');
+        const textarea = document.getElementById('clientCommentText');
+        if (!block || !textarea) return;
+        if (!user) {
+          block.style.display = 'none';
+          textarea.value = '';
+          setMsg('clientCommentMsg', '');
+          return;
+        }
+        block.style.display = '';
+        textarea.value = String(user.comment || '');
+        setMsg('clientCommentMsg', '');
+      }
+
+      async function saveClientComment() {
+        const seekerId = q().seekerId;
+        if (!seekerId) throw new Error('Select a client first.');
+        const textarea = document.getElementById('clientCommentText');
+        const btn = document.getElementById('saveClientCommentBtn');
+        const raw = String(textarea?.value || '').trim();
+        const body = { comment: raw || null };
+        if (isBotAdminUser) {
+          const aid = String(q().agentUserId || '').trim();
+          if (aid) body.agentUserId = Number(aid);
+        }
+        if (btn) btn.disabled = true;
+        try {
+          const payload = await api(
+            `${API_BASE}/api/app/agent/clients/${encodeURIComponent(seekerId)}/comment`,
+            { method: 'PATCH', body: JSON.stringify(body) }
+          );
+          const saved = payload?.comment ?? null;
+          const idx = users.findIndex((u) => String(u.id) === String(seekerId));
+          if (idx >= 0) users[idx] = { ...users[idx], comment: saved };
+          if (textarea) textarea.value = String(saved || '');
+          setMsg('clientCommentMsg', 'Saved.');
+        } finally {
+          if (btn) btn.disabled = false;
+        }
       }
 
       async function loadSkills() {
@@ -1672,6 +1735,9 @@
       });
       document.getElementById('notesText').addEventListener('blur', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
       document.getElementById('genBtn').addEventListener('click', () => generateMaterials().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('saveClientCommentBtn').addEventListener('click', () => {
+        saveClientComment().catch((e) => setMsg('clientCommentMsg', e.message, true));
+      });
       document.getElementById('openResumeBtn').addEventListener('click', openSelectedUserResume);
       document.getElementById('cvModalClose').addEventListener('click', closeCvModal);
       document.getElementById('cvModal').addEventListener('click', (e) => {

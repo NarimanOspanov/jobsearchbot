@@ -124,6 +124,10 @@ export default function defineUser(sequelize) {
         type: DataTypes.STRING(2048),
         allowNull: true,
       },
+      Comment: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       ResumeContactsJson: {
         type: DataTypes.TEXT,
         allowNull: true,

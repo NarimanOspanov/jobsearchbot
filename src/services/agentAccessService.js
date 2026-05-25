@@ -95,6 +95,7 @@ export function mapUserToAgentClientPayload(u) {
     dateJoined: u.DateJoined,
     isBlocked: !!u.IsBlocked,
     resumeUrl: u.ResumeURL || null,
+    comment: u.Comment ?? null,
     skills: Array.isArray(u.skills) ? u.skills : [],
     ...projection,
   };

@@ -53,6 +53,28 @@ function mapAssignmentRow(row) {
   };
 }
 
+const CLIENT_COMMENT_MAX_LENGTH = 4000;
+
+function parseImpersonateAgentUserId(req) {
+  const n = Number.parseInt(String(req.query.agentUserId || req.body?.agentUserId || ''), 10);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+async function enforceAgentClientAccess(req, res, clientUserId) {
+  if (Number(req.actorUser.Id) === Number(clientUserId)) return true;
+  const access = await assertCanAccessClient({
+    actorUserId: req.actorUser.Id,
+    clientUserId,
+    isBotAdmin: req.isBotAdmin,
+    impersonateAgentUserId: parseImpersonateAgentUserId(req),
+  });
+  if (!access.ok) {
+    res.status(access.status).json({ error: access.error });
+    return false;
+  }
+  return true;
+}
+
 function resolveEffectiveAgentUserId(req) {
   const requested = Number.parseInt(String(req.query.agentUserId || ''), 10);
   if (req.isBotAdmin) {
@@ -261,6 +283,41 @@ export function createAgentClientsRouter() {
       return res.status(500).json({ error: 'Failed to update assignment' });
     }
   });
+
+  router.patch(
+    '/api/app/agent/clients/:clientUserId/comment',
+    agentMiniAppAuth,
+    async (req, res) => {
+      try {
+        const clientUserId = Number.parseInt(String(req.params.clientUserId), 10);
+        if (!Number.isSafeInteger(clientUserId) || clientUserId <= 0) {
+          return res.status(400).json({ error: 'Invalid client user id' });
+        }
+        if (!(await enforceAgentClientAccess(req, res, clientUserId))) return;
+
+        if (!('comment' in req.body)) {
+          return res.status(400).json({ error: 'comment is required' });
+        }
+
+        let comment = null;
+        if (req.body.comment != null) {
+          const raw = String(req.body.comment).trim();
+          if (raw.length > CLIENT_COMMENT_MAX_LENGTH) {
+            return res.status(400).json({
+              error: `comment must be at most ${CLIENT_COMMENT_MAX_LENGTH} characters`,
+            });
+          }
+          comment = raw || null;
+        }
+
+        await models.Users.update({ Comment: comment }, { where: { Id: clientUserId } });
+        return res.json({ ok: true, comment });
+      } catch (err) {
+        console.error('PATCH /api/app/agent/clients/:clientUserId/comment:', err);
+        return res.status(500).json({ error: 'Failed to save client comment' });
+      }
+    }
+  );
 
   router.delete('/api/app/admin/agent-clients/:id', adminMiniAppAuth, async (req, res) => {
     try {
