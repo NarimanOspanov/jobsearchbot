@@ -609,6 +609,7 @@
         return `<span class="tag-remote" title="${attrEsc(r)}">Remote</span>`;
       }
       function renderJobSkillsHtml(skills) {
+        if (!isBotAdminUser) return '';
         const list = Array.isArray(skills) ? skills : [];
         const primary = list.filter((s) => s.isHighlyRelevant === true);
         const secondary = list.filter((s) => s.isHighlyRelevant !== true);
