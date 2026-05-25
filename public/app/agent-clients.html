@@ -209,6 +209,13 @@
         justify-content: space-between;
         gap: 8px;
       }
+      .section-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
       .ghost-btn {
         background: #0f1730;
         border: 1px solid var(--border);
@@ -336,7 +343,10 @@
         <section class="card layout-col">
           <div class="section-head-row">
             <h2>Client applications</h2>
-            <button id="toggleUserInfoBtn" type="button" class="ghost-btn">Show user info</button>
+            <div class="section-head-actions">
+              <button id="toggleFiltersBtn" type="button" class="ghost-btn">Show filters</button>
+              <button id="toggleUserInfoBtn" type="button" class="ghost-btn">Show user info</button>
+            </div>
           </div>
           <div id="userInfoSection" style="display:none">
             <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
@@ -360,43 +370,47 @@
             </div>
             <hr class="section-separator" />
           </div>
-          <div class="row date-range-row">
-            <span class="date-range">
-              <label>From <input id="fromDate" type="date" /></label>
-              <label>To <input id="toDate" type="date" /></label>
-            </span>
-          </div>
-          <div class="row date-range-row">
-            <label>Roles</label>
-            <div class="skills-picker">
-              <button id="skillPickerBtn" type="button" class="skills-picker-btn">All roles</button>
-              <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+          <div id="filtersSection" style="display:none">
+            <div class="row date-range-row">
+              <span class="date-range">
+                <label>From <input id="fromDate" type="date" /></label>
+                <label>To <input id="toDate" type="date" /></label>
+              </span>
             </div>
-            <span id="highlyRelevantFilterWrap" class="highly-relevant-filter" aria-hidden="true">
-              <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
-              <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="What does Top matches mean?" aria-label="What does Top matches mean?">?</button>
-            </span>
-          </div>
-          <div class="row date-range-row">
-            <label>Search in</label>
-            <div class="skills-picker">
-              <button id="sourcePickerBtn" type="button" class="skills-picker-btn">All sources</button>
-              <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            <div class="row date-range-row">
+              <label>Roles</label>
+              <div class="skills-picker">
+                <button id="skillPickerBtn" type="button" class="skills-picker-btn">All roles</button>
+                <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+              </div>
+              <span id="highlyRelevantFilterWrap" class="highly-relevant-filter" aria-hidden="true">
+                <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
+                <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="What does Top matches mean?" aria-label="What does Top matches mean?">?</button>
+              </span>
             </div>
-          </div>
-          <div id="sourceFilterRow" class="row date-range-row" style="display:none" hidden>
-            <label>Source
-              <select id="sourceSel">
-                <option value="">All</option>
-                <option value="Linkedin">Linkedin</option>
-                <option value="Indeed">Indeed</option>
-                <option value="hirehi">hirehi</option>
-              </select>
-            </label>
+            <div class="row date-range-row">
+              <label>Search in</label>
+              <div class="skills-picker">
+                <button id="sourcePickerBtn" type="button" class="skills-picker-btn">All sources</button>
+                <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+              </div>
+            </div>
+            <div id="sourceFilterRow" class="row date-range-row" style="display:none" hidden>
+              <label>Source
+                <select id="sourceSel">
+                  <option value="">All</option>
+                  <option value="Linkedin">Linkedin</option>
+                  <option value="Indeed">Indeed</option>
+                  <option value="hirehi">hirehi</option>
+                </select>
+              </label>
+            </div>
+            <div class="row date-range-row">
+              <button id="clearFiltersBtn" type="button" class="ghost-btn">Reset filters</button>
+            </div>
           </div>
           <div class="row date-range-row">
             <button id="syncBtn">Search</button>
-            <button id="clearFiltersBtn" type="button" class="ghost-btn">Reset filters</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
             <span class="pager">
               <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Previous page">
@@ -554,6 +568,7 @@
       let isSyncing = false;
       let isJobBusy = false;
       let isUserInfoHidden = true;
+      let isFiltersHidden = true;
       let isSkillPickerOpen = false;
       let isSourcePickerOpen = false;
       let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
@@ -827,6 +842,13 @@
         const btn = document.getElementById('toggleUserInfoBtn');
         if (section) section.style.display = isUserInfoHidden ? 'none' : '';
         if (btn) btn.textContent = isUserInfoHidden ? 'Show user info' : 'Hide user info';
+      }
+      function setFiltersVisibility(hidden) {
+        isFiltersHidden = !!hidden;
+        const section = document.getElementById('filtersSection');
+        const btn = document.getElementById('toggleFiltersBtn');
+        if (section) section.style.display = isFiltersHidden ? 'none' : '';
+        if (btn) btn.textContent = isFiltersHidden ? 'Show filters' : 'Hide filters';
       }
       function openCvModal(title, url) {
         document.getElementById('cvModalTitle').textContent = title || 'Document';
@@ -1607,6 +1629,7 @@
         await Promise.all([loadClients(), loadSkills()]);
         renderSelectedUserInfo();
         setUserInfoVisibility(true);
+        setFiltersVisibility(true);
         const s = q();
         applySelectedApplyTypesCsv(s.applyTypes || '');
         if (s.skillIds) {
@@ -1699,6 +1722,9 @@
         if (event.target.id === 'highlyRelevantHintModal') {
           document.getElementById('highlyRelevantHintModal').classList.remove('on');
         }
+      });
+      document.getElementById('toggleFiltersBtn').addEventListener('click', () => {
+        setFiltersVisibility(!isFiltersHidden);
       });
       document.getElementById('toggleUserInfoBtn').addEventListener('click', () => {
         setUserInfoVisibility(!isUserInfoHidden);
