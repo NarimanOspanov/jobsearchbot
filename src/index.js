@@ -61,7 +61,7 @@ import {
   runResumeEnrichmentInBackground,
 } from './services/userService.js';
 import { countAgentAssignments, isBotAdminTelegramId } from './services/agentAccessService.js';
-import { generateTailoredCvSimple } from './services/tailoredCvService.js';
+import { tailorResumeForSeeker } from './services/tailoredCvService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
 import {
   tr,
@@ -784,6 +784,61 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await startHireAgentScenario(ctx);
   });
 
+  function resumeUrlSupportsTextExtraction(resumeUrl) {
+    const lower = String(resumeUrl || '').toLowerCase();
+    return lower.endsWith('.pdf') || lower.endsWith('.txt');
+  }
+
+  async function promptCvscoreResumeSource(ctx, flow) {
+    const chatId = ctx.callbackQuery?.message?.chat?.id ?? ctx.chat?.id;
+    if (!chatId) return;
+    const step = flow === 'roast' ? 'awaiting_cv_roast' : 'awaiting_cv_tailor';
+    hireAgentStateByChatId.set(chatId, { step });
+
+    const { user } = await ensureUserByTelegramId(
+      chatId,
+      ctx.from?.username ?? null,
+      ctx.from?.first_name ?? null,
+      ctx.from?.last_name ?? null
+    );
+    const lang = langFromCtx(ctx);
+    const hasSaved = Boolean(String(user?.ResumeURL || '').trim());
+    const promptKey = flow === 'roast' ? 'cvscore_prompt' : 'cvscore_tailor_prompt';
+
+    if (hasSaved) {
+      await ctx.reply(tr(ctx, 'cvscore_has_saved_resume'), {
+        reply_markup: {
+          inline_keyboard: [[{ text: t(lang, 'btn_cv_use_saved'), callback_data: `cvscore_use_saved:${flow}` }]],
+        },
+      });
+    }
+    await ctx.reply(tr(ctx, promptKey));
+  }
+
+  async function runCvscoreTailorJob(ctx, chatId, user, jobRequirements, { fallbackResumeText = '', source = 'cvscore-bot' } = {}) {
+    hireAgentStateByChatId.set(chatId, { step: 'idle' });
+    await ctx.reply(tr(ctx, 'tailoring_cv'));
+    try {
+      const { url: cvUrl } = await runWithTyping(ctx.telegram, chatId, () =>
+        tailorResumeForSeeker({
+          seekerUser: user,
+          jobRequirements,
+          source,
+          fallbackResumeText,
+        })
+      );
+      const lang = langFromCtx(ctx);
+      await ctx.reply(tr(ctx, 'tailored_ready'), {
+        reply_markup: {
+          inline_keyboard: [[{ text: t(lang, 'btn_tailored_download'), url: cvUrl }]],
+        },
+      });
+    } catch (err) {
+      console.error('generate-simple error:', err);
+      await ctx.reply(tr(ctx, 'tailored_failed'));
+    }
+  }
+
   const runCvAnalysis = async (ctx, chatId, resumeText) => {
     await ctx.reply(tr(ctx, 'cv_analyzing'), { reply_markup: { remove_keyboard: true } });
     const lang = langFromCtx(ctx);
@@ -874,20 +929,61 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.answerCbQuery().catch(() => {});
     const canProceed = await enforceStartRequiredChannelsGate(ctx);
     if (!canProceed) return;
-    const chatId = ctx.callbackQuery?.message?.chat?.id;
-    if (!chatId) return;
-    hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_roast' });
-    await ctx.reply(tr(ctx, 'cvscore_prompt'));
+    await promptCvscoreResumeSource(ctx, 'roast');
   });
 
   bot.action('cvscore_tailor', async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
     const canProceed = await enforceStartRequiredChannelsGate(ctx);
     if (!canProceed) return;
+    await promptCvscoreResumeSource(ctx, 'tailor');
+  });
+
+  bot.action(/^cvscore_use_saved:(roast|tailor)$/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const canProceed = await enforceStartRequiredChannelsGate(ctx);
+    if (!canProceed) return;
+    const flow = ctx.match[1];
     const chatId = ctx.callbackQuery?.message?.chat?.id;
     if (!chatId) return;
-    hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv_tailor' });
-    await ctx.reply(tr(ctx, 'cvscore_tailor_prompt'));
+    const originalStep = flow === 'roast' ? 'awaiting_cv_roast' : 'awaiting_cv_tailor';
+
+    try {
+      const { user } = await ensureUserByTelegramId(
+        chatId,
+        ctx.from?.username ?? null,
+        ctx.from?.first_name ?? null,
+        ctx.from?.last_name ?? null
+      );
+      const resumeUrl = String(user?.ResumeURL || '').trim();
+      if (!resumeUrl) {
+        await ctx.reply(tr(ctx, 'cvscore_saved_resume_missing'));
+        await promptCvscoreResumeSource(ctx, flow);
+        return;
+      }
+      if (!resumeUrlSupportsTextExtraction(resumeUrl)) {
+        hireAgentStateByChatId.set(chatId, { step: originalStep });
+        await ctx.reply(tr(ctx, 'cvscore_pdf_only'));
+        return;
+      }
+      const resumeText = await runWithTyping(ctx.telegram, chatId, () => extractResumeTextFromUrl(resumeUrl));
+      if (!resumeText) {
+        hireAgentStateByChatId.set(chatId, { step: originalStep });
+        await ctx.reply(tr(ctx, 'cvscore_extract_failed'));
+        return;
+      }
+      if (flow === 'roast') {
+        hireAgentStateByChatId.set(chatId, { step: 'idle' });
+        await runCvAnalysis(ctx, chatId, resumeText);
+        return;
+      }
+      hireAgentStateByChatId.set(chatId, { step: 'awaiting_job_desc', resumeText });
+      await ctx.reply(tr(ctx, 'awaiting_job_desc'), { reply_markup: { remove_keyboard: true } });
+    } catch (err) {
+      console.error('cvscore_use_saved failed:', err);
+      hireAgentStateByChatId.set(chatId, { step: originalStep });
+      await ctx.reply(tr(ctx, 'cvscore_process_failed'));
+    }
   });
 
   bot.action('start_hireagent', async (ctx) => {
@@ -1001,6 +1097,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         ctx.from?.first_name ?? null,
         ctx.from?.last_name ?? null
       );
+      // New upload replaces the user's base resume (Users.ResumeURL) for job search and future CVScore runs.
       await user.update({ ResumeURL: resumeUrl });
       runResumeEnrichmentInBackground({ userId: user.Id, resumeUrl, includeSkills: true });
       const totalWithResume = await models.Users.count({
@@ -1051,8 +1148,19 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           hireAgentStateByChatId.set(chatId, { step: 'idle' });
           await runCvAnalysis(ctx, chatId, resumeText);
         } else {
-          hireAgentStateByChatId.set(chatId, { step: 'awaiting_job_desc', resumeText });
-          await ctx.reply(tr(ctx, 'awaiting_job_desc'), { reply_markup: { remove_keyboard: true } });
+          const caption = String(ctx.message?.caption || '').trim();
+          if (caption.length >= 50) {
+            await runCvscoreTailorJob(ctx, chatId, user, caption, {
+              fallbackResumeText: resumeText,
+              source: 'cvscore-bot-caption',
+            });
+          } else {
+            if (caption.length > 0) {
+              await ctx.reply(tr(ctx, 'job_desc_too_short'));
+            }
+            hireAgentStateByChatId.set(chatId, { step: 'awaiting_job_desc', resumeText });
+            await ctx.reply(tr(ctx, 'awaiting_job_desc'), { reply_markup: { remove_keyboard: true } });
+          }
         }
       } else if (isPositionCvFlow) {
         const positionId = String(st?.positionId || '').trim();
@@ -1522,20 +1630,19 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         await ctx.reply(tr(ctx, 'job_desc_too_short'));
         return;
       }
-      hireAgentStateByChatId.set(chatId, { step: 'idle' });
-      await ctx.reply(tr(ctx, 'tailoring_cv'));
       try {
-        const { url: cvUrl } = await runWithTyping(ctx.telegram, chatId, () =>
-          generateTailoredCvSimple({ existingCvText: st.resumeText, jobRequirements: text })
+        const { user } = await ensureUserByTelegramId(
+          chatId,
+          ctx.from?.username ?? null,
+          ctx.from?.first_name ?? null,
+          ctx.from?.last_name ?? null
         );
-        const lang = langFromCtx(ctx);
-        await ctx.reply(tr(ctx, 'tailored_ready'), {
-          reply_markup: {
-            inline_keyboard: [[{ text: t(lang, 'btn_tailored_download'), url: cvUrl }]],
-          },
+        await runCvscoreTailorJob(ctx, chatId, user, text, {
+          fallbackResumeText: st.resumeText,
+          source: 'cvscore-bot',
         });
       } catch (err) {
-        console.error('generate-simple error:', err);
+        console.error('awaiting_job_desc tailor failed:', err);
         await ctx.reply(tr(ctx, 'tailored_failed'));
       }
       return;

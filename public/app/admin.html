@@ -1312,8 +1312,8 @@
           const tailorPayload = {
             seekerId: Number(seekerId),
             screenlyJobId: Number(selectedJob.id),
-            mainResumeText,
             job: selectedJob,
+            tailorSource: 'admin',
           };
 
           const [tailored, cover] = await Promise.all([
@@ -1323,7 +1323,7 @@
             }),
             api(`${API_BASE}/api/cover-letter`, {
               method: 'POST',
-              body: JSON.stringify({ ...tailorPayload }),
+              body: JSON.stringify({ ...tailorPayload, mainResumeText }),
             }),
           ]);
 

@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { extractResumeTextFromUrl } from './resumeService.js';
 
 /** Build job requirements text (same shape as /cvscore «Адаптация под вакансию» user paste). */
 export function buildJobRequirementsText(job) {
@@ -27,6 +28,46 @@ export function resolveJobRequirementsFromBody(body) {
   const direct = String(body?.jobRequirements || body?.jobDescription || '').trim();
   if (direct) return direct;
   return buildJobRequirementsText(body?.job);
+}
+
+/** Resume text for tailoring: always from Users.ResumeURL when set (same PDF for all flows). */
+export async function getSeekerResumeTextForTailoring(seekerUser, fallbackText = '') {
+  const resumeUrl = String(seekerUser?.ResumeURL || '').trim();
+  if (resumeUrl) {
+    const fromUrl = await extractResumeTextFromUrl(resumeUrl);
+    if (fromUrl) return fromUrl;
+  }
+  const fallback = String(fallbackText || '').trim();
+  if (fallback) return fallback;
+  throw new Error('Resume text is empty; upload a PDF resume first');
+}
+
+/**
+ * Single entry for CVScore «Адаптация под вакансию», job search, and agent clients.
+ * @param {{ seekerUser: object, jobRequirements: string, source?: string, fallbackResumeText?: string }}
+ * @returns {Promise<{ url: string, resumeTextLength: number, jobRequirementsLength: number }>}
+ */
+export async function tailorResumeForSeeker({
+  seekerUser,
+  jobRequirements,
+  source = 'unknown',
+  fallbackResumeText = '',
+}) {
+  const requirements = String(jobRequirements || '').trim();
+  if (!requirements) throw new Error('jobRequirements is required');
+  if (requirements.length < 50) throw new Error('Job description is too short for tailoring');
+
+  const existingCvText = await getSeekerResumeTextForTailoring(seekerUser, fallbackResumeText);
+  console.info('[tailor-cv]', {
+    source,
+    userId: seekerUser?.Id,
+    resumeUrl: seekerUser?.ResumeURL || null,
+    resumeTextLength: existingCvText.length,
+    jobRequirementsLength: requirements.length,
+  });
+
+  const { url } = await generateTailoredCvSimple({ existingCvText, jobRequirements: requirements });
+  return { url, resumeTextLength: existingCvText.length, jobRequirementsLength: requirements.length };
 }
 
 /**

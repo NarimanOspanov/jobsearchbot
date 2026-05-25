@@ -1357,8 +1357,8 @@
           const tailorPayload = {
             seekerId: Number(seekerId),
             screenlyJobId: Number(selectedJob.id),
-            mainResumeText,
             job: selectedJob,
+            tailorSource: 'agent-clients',
           };
           const agentUserId = String(q().agentUserId || '').trim();
           if (isBotAdminUser && agentUserId) tailorPayload.agentUserId = Number(agentUserId);
@@ -1370,7 +1370,7 @@
             }),
             api(`${API_BASE}/api/cover-letter`, {
               method: 'POST',
-              body: JSON.stringify({ ...tailorPayload }),
+              body: JSON.stringify({ ...tailorPayload, mainResumeText }),
             }),
           ]);
 

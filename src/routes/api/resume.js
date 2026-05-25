@@ -11,8 +11,8 @@ import {
 import { models } from '../../db.js';
 import { cvScoreResultByUserId } from '../../bot/state.js';
 import {
-  generateTailoredCvSimple,
   resolveJobRequirementsFromBody,
+  tailorResumeForSeeker,
 } from '../../services/tailoredCvService.js';
 import { extractMiniAppInitData, verifyInitData } from '../../utils/telegramUtils.js';
 import { getRequiredChannelsState, serializeRequiredChannels } from '../../services/channelService.js';
@@ -97,7 +97,9 @@ export function createResumeRouter() {
     }
   });
 
+  /** @deprecated Legacy Gemini markdown PDF; job tailor uses POST /api/tailored-resume/upload → generate-simple. */
   router.post('/api/tailored-resume', async (req, res) => {
+    console.warn('POST /api/tailored-resume (legacy markdown) called');
     try {
       const jobTitle = String(req.body?.jobTitle || '').trim();
       const jobDescription = String(req.body?.jobDescription || '').trim();
@@ -124,18 +126,15 @@ export function createResumeRouter() {
       const screenlyJobId = Number.parseInt(String(req.body?.screenlyJobId), 10);
       const jobTitle = String(req.body?.jobTitle || req.body?.job?.title || '').trim();
       const jobRequirements = resolveJobRequirementsFromBody(req.body);
-      const mainResumeText = String(req.body?.mainResumeText || '').trim();
+      const tailorSource = String(req.body?.tailorSource || 'api-upload').trim() || 'api-upload';
       if (!Number.isSafeInteger(seekerId) || seekerId <= 0) {
         return res.status(400).json({ error: 'seekerId is required and must be a positive integer' });
       }
       if (!Number.isSafeInteger(screenlyJobId) || screenlyJobId < 0) {
         return res.status(400).json({ error: 'screenlyJobId is required and must be a non-negative integer' });
       }
-      if (!jobTitle || !jobRequirements || !mainResumeText) {
-        return res.status(400).json({ error: 'job title, job description, and mainResumeText are required' });
-      }
-      if (jobRequirements.length < 50) {
-        return res.status(400).json({ error: 'Job description is too short for tailoring' });
+      if (!jobTitle || !jobRequirements) {
+        return res.status(400).json({ error: 'job title and job description are required' });
       }
       const resolved = await resolveSeekerUserForAiGeneration(req, seekerId);
       if (!resolved.ok) {
@@ -151,9 +150,10 @@ export function createResumeRouter() {
         });
       }
 
-      const { url: tailoredCvUrl } = await generateTailoredCvSimple({
-        existingCvText: mainResumeText,
+      const { url: tailoredCvUrl } = await tailorResumeForSeeker({
+        seekerUser,
         jobRequirements,
+        source: tailorSource,
       });
       return res.status(200).json({ tailoredCvUrl });
     } catch (err) {
