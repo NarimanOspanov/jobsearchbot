@@ -66,6 +66,7 @@ import {
   isBotAdminTelegramId,
 } from './services/agentAccessService.js';
 import { tailorResumeForSeeker } from './services/tailoredCvService.js';
+import { notifyPublisherOfNewApplication } from './services/publisherApplyNotificationService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
 import {
   tr,
@@ -1210,6 +1211,17 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
             Publisher: attribution?.publisherUserId ?? null,
             PublishedIn: attribution?.publishedInChatId ?? null,
           });
+          if (attribution?.publisherUserId != null && attribution?.publishedInChatId != null) {
+            notifyPublisherOfNewApplication({
+              telegram: ctx.telegram,
+              applicantUser: user,
+              positionId,
+              publisherUserId: attribution.publisherUserId,
+              publishedInChatId: attribution.publishedInChatId,
+            }).catch((err) => {
+              console.warn('Publisher apply notification error:', err?.message || err);
+            });
+          }
         }
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
         clearPositionApplyChannelBypass(chatId);
