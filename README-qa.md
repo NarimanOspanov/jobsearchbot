@@ -98,6 +98,7 @@ Test each command in a **private chat** with the bot.
 | `/admin_notifications` | Notification panel link |
 | `/stat` | 7-day stats summary in chat |
 | `/stat2` | Link to stat2 Mini App |
+| `/publisher_stats` | Job poster apply-link efficiency (tracked UserApplications) |
 | `/removeuser <telegramId>` | Deletes all user data; replies with counts |
 
 ---
@@ -265,6 +266,7 @@ Open each URL while logged in via Telegram WebApp. Verify the page loads and cor
 | `/app/admin/agent-assignments` | Assignment CRUD (admin only) |
 | `/app/admin` | Redirects to `/app/agent/clients` |
 | `/app/stat2` | Stats chart renders (admin only) |
+| `/app/publisher-stats` | Publisher/channel application stats (admin only) |
 
 ---
 

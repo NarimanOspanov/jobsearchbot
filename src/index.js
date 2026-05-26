@@ -161,6 +161,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const applyLinkBuilderUrl = appBaseUrl ? `${appBaseUrl}/app/apply-link-builder` : '';
   const adminNotificationsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/notifications` : '';
   const stat2Url = appBaseUrl ? `${appBaseUrl}/app/stat2` : '';
+  const publisherStatsUrl = appBaseUrl ? `${appBaseUrl}/app/publisher-stats` : '';
   const cvScoreUrl = appBaseUrl ? `${appBaseUrl}/app/cvscore` : '';
   const canUseSeekerJobsWebApp = isValidTelegramWebAppUrl(seekerJobsUrl);
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
@@ -175,6 +176,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseApplyLinkBuilderWebApp = isValidTelegramWebAppUrl(applyLinkBuilderUrl);
   const canUseAdminNotificationsWebApp = isValidTelegramWebAppUrl(adminNotificationsUrl);
   const canUseStat2WebApp = isValidTelegramWebAppUrl(stat2Url);
+  const canUsePublisherStatsWebApp = isValidTelegramWebAppUrl(publisherStatsUrl);
   const canUseCvScoreWebApp = isValidTelegramWebAppUrl(cvScoreUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const notSubscribedImagePath = join(__dirname, '..', 'not_subscribed.png');
@@ -1589,6 +1591,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<b>Statistics</b>',
       '<code>/stat</code> — job import stats (external page)',
       '<code>/stat2</code> [days] — Stat2 dashboard (default 7 days)',
+      '<code>/publisher_stats</code> [days] — job poster apply-link efficiency (default 7 days)',
+      '<i>Alias:</i> <code>/publisher-stats</code>',
       '',
       '<b>Maintenance</b>',
       '<code>/refreshmenus</code> — refresh bot command menus for all users',
@@ -1635,6 +1639,37 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       },
     });
   });
+
+  const openPublisherStats = async (ctx) => {
+    const ok = await ensurePrivateAdminForHiddenCommand(ctx, 'This command');
+    if (!ok) return;
+    const text = String(ctx.message?.text || '').trim();
+    const parts = text.split(/\s+/).filter(Boolean);
+    const periodDays = parsePeriodDays(parts[1], 7);
+    const pageUrl = publisherStatsUrl
+      ? `${publisherStatsUrl}?period=${encodeURIComponent(periodDays)}`
+      : '';
+    if (!pageUrl) {
+      await ctx.reply('Publisher stats page URL is not configured.');
+      return;
+    }
+    if (canUsePublisherStatsWebApp) {
+      await ctx.reply('Open publisher stats:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Publisher stats', web_app: { url: pageUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Open publisher stats:', {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Publisher stats', url: pageUrl }]],
+      },
+    });
+  };
+
+  bot.command('publisher_stats', openPublisherStats);
+  bot.hears(/^\/publisher-stats(?:@\w+)?$/, openPublisherStats);
 
   bot.command('removeuser', async (ctx) => {
     if (ctx.chat?.type !== 'private') {

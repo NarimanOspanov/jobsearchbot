@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Publisher stats</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+        --ok: #22c55e;
+        --bad: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      h1, h2 { margin: 0 0 10px; font-size: 1.1rem; }
+      .muted { color: var(--muted); font-size: 14px; }
+      .bad { color: var(--bad); }
+      .ok { color: var(--ok); }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      select, button {
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #0f1730;
+        color: var(--text);
+        padding: 8px 10px;
+        font: inherit;
+      }
+      button {
+        border-color: var(--accent);
+        background: var(--accent);
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .metrics {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      }
+      .metric-title { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+      .metric-value { font-size: 24px; font-weight: 700; line-height: 1.1; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th, td {
+        border-bottom: 1px solid var(--border);
+        padding: 8px 6px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th { color: var(--muted); font-weight: 600; }
+      .table-wrap { overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Job poster efficiency</h1>
+        <p class="muted">Applications from tracked apply links (<code>Publisher</code> + <code>PublishedIn</code> on UserApplications).</p>
+        <div class="toolbar" style="margin-top:12px">
+          <label class="muted">Period (days)
+            <select id="periodSel">
+              <option value="1">1</option>
+              <option value="7" selected>7</option>
+              <option value="14">14</option>
+              <option value="30">30</option>
+              <option value="90">90</option>
+            </select>
+          </label>
+          <button id="reloadBtn" type="button">Reload</button>
+        </div>
+        <p id="msg" class="muted" style="margin-top:10px"></p>
+      </div>
+
+      <div class="card">
+        <h2>Summary</h2>
+        <div id="totals" class="metrics"></div>
+      </div>
+
+      <div class="card">
+        <h2>By publisher</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Publisher</th>
+                <th>Applications</th>
+                <th>Channels</th>
+                <th>Positions</th>
+              </tr>
+            </thead>
+            <tbody id="byPublisherBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>By publisher and channel</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Publisher</th>
+                <th>Channel chat id</th>
+                <th>Applications</th>
+                <th>Positions</th>
+              </tr>
+            </thead>
+            <tbody id="byChannelBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Recent applications</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Applicant</th>
+                <th>Publisher</th>
+                <th>Channel</th>
+                <th>Position</th>
+              </tr>
+            </thead>
+            <tbody id="recentBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+
+      function esc(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function toInt(value, fallback) {
+        const n = Number.parseInt(String(value), 10);
+        return Number.isSafeInteger(n) && n > 0 ? n : fallback;
+      }
+
+      const periodFromUrl = new URLSearchParams(location.search).get('period');
+
+      async function api(path) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (tg?.initData) headers['x-init-data'] = tg.initData;
+        const res = await fetch(path, { headers });
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+      }
+
+      function formatDt(value) {
+        if (!value) return '—';
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+      }
+
+      function renderTotals(totals) {
+        const tracked = Number(totals?.trackedApplications || 0);
+        const all = Number(totals?.applications || 0);
+        const rate = all > 0 ? `${Math.round((tracked / all) * 100)}%` : '—';
+        const items = [
+          ['Applications', all],
+          ['Tracked', tracked],
+          ['Untracked', Number(totals?.untrackedApplications || 0)],
+          ['Tracking rate', rate],
+          ['Publishers', Number(totals?.uniquePublishers || 0)],
+          ['Channels', Number(totals?.uniqueChannels || 0)],
+        ];
+        document.getElementById('totals').innerHTML = items
+          .map(
+            ([title, value]) => `
+              <div>
+                <div class="metric-title">${esc(title)}</div>
+                <div class="metric-value">${esc(value)}</div>
+              </div>
+            `
+          )
+          .join('');
+      }
+
+      function renderTableRows(tbodyId, rowsHtml) {
+        document.getElementById(tbodyId).innerHTML =
+          rowsHtml || '<tr><td colspan="6" class="muted">No data</td></tr>';
+      }
+
+      async function load() {
+        const msg = document.getElementById('msg');
+        msg.className = 'muted';
+        msg.textContent = 'Loading...';
+        const period = toInt(document.getElementById('periodSel').value, 7);
+        try {
+          const payload = await api(`/api/app/admin/publisher-stats?period=${encodeURIComponent(period)}`);
+          renderTotals(payload?.totals || {});
+
+          const byPublisher = Array.isArray(payload?.byPublisher) ? payload.byPublisher : [];
+          renderTableRows(
+            'byPublisherBody',
+            byPublisher
+              .map(
+                (row) => `<tr>
+                  <td>${esc(row.publisherName)} <span class="muted">#${esc(row.publisherUserId)}</span></td>
+                  <td>${esc(row.applications)}</td>
+                  <td>${esc(row.uniqueChannels)}</td>
+                  <td>${esc(row.uniquePositions)}</td>
+                </tr>`
+              )
+              .join('')
+          );
+
+          const byChannel = Array.isArray(payload?.byPublisherChannel) ? payload.byPublisherChannel : [];
+          renderTableRows(
+            'byChannelBody',
+            byChannel
+              .map(
+                (row) => `<tr>
+                  <td>${esc(row.publisherName)} <span class="muted">#${esc(row.publisherUserId)}</span></td>
+                  <td><code>${esc(row.publishedInChatId)}</code></td>
+                  <td>${esc(row.applications)}</td>
+                  <td>${esc(row.uniquePositions)}</td>
+                </tr>`
+              )
+              .join('')
+          );
+
+          const recent = Array.isArray(payload?.recent) ? payload.recent : [];
+          renderTableRows(
+            'recentBody',
+            recent
+              .map(
+                (row) => `<tr>
+                  <td>${esc(formatDt(row.dateTime))}</td>
+                  <td>${esc(row.applicantName)}</td>
+                  <td>${row.publisherName ? esc(row.publisherName) : '<span class="muted">—</span>'}</td>
+                  <td>${row.publishedInChatId != null ? `<code>${esc(row.publishedInChatId)}</code>` : '<span class="muted">—</span>'}</td>
+                  <td>${esc(row.positionTitle || row.positionId || '—')}</td>
+                </tr>`
+              )
+              .join('')
+          );
+
+          msg.textContent = `Updated for ${period} day(s), since ${formatDt(payload?.since)}`;
+          msg.className = 'ok';
+          const current = new URL(window.location.href);
+          current.searchParams.set('period', String(period));
+          window.history.replaceState(null, '', current.toString());
+        } catch (err) {
+          msg.className = 'bad';
+          msg.textContent = `Failed to load: ${err?.message || 'Unknown error'}`;
+        }
+      }
+
+      document.getElementById('periodSel').value = String(toInt(periodFromUrl, 7));
+      document.getElementById('reloadBtn').addEventListener('click', load);
+      document.getElementById('periodSel').addEventListener('change', load);
+      load();
+    </script>
+  </body>
+</html>

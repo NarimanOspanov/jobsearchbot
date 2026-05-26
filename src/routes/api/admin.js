@@ -199,6 +199,195 @@ export function createAdminRouter() {
     }
   });
 
+  router.get('/api/app/admin/publisher-stats', adminMiniAppAuth, async (req, res) => {
+    try {
+      const periodRaw = String(req.query.period || '7').trim();
+      const period = /^\d+$/.test(periodRaw)
+        ? Math.min(365, Math.max(1, Number.parseInt(periodRaw, 10)))
+        : 7;
+      const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
+
+      if (!models.UserApplications) {
+        return res.json({
+          success: true,
+          period,
+          since: since.toISOString(),
+          totals: {
+            applications: 0,
+            trackedApplications: 0,
+            untrackedApplications: 0,
+            uniquePublishers: 0,
+            uniqueChannels: 0,
+          },
+          byPublisher: [],
+          byPublisherChannel: [],
+          recent: [],
+        });
+      }
+
+      const buildUserLabel = (user) => {
+        const firstName = String(user?.FirstName || '').trim();
+        const lastName = String(user?.LastName || '').trim();
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+        const username = String(user?.TelegramUserName || '').trim();
+        if (fullName && username) return `${fullName} (@${username})`;
+        if (fullName) return fullName;
+        if (username) return `@${username}`;
+        return `User #${user?.Id ?? '-'}`;
+      };
+
+      const [totalsRow] = await sequelize.query(
+        `SELECT
+           COUNT(*) AS applications,
+           SUM(CASE WHEN ua.Publisher IS NOT NULL AND ua.PublishedIn IS NOT NULL THEN 1 ELSE 0 END) AS trackedApplications,
+           SUM(CASE WHEN ua.Publisher IS NULL OR ua.PublishedIn IS NULL THEN 1 ELSE 0 END) AS untrackedApplications,
+           COUNT(DISTINCT CASE WHEN ua.Publisher IS NOT NULL THEN ua.Publisher END) AS uniquePublishers,
+           COUNT(DISTINCT CASE WHEN ua.PublishedIn IS NOT NULL THEN ua.PublishedIn END) AS uniqueChannels
+         FROM dbo.UserApplications AS ua
+         WHERE ua.DateTime >= :since`,
+        { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+      );
+
+      const byPublisherRows = await sequelize.query(
+        `SELECT
+           ua.Publisher AS publisherUserId,
+           COUNT(*) AS applications,
+           COUNT(DISTINCT ua.PublishedIn) AS uniqueChannels,
+           COUNT(DISTINCT ua.PositionId) AS uniquePositions
+         FROM dbo.UserApplications AS ua
+         WHERE ua.DateTime >= :since AND ua.Publisher IS NOT NULL
+         GROUP BY ua.Publisher
+         ORDER BY applications DESC`,
+        { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+      );
+
+      const byPublisherChannelRows = await sequelize.query(
+        `SELECT
+           ua.Publisher AS publisherUserId,
+           ua.PublishedIn AS publishedInChatId,
+           COUNT(*) AS applications,
+           COUNT(DISTINCT ua.PositionId) AS uniquePositions
+         FROM dbo.UserApplications AS ua
+         WHERE ua.DateTime >= :since
+           AND ua.Publisher IS NOT NULL
+           AND ua.PublishedIn IS NOT NULL
+         GROUP BY ua.Publisher, ua.PublishedIn
+         ORDER BY applications DESC`,
+        { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+      );
+
+      const recentLimit = Math.min(200, Math.max(1, Number.parseInt(String(req.query.recentLimit || '50'), 10) || 50));
+      const recentRows = await sequelize.query(
+        `SELECT TOP (${recentLimit})
+           ua.Id AS id,
+           ua.DateTime AS dateTime,
+           ua.Publisher AS publisherUserId,
+           ua.PublishedIn AS publishedInChatId,
+           ua.PositionId AS positionId,
+           ua.UserId AS applicantUserId,
+           p.Title AS positionTitle
+         FROM dbo.UserApplications AS ua
+         LEFT JOIN dbo.Positions AS p ON p.Id = ua.PositionId
+         WHERE ua.DateTime >= :since
+         ORDER BY ua.DateTime DESC, ua.Id DESC`,
+        { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+      );
+
+      const publisherIds = Array.from(
+        new Set(
+          [
+            ...byPublisherRows.map((r) => Number(r?.publisherUserId)),
+            ...byPublisherChannelRows.map((r) => Number(r?.publisherUserId)),
+            ...recentRows.map((r) => Number(r?.publisherUserId)),
+          ].filter((id) => Number.isSafeInteger(id) && id > 0)
+        )
+      );
+      const applicantIds = Array.from(
+        new Set(
+          recentRows
+            .map((r) => Number(r?.applicantUserId))
+            .filter((id) => Number.isSafeInteger(id) && id > 0)
+        )
+      );
+      const userIds = Array.from(new Set([...publisherIds, ...applicantIds]));
+      const users =
+        userIds.length > 0 && models.Users
+          ? await models.Users.findAll({
+              attributes: ['Id', 'FirstName', 'LastName', 'TelegramUserName'],
+              where: { Id: { [Sequelize.Op.in]: userIds } },
+            })
+          : [];
+      const userById = new Map(users.map((u) => [Number(u.Id), u]));
+
+      const byPublisher = (Array.isArray(byPublisherRows) ? byPublisherRows : []).map((row) => {
+        const publisherUserId = Number(row?.publisherUserId);
+        const publisher = userById.get(publisherUserId);
+        return {
+          publisherUserId,
+          publisherName: publisher ? buildUserLabel(publisher) : `User #${publisherUserId}`,
+          applications: Number(row?.applications || 0),
+          uniqueChannels: Number(row?.uniqueChannels || 0),
+          uniquePositions: Number(row?.uniquePositions || 0),
+        };
+      });
+
+      const byPublisherChannel = (Array.isArray(byPublisherChannelRows) ? byPublisherChannelRows : []).map(
+        (row) => {
+          const publisherUserId = Number(row?.publisherUserId);
+          const publisher = userById.get(publisherUserId);
+          return {
+            publisherUserId,
+            publisherName: publisher ? buildUserLabel(publisher) : `User #${publisherUserId}`,
+            publishedInChatId: Number(row?.publishedInChatId),
+            applications: Number(row?.applications || 0),
+            uniquePositions: Number(row?.uniquePositions || 0),
+          };
+        }
+      );
+
+      const recent = (Array.isArray(recentRows) ? recentRows : []).map((row) => {
+        const publisherUserId =
+          row?.publisherUserId != null ? Number(row.publisherUserId) : null;
+        const applicantUserId = Number(row?.applicantUserId);
+        const publisher = publisherUserId ? userById.get(publisherUserId) : null;
+        const applicant = userById.get(applicantUserId);
+        return {
+          id: Number(row?.id),
+          dateTime: row?.dateTime || null,
+          publisherUserId,
+          publisherName: publisher ? buildUserLabel(publisher) : null,
+          publishedInChatId:
+            row?.publishedInChatId != null ? Number(row.publishedInChatId) : null,
+          positionId: row?.positionId || null,
+          positionTitle: row?.positionTitle || null,
+          applicantUserId,
+          applicantName: applicant ? buildUserLabel(applicant) : `User #${applicantUserId}`,
+        };
+      });
+
+      const totals = {
+        applications: Number(totalsRow?.applications || 0),
+        trackedApplications: Number(totalsRow?.trackedApplications || 0),
+        untrackedApplications: Number(totalsRow?.untrackedApplications || 0),
+        uniquePublishers: Number(totalsRow?.uniquePublishers || 0),
+        uniqueChannels: Number(totalsRow?.uniqueChannels || 0),
+      };
+
+      return res.json({
+        success: true,
+        period,
+        since: since.toISOString(),
+        totals,
+        byPublisher,
+        byPublisherChannel,
+        recent,
+      });
+    } catch (err) {
+      console.error('GET /api/app/admin/publisher-stats:', err);
+      return res.status(500).json({ error: 'Failed to load publisher stats' });
+    }
+  });
+
   router.get('/api/app/admin/users/search', adminMiniAppAuth, async (req, res) => {
     try {
       const query = String(req.query.q || '').trim();
