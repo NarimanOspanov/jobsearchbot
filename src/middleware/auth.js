@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { verifyInitData, extractMiniAppInitData } from '../utils/telegramUtils.js';
 import {
+  canUseApplyLinkBuilder,
   countAgentAssignments,
   isBotAdminTelegramId,
   resolveUserFromMiniApp,
@@ -63,6 +64,24 @@ export async function miniAppActorAuth(req, res, next) {
     req.actorUser = actorUser;
     req.isBotAdmin = isBotAdminTelegramId(telegramUserId);
     req.isCareerAgent = (await countAgentAssignments(actorUser.Id)) > 0;
+    return next();
+  });
+}
+
+/** Bot admins and env-configured job publishers (apply link builder). */
+export async function publisherMiniAppAuth(req, res, next) {
+  await miniAppAuth(req, res, async () => {
+    const telegramUserId = Number(req.miniAppUser?.id);
+    if (!Number.isSafeInteger(telegramUserId) || telegramUserId <= 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (!canUseApplyLinkBuilder(telegramUserId)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const actorUser = await resolveUserFromMiniApp(req.miniAppUser);
+    if (!actorUser) return res.status(403).json({ error: 'User not found' });
+    req.actorUser = actorUser;
+    req.isBotAdmin = isBotAdminTelegramId(telegramUserId);
     return next();
   });
 }

@@ -31,6 +31,7 @@ export function createStaticRouter() {
   router.get('/app/pricing', (_req, res) => res.sendFile(join(publicApp, 'pricing.html')));
   router.get('/app/admin/companies', (_req, res) => res.sendFile(join(publicApp, 'admin-companies.html')));
   router.get('/app/admin/positions', (_req, res) => res.sendFile(join(publicApp, 'admin-positions.html')));
+  router.get('/app/apply-link-builder', (_req, res) => res.sendFile(join(publicApp, 'apply-link-builder.html')));
   router.get('/app/admin/notifications', (_req, res) => res.sendFile(join(publicApp, 'admin-notifications.html')));
   router.get('/app/admin/agent-assignments', (_req, res) =>
     res.sendFile(join(publicApp, 'admin-agent-assignments.html'))

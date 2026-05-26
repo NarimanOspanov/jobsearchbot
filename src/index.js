@@ -30,7 +30,7 @@ import {
   downloadTelegramFileAsBuffer,
   parseStartPayload,
   parseStartReferralChatId,
-  parseStartPositionId,
+  parseStartApplyPayload,
 } from './utils/telegramUtils.js';
 
 // services
@@ -60,7 +60,11 @@ import {
   removeUserDataByTelegramChatId,
   runResumeEnrichmentInBackground,
 } from './services/userService.js';
-import { countAgentAssignments, isBotAdminTelegramId } from './services/agentAccessService.js';
+import {
+  canUseApplyLinkBuilder,
+  countAgentAssignments,
+  isBotAdminTelegramId,
+} from './services/agentAccessService.js';
 import { tailorResumeForSeeker } from './services/tailoredCvService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
 import {
@@ -73,6 +77,8 @@ import {
 import {
   hireAgentStateByChatId,
   positionApplyChannelBypassByChatId,
+  setPositionApplyAttribution,
+  takePositionApplyAttribution,
   legacyKeyboardClearedByChatId,
   cvScoreResultByUserId,
   runtimeBot,
@@ -89,6 +95,7 @@ import { createCompaniesRouter } from './routes/api/companies.js';
 import { createPositionsRouter } from './routes/api/positions.js';
 import { createAdminRouter } from './routes/api/admin.js';
 import { createAgentClientsRouter } from './routes/api/agentClients.js';
+import { createApplyLinkRouter } from './routes/api/applyLink.js';
 import { createNotificationsRouter } from './routes/api/notifications.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -151,6 +158,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const adminAgentAssignmentsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/agent-assignments` : '';
   const adminCompaniesUrl = appBaseUrl ? `${appBaseUrl}/app/admin/companies` : '';
   const adminPositionsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/positions` : '';
+  const applyLinkBuilderUrl = appBaseUrl ? `${appBaseUrl}/app/apply-link-builder` : '';
   const adminNotificationsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/notifications` : '';
   const stat2Url = appBaseUrl ? `${appBaseUrl}/app/stat2` : '';
   const cvScoreUrl = appBaseUrl ? `${appBaseUrl}/app/cvscore` : '';
@@ -164,6 +172,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseAdminAgentAssignmentsWebApp = isValidTelegramWebAppUrl(adminAgentAssignmentsUrl);
   const canUseAdminCompaniesWebApp = isValidTelegramWebAppUrl(adminCompaniesUrl);
   const canUseAdminPositionsWebApp = isValidTelegramWebAppUrl(adminPositionsUrl);
+  const canUseApplyLinkBuilderWebApp = isValidTelegramWebAppUrl(applyLinkBuilderUrl);
   const canUseAdminNotificationsWebApp = isValidTelegramWebAppUrl(adminNotificationsUrl);
   const canUseStat2WebApp = isValidTelegramWebAppUrl(stat2Url);
   const canUseCvScoreWebApp = isValidTelegramWebAppUrl(cvScoreUrl);
@@ -611,9 +620,17 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.start(async (ctx) => {
     const payload = parseStartPayload(ctx);
-    const positionIdFromStart = parseStartPositionId(payload);
-    if (positionIdFromStart) {
-      await startPositionApplyScenario(ctx, positionIdFromStart, { enableChannelBypass: true });
+    const applyFromStart = parseStartApplyPayload(payload);
+    if (applyFromStart?.positionId) {
+      const chatId = ctx.chat?.id ?? ctx.from?.id;
+      if (
+        chatId &&
+        applyFromStart.publisherUserId != null &&
+        applyFromStart.publishedInChatId != null
+      ) {
+        setPositionApplyAttribution(chatId, applyFromStart);
+      }
+      await startPositionApplyScenario(ctx, applyFromStart.positionId, { enableChannelBypass: true });
       return;
     }
     const canProceedToVacancies = await enforceStartRequiredChannelsGate(ctx);
@@ -1183,10 +1200,13 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       } else if (isPositionCvFlow) {
         const positionId = String(st?.positionId || '').trim();
         if (positionId && models.UserApplications) {
+          const attribution = takePositionApplyAttribution(chatId, positionId);
           await models.UserApplications.create({
             UserId: user.Id,
             PositionId: positionId,
             DateTime: Sequelize.literal('GETUTCDATE()'),
+            Publisher: attribution?.publisherUserId ?? null,
+            PublishedIn: attribution?.publishedInChatId ?? null,
           });
         }
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
@@ -1447,6 +1467,35 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.hears(/^\/admin-positions(?:@\w+)?$/, async (ctx) => {
     await openAdminPositions(ctx);
+  });
+
+  const openApplyLinkBuilder = async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Apply link builder is available only in private chat.');
+      return;
+    }
+    const telegramUserId = Number(ctx.from?.id || 0);
+    if (!canUseApplyLinkBuilder(telegramUserId)) {
+      await ctx.reply('Unauthorized.');
+      return;
+    }
+    if (canUseApplyLinkBuilderWebApp) {
+      await ctx.reply('Open apply link builder:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Apply link builder', web_app: { url: applyLinkBuilderUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Apply link builder requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  };
+
+  bot.command('apply_link', async (ctx) => {
+    await openApplyLinkBuilder(ctx);
+  });
+
+  bot.hears(/^\/apply-link(?:@\w+)?$/, async (ctx) => {
+    await openApplyLinkBuilder(ctx);
   });
 
   const openAdminNotifications = async (ctx) => {
@@ -1786,6 +1835,7 @@ async function main() {
   app.use(createPositionsRouter());
   app.use(createAdminRouter());
   app.use(createAgentClientsRouter());
+  app.use(createApplyLinkRouter());
   app.use(createNotificationsRouter());
 
   await new Promise((resolve) => app.listen(port, resolve));

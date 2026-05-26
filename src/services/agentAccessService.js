@@ -13,6 +13,21 @@ export function isBotAdminTelegramId(telegramUserId) {
   );
 }
 
+export function isBotPublisherTelegramId(telegramUserId) {
+  const id = Number(telegramUserId);
+  const publisherIds = config.botPublisherTelegramIds;
+  return (
+    Number.isSafeInteger(id) &&
+    id > 0 &&
+    publisherIds.size > 0 &&
+    publisherIds.has(id)
+  );
+}
+
+export function canUseApplyLinkBuilder(telegramUserId) {
+  return isBotAdminTelegramId(telegramUserId) || isBotPublisherTelegramId(telegramUserId);
+}
+
 export async function resolveUserFromMiniApp(miniAppUser) {
   if (!miniAppUser?.id) return null;
   const { user } = await ensureUserByTelegramId(

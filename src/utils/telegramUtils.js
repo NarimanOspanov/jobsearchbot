@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { config } from '../config.js';
+import { decodeApplyAttribution } from './applyLinkAttribution.js';
 
 export function isValidTelegramWebAppUrl(urlValue) {
   if (!urlValue) return false;
@@ -93,9 +94,54 @@ export function parseStartReferralChatId(startPayload) {
   return Number.isSafeInteger(chatId) && chatId > 0 ? chatId : null;
 }
 
-export function parseStartPositionId(startPayload) {
+const APPLY_POSITION_UUID_RE =
+  '([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})';
+
+/**
+ * @param {string} startPayload
+ * @returns {{ positionId: string, publisherUserId?: number, publishedInChatId?: number } | null}
+ */
+export function parseStartApplyPayload(startPayload) {
   const payload = String(startPayload || '').trim();
-  const match = payload.match(/^apply_([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
-  if (!match) return null;
-  return String(match[1]).toLowerCase();
+  const trackedMatch = payload.match(
+    new RegExp(`^apply_${APPLY_POSITION_UUID_RE}\\.([A-Za-z0-9_-]{16})$`, 'i')
+  );
+  if (trackedMatch) {
+    const positionId = String(trackedMatch[1]).toLowerCase();
+    const attribution = decodeApplyAttribution(trackedMatch[2]);
+    if (!attribution) {
+      return { positionId };
+    }
+    return {
+      positionId,
+      publisherUserId: attribution.publisherUserId,
+      publishedInChatId: attribution.publishedInChatId,
+    };
+  }
+  const legacyMatch = payload.match(new RegExp(`^apply_${APPLY_POSITION_UUID_RE}$`, 'i'));
+  if (!legacyMatch) return null;
+  return { positionId: String(legacyMatch[1]).toLowerCase() };
+}
+
+export function parseStartPositionId(startPayload) {
+  return parseStartApplyPayload(startPayload)?.positionId ?? null;
+}
+
+/**
+ * Extract start payload from a t.me apply URL or raw start= value.
+ * @param {string} input
+ * @returns {string}
+ */
+export function extractApplyStartPayloadFromUrl(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+  if (/^apply_/i.test(raw)) return raw;
+  try {
+    const normalized = raw.startsWith('http') ? raw : `https://${raw}`;
+    const url = new URL(normalized);
+    const start = url.searchParams.get('start');
+    return start ? String(start).trim() : '';
+  } catch {
+    return '';
+  }
 }

@@ -22,6 +22,14 @@ export default function defineUserApplication(sequelize) {
         type: DataTypes.DATE,
         allowNull: false,
       },
+      Publisher: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      PublishedIn: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+      },
     },
     {
       tableName: 'UserApplications',

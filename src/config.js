@@ -17,8 +17,8 @@ function getEnv(name) {
   return process.env[name] || '';
 }
 
-/** Comma-separated Telegram user IDs allowed to run hidden admin bot commands (e.g. /removeuser). */
-function parseBotAdminTelegramIds(raw) {
+/** Comma-separated Telegram user IDs (positive). */
+function parseTelegramUserIdSet(raw) {
   const set = new Set();
   for (const part of (raw || '').split(',')) {
     const n = Number.parseInt(part.trim(), 10);
@@ -40,7 +40,9 @@ export const config = {
   geminiTextModel: getEnv('GEMINI_TEXT_MODEL') || 'gemini-2.5-flash',
   anthropicApiKey: getEnv('ANTHROPIC_API_KEY'),
   anthropicCvScoreModel: getEnv('ANTHROPIC_CVSCORE_MODEL') || 'claude-sonnet-4-20250514',
-  botAdminTelegramIds: parseBotAdminTelegramIds(getEnv('BOT_ADMIN_TELEGRAM_IDS')),
+  botAdminTelegramIds: parseTelegramUserIdSet(getEnv('BOT_ADMIN_TELEGRAM_IDS')),
+  /** Job posters who may build tracked apply links (Telegram user ids). */
+  botPublisherTelegramIds: parseTelegramUserIdSet(getEnv('BOT_PUBLISHER_TELEGRAM_IDS')),
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',

@@ -137,6 +137,7 @@
             <div style="margin-top:8px"><span class="muted">Apply link:</span> ${row.applyLink ? `<a href="${esc(row.applyLink)}" target="_blank" rel="noopener noreferrer">${esc(row.applyLink)}</a>` : '<span class="muted">недоступно</span>'}</div>
             <div class="row-actions">
               <button data-copy="${row.Id}" ${row.applyLink ? '' : 'disabled'}>Копировать apply link</button>
+              <button data-track="${row.Id}" ${row.applyLink ? '' : 'disabled'}>Tracked link</button>
               <button data-edit="${row.Id}">Редактировать</button>
               <button class="danger" data-delete="${row.Id}">Удалить</button>
             </div>
@@ -166,6 +167,15 @@
             const link = String(row?.applyLink || '').trim();
             if (!link) return;
             await navigator.clipboard.writeText(link);
+          });
+        }
+        for (const btn of list.querySelectorAll('[data-track]')) {
+          btn.addEventListener('click', () => {
+            const id = String(btn.getAttribute('data-track') || '');
+            const row = rows.find((x) => String(x.Id) === id);
+            const link = String(row?.applyLink || '').trim();
+            if (!link) return;
+            location.href = `/app/apply-link-builder?applyLink=${encodeURIComponent(link)}`;
           });
         }
       }

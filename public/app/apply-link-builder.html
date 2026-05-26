@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Apply link builder</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+        --ok: #22c55e;
+        --bad: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { max-width: 720px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+      h1, h2 { margin: 0 0 12px; font-size: 1.15rem; }
+      label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 14px; }
+      input, select, textarea, button {
+        width: 100%; border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text);
+        padding: 10px; font: inherit;
+      }
+      textarea { min-height: 72px; resize: vertical; }
+      button { cursor: pointer; background: var(--accent); border-color: var(--accent); font-weight: 600; margin-top: 10px; }
+      .ghost-btn { background: #0f1730; border: 1px solid var(--border); }
+      .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .row-actions button { width: auto; margin-top: 0; }
+      .muted { color: var(--muted); font-size: 14px; }
+      .ok { color: var(--ok); }
+      .bad { color: var(--bad); }
+      .result-box {
+        margin-top: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+        background: #0f1730; word-break: break-all; font-size: 14px; line-height: 1.45;
+      }
+      a { color: #9ec5ff; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Tracked apply link</h1>
+      <p class="muted">Paste the base apply link, choose publisher and channel, then post the generated link in Telegram.</p>
+
+      <section class="card">
+        <label for="applyLinkInput">Base apply link</label>
+        <textarea id="applyLinkInput" placeholder="https://t.me/apply_jobs_bot?start=apply_..."></textarea>
+
+        <label for="publisherSel" style="margin-top:12px">Publisher</label>
+        <select id="publisherSel"></select>
+
+        <label for="publishedInInput" style="margin-top:12px">Published in (channel / chat id)</label>
+        <input id="publishedInInput" type="text" inputmode="numeric" placeholder="-1001234567890" />
+
+        <button id="buildBtn" type="button">Generate tracked link</button>
+        <p id="status" class="muted"></p>
+
+        <div id="resultBlock" style="display:none">
+          <h2>Result</h2>
+          <div class="result-box" id="resultLink"></div>
+          <p class="muted" style="margin-top:8px">Start payload: <code id="resultPayload"></code></p>
+          <div class="row-actions">
+            <button id="copyBtn" type="button" class="ghost-btn">Copy link</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+
+      let publishers = [];
+      let canSelectPublisher = false;
+      let lastApplyLink = '';
+
+      async function api(path, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        if (tg?.initData) headers['x-init-data'] = tg.initData;
+        const response = await fetch(path, { ...options, headers });
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+      }
+
+      function esc(value) {
+        return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function setStatus(text, isErr = false) {
+        const el = document.getElementById('status');
+        el.textContent = text || '';
+        el.className = isErr ? 'bad' : 'muted';
+      }
+
+      function renderPublishers() {
+        const sel = document.getElementById('publisherSel');
+        if (!publishers.length) {
+          sel.innerHTML = '<option value="">No publishers configured</option>';
+          sel.disabled = true;
+          return;
+        }
+        sel.disabled = !canSelectPublisher && publishers.length <= 1;
+        sel.innerHTML = publishers
+          .map((p) => `<option value="${esc(p.id)}">${esc(p.displayName)} (#${esc(p.id)})</option>`)
+          .join('');
+      }
+
+      async function loadPublishers() {
+        const payload = await api('/api/app/apply-link/publishers');
+        publishers = Array.isArray(payload?.publishers) ? payload.publishers : [];
+        canSelectPublisher = !!payload?.canSelectPublisher;
+        renderPublishers();
+      }
+
+      document.getElementById('buildBtn').addEventListener('click', async () => {
+        setStatus('Generating...');
+        document.getElementById('resultBlock').style.display = 'none';
+        try {
+          const applyLink = document.getElementById('applyLinkInput').value.trim();
+          const publisherUserId = Number(document.getElementById('publisherSel').value);
+          const publishedInChatId = document.getElementById('publishedInInput').value.trim();
+          if (!applyLink) throw new Error('Paste the base apply link.');
+          if (!Number.isSafeInteger(publisherUserId) || publisherUserId <= 0) {
+            throw new Error('Select a publisher.');
+          }
+          if (!publishedInChatId) throw new Error('Enter channel or chat id.');
+
+          const result = await api('/api/app/apply-link/build', {
+            method: 'POST',
+            body: JSON.stringify({ applyLink, publisherUserId, publishedInChatId }),
+          });
+
+          lastApplyLink = String(result.applyLink || '').trim();
+          document.getElementById('resultLink').innerHTML = lastApplyLink
+            ? `<a href="${esc(lastApplyLink)}" target="_blank" rel="noopener noreferrer">${esc(lastApplyLink)}</a>`
+            : '—';
+          document.getElementById('resultPayload').textContent = result.startPayload || '';
+          document.getElementById('resultBlock').style.display = '';
+          setStatus(`Generated (${String(result.startPayload || '').length} chars in start payload).`, false);
+          document.getElementById('status').className = 'ok';
+        } catch (err) {
+          setStatus(err.message || 'Failed to build link', true);
+        }
+      });
+
+      document.getElementById('copyBtn').addEventListener('click', async () => {
+        if (!lastApplyLink) return;
+        await navigator.clipboard.writeText(lastApplyLink);
+        setStatus('Copied.', false);
+        document.getElementById('status').className = 'ok';
+      });
+
+      const prefill = new URLSearchParams(location.search).get('applyLink');
+      if (prefill) document.getElementById('applyLinkInput').value = prefill;
+
+      loadPublishers().catch((err) => setStatus(err.message, true));
+    </script>
+  </body>
+</html>
