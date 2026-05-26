@@ -103,10 +103,14 @@ const APPLY_POSITION_UUID_RE =
  */
 export function parseStartApplyPayload(startPayload) {
   const payload = String(startPayload || '').trim();
-  const trackedMatch = payload.match(
-    new RegExp(`^apply_${APPLY_POSITION_UUID_RE}\\.([A-Za-z0-9_-]{16})$`, 'i')
-  );
-  if (trackedMatch) {
+  // URL-safe tracked link uses "_" before token; "." was used earlier (manual /start only).
+  const trackedSeparators = ['_', '.'];
+  for (const sep of trackedSeparators) {
+    const escaped = sep === '.' ? '\\.' : sep;
+    const trackedMatch = payload.match(
+      new RegExp(`^apply_${APPLY_POSITION_UUID_RE}${escaped}([A-Za-z0-9_-]{16})$`, 'i')
+    );
+    if (!trackedMatch) continue;
     const positionId = String(trackedMatch[1]).toLowerCase();
     const attribution = decodeApplyAttribution(trackedMatch[2]);
     if (!attribution) {

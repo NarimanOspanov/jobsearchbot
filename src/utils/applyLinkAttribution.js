@@ -45,7 +45,8 @@ export function buildTrackedApplyStartPayload(positionId, publisherUserId, publi
     throw new Error('Invalid positionId');
   }
   const token = encodeApplyAttribution(publisherUserId, publishedInChatId);
-  const payload = `apply_${id}.${token}`;
+  // Underscore separator: t.me ?start= only allows A-Z a-z 0-9 _ - (not ".")
+  const payload = `apply_${id}_${token}`;
   if (payload.length > 64) {
     throw new Error('Tracked apply payload exceeds Telegram 64 character limit');
   }
