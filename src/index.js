@@ -79,7 +79,9 @@ import {
   hireAgentStateByChatId,
   positionApplyChannelBypassByChatId,
   setPositionApplyAttribution,
-  takePositionApplyAttribution,
+  getPositionApplyAttribution,
+  resolvePositionApplyAttribution,
+  clearPositionApplyAttributionStores,
   legacyKeyboardClearedByChatId,
   cvScoreResultByUserId,
   runtimeBot,
@@ -242,13 +244,17 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.reply(lines, { parse_mode: 'HTML', reply_markup: replyMarkup });
   };
 
-  const enablePositionApplyChannelBypass = (chatId, positionId) => {
+  const enablePositionApplyChannelBypass = (chatId, positionId, attribution = null) => {
     const normalizedChatId = Number(chatId);
-    const normalizedPositionId = String(positionId || '').trim();
+    const normalizedPositionId = String(positionId || '').trim().toLowerCase();
     if (!normalizedChatId || !normalizedPositionId) return;
-    positionApplyChannelBypassByChatId.set(normalizedChatId, {
-      positionId: normalizedPositionId,
-    });
+    const attr = attribution || getPositionApplyAttribution(normalizedChatId, normalizedPositionId);
+    const entry = { positionId: normalizedPositionId };
+    if (attr?.publisherUserId != null && attr?.publishedInChatId != null) {
+      entry.publisherUserId = attr.publisherUserId;
+      entry.publishedInChatId = attr.publishedInChatId;
+    }
+    positionApplyChannelBypassByChatId.set(normalizedChatId, entry);
   };
 
   const clearPositionApplyChannelBypass = (chatId) => {
@@ -526,7 +532,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     if (enableChannelBypass) {
-      enablePositionApplyChannelBypass(chat.id, position.Id);
+      enablePositionApplyChannelBypass(
+        chat.id,
+        position.Id,
+        getPositionApplyAttribution(chat.id, position.Id)
+      );
     }
     const applyButton = {
       text: t(lang, 'btn_position_apply'),
@@ -555,9 +565,16 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       await ctx.reply(tr(ctx, 'position_not_found'));
       return;
     }
+    const attribution = getPositionApplyAttribution(chat.id, position.Id);
     hireAgentStateByChatId.set(chat.id, {
       step: 'awaiting_cv_for_position',
       positionId: position.Id,
+      ...(attribution
+        ? {
+            publisherUserId: attribution.publisherUserId,
+            publishedInChatId: attribution.publishedInChatId,
+          }
+        : {}),
     });
     await ctx.reply(tr(ctx, 'position_apply_prompt'));
   };
@@ -1203,23 +1220,33 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       } else if (isPositionCvFlow) {
         const positionId = String(st?.positionId || '').trim();
         if (positionId && models.UserApplications) {
-          const attribution = takePositionApplyAttribution(chatId, positionId);
+          const attribution = resolvePositionApplyAttribution(
+            chatId,
+            positionId,
+            hireAgentStateByChatId.get(chatId)
+          );
           await models.UserApplications.create({
             UserId: user.Id,
-            PositionId: positionId,
+            PositionId: String(positionId).trim().toLowerCase(),
             DateTime: Sequelize.literal('GETUTCDATE()'),
             Publisher: attribution?.publisherUserId ?? null,
             PublishedIn: attribution?.publishedInChatId ?? null,
           });
+          clearPositionApplyAttributionStores(chatId);
           if (attribution?.publisherUserId != null && attribution?.publishedInChatId != null) {
             notifyPublisherOfNewApplication({
-              telegram: ctx.telegram,
+              telegram: ctx.telegram || runtimeBot.telegram,
               applicantUser: user,
               positionId,
               publisherUserId: attribution.publisherUserId,
               publishedInChatId: attribution.publishedInChatId,
             }).catch((err) => {
               console.warn('Publisher apply notification error:', err?.message || err);
+            });
+          } else {
+            console.warn('Publisher apply notification skipped: no attribution', {
+              chatId,
+              positionId,
             });
           }
         }

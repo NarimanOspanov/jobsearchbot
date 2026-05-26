@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import { models } from '../db.js';
+import { runtimeBot } from '../bot/state.js';
 
 function trackedApplicationWhere(publisherUserId, extra = {}) {
   return {
@@ -20,16 +21,36 @@ export async function notifyPublisherOfNewApplication({
   publisherUserId,
   publishedInChatId,
 }) {
+  const bot = telegram || runtimeBot.telegram;
   const publisherId = Number(publisherUserId);
   const resourceChatId = Number(publishedInChatId);
-  const posId = String(positionId || '').trim();
-  if (!telegram || !models.UserApplications) return;
-  if (!Number.isSafeInteger(publisherId) || publisherId <= 0) return;
-  if (!Number.isSafeInteger(resourceChatId) || resourceChatId === 0) return;
-  if (!posId) return;
+  const posId = String(positionId || '').trim().toLowerCase();
+  if (!bot) {
+    console.warn('notifyPublisherOfNewApplication skipped: telegram not available');
+    return;
+  }
+  if (!models.UserApplications) {
+    console.warn('notifyPublisherOfNewApplication skipped: UserApplications model missing');
+    return;
+  }
+  if (!Number.isSafeInteger(publisherId) || publisherId <= 0) {
+    console.warn('notifyPublisherOfNewApplication skipped: invalid publisherUserId', publisherId);
+    return;
+  }
+  if (!Number.isSafeInteger(resourceChatId) || resourceChatId === 0) {
+    console.warn('notifyPublisherOfNewApplication skipped: invalid publishedInChatId', resourceChatId);
+    return;
+  }
+  if (!posId) {
+    console.warn('notifyPublisherOfNewApplication skipped: missing positionId');
+    return;
+  }
 
   const applicantChatId = Number(applicantUser?.TelegramChatId);
-  if (!Number.isSafeInteger(applicantChatId) || applicantChatId <= 0) return;
+  if (!Number.isSafeInteger(applicantChatId) || applicantChatId <= 0) {
+    console.warn('notifyPublisherOfNewApplication skipped: invalid applicant chat id');
+    return;
+  }
 
   const [publisher, position] = await Promise.all([
     models.Users.findByPk(publisherId, { attributes: ['Id', 'TelegramChatId'] }),
@@ -37,8 +58,18 @@ export async function notifyPublisherOfNewApplication({
   ]);
 
   const publisherChatId = Number(publisher?.TelegramChatId);
-  if (!Number.isSafeInteger(publisherChatId) || publisherChatId <= 0) return;
-  if (publisherChatId === applicantChatId) return;
+  if (!Number.isSafeInteger(publisherChatId) || publisherChatId <= 0) {
+    console.warn('notifyPublisherOfNewApplication skipped: publisher has no TelegramChatId', {
+      publisherId,
+    });
+    return;
+  }
+  if (publisherChatId === applicantChatId) {
+    console.warn('notifyPublisherOfNewApplication skipped: publisher is the applicant', {
+      publisherChatId,
+    });
+    return;
+  }
 
   const positionLabel = (() => {
     const title = String(position?.Title || '').trim();
@@ -69,7 +100,17 @@ export async function notifyPublisherOfNewApplication({
     `overall number of applicants from your links: ${overallCount}`,
   ];
 
-  await telegram.sendMessage(publisherChatId, lines.join('\n')).catch((err) => {
-    console.warn('notifyPublisherOfNewApplication failed:', err?.message || err);
-  });
+  try {
+    await bot.sendMessage(publisherChatId, lines.join('\n'));
+    console.log('notifyPublisherOfNewApplication sent', {
+      publisherChatId,
+      publisherId,
+      positionId: posId,
+    });
+  } catch (err) {
+    console.warn('notifyPublisherOfNewApplication failed:', err?.message || err, {
+      publisherChatId,
+      publisherId,
+    });
+  }
 }
