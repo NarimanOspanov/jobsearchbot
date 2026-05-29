@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { runtimeBot } from '../../bot/state.js';
+import { runtimeBot, screeningCronHealthState } from '../../bot/state.js';
 import { screeningCronSecretAuth } from '../../middleware/cronSecretAuth.js';
 import {
   buildScreeningJobsUi,
@@ -45,6 +45,7 @@ export function createCronRouter() {
       return res.json({
         ok: true,
         telegramReady: Boolean(runtimeBot.telegram),
+        cronHealth: screeningCronHealthState,
         jobsUi: buildScreeningJobsUi(),
         ...status,
       });

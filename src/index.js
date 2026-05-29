@@ -96,6 +96,7 @@ import {
   legacyKeyboardClearedByChatId,
   cvScoreResultByUserId,
   runtimeBot,
+  screeningCronHealthState,
 } from './bot/state.js';
 
 // routes
@@ -1992,18 +1993,26 @@ async function main() {
   const runScreeningCron = async () => {
     if (screeningCronRunning || !runtimeBot.telegram) return;
     screeningCronRunning = true;
+    screeningCronHealthState.running = true;
+    screeningCronHealthState.lastStartedAt = new Date().toISOString();
     try {
       const result = await processDueScreeningResponses({
         telegram: runtimeBot.telegram,
         jobsUi: screeningJobsUi,
       });
+      screeningCronHealthState.lastResult = result;
+      screeningCronHealthState.lastError = null;
       if (result.processed > 0 || result.warning || result.rejectionNotificationChatIds) {
         console.log('Position apply screening cron:', result);
       }
     } catch (err) {
+      screeningCronHealthState.lastError = err?.message || String(err);
       console.error('Position apply screening cron error:', err?.message || err);
     } finally {
       screeningCronRunning = false;
+      screeningCronHealthState.running = false;
+      screeningCronHealthState.runCount += 1;
+      screeningCronHealthState.lastFinishedAt = new Date().toISOString();
     }
   };
   setTimeout(() => {
@@ -2012,6 +2021,8 @@ async function main() {
     });
   }, 30 * 1000);
   setInterval(runScreeningCron, 60 * 1000);
+  screeningCronHealthState.intervalMs = 60 * 1000;
+  screeningCronHealthState.startupDelayMs = 30 * 1000;
   const rejectionChatFilter = config.rejectionNotificationChatIds;
   if (rejectionChatFilter.size > 0) {
     console.log(

@@ -116,3 +116,14 @@ export const runtimeBot = {
   username: '',
   telegram: null,
 };
+
+export const screeningCronHealthState = {
+  intervalMs: 60_000,
+  startupDelayMs: 30_000,
+  running: false,
+  runCount: 0,
+  lastStartedAt: null,
+  lastFinishedAt: null,
+  lastResult: null,
+  lastError: null,
+};
