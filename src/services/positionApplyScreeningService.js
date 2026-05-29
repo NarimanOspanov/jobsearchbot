@@ -1,6 +1,6 @@
-import { Op } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
 import { config, parseCommaSeparatedIdSet } from '../config.js';
-import { models } from '../db.js';
+import { models, sequelize } from '../db.js';
 import { getConfigInt } from './planService.js';
 import { t } from '../i18n/botI18n.js';
 import { normalizeUserLanguage } from '../utils/userLanguage.js';
@@ -51,6 +51,60 @@ export function getRejectionNotificationChatIdFilter(override = undefined) {
 
 export function rejectionNotificationChatIdsForResult(allowlist) {
   return allowlist ? Array.from(allowlist).sort((a, b) => a - b) : null;
+}
+
+/**
+ * Map REJECTION_NOTIFICATION_IDS to Users rows (TelegramChatId or Users.Id for testing).
+ * @param {Set<number>} allowlist
+ */
+export async function resolveRejectionNotificationUserIds(allowlist) {
+  if (!allowlist?.size || !models.Users) {
+    return { userIds: null, matchedUsers: [] };
+  }
+  const values = Array.from(allowlist);
+  const chatIdStrings = values.map((v) => String(v));
+  const intIdCandidates = values.filter((v) => v > 0 && v <= 2147483647);
+
+  /** Raw SQL avoids Sequelize/MSSQL BIGINT IN-list mismatches for large Telegram chat ids. */
+  const idClause =
+    intIdCandidates.length > 0 ? ' OR Id IN (:intIdCandidates)' : '';
+  const users = await sequelize.query(
+    `SELECT Id, TelegramChatId
+     FROM dbo.Users
+     WHERE CAST(TelegramChatId AS VARCHAR(20)) IN (:chatIdStrings)${idClause}`,
+    {
+      replacements: { chatIdStrings, intIdCandidates },
+      type: QueryTypes.SELECT,
+    }
+  );
+
+  const matchedUsers = users.map((row) => ({
+    id: Number(row.Id),
+    telegramChatId: row.TelegramChatId != null ? String(row.TelegramChatId) : null,
+  }));
+  const userIds = matchedUsers
+    .map((row) => row.id)
+    .filter((id) => Number.isSafeInteger(id) && id > 0);
+  return { userIds, matchedUsers };
+}
+
+/** Log whether REJECTION_NOTIFICATION_IDS resolves to DB users (call once at startup). */
+export async function logRejectionNotificationFilterStartup() {
+  const allowlist = config.rejectionNotificationChatIds;
+  if (!allowlist.size) {
+    console.log('Position apply screening: no REJECTION_NOTIFICATION_IDS filter (all due applicants)');
+    return;
+  }
+  const { matchedUsers } = await resolveRejectionNotificationUserIds(allowlist);
+  console.log('Position apply screening REJECTION_NOTIFICATION_IDS:', {
+    configured: Array.from(allowlist),
+    matchedUsers,
+  });
+  if (matchedUsers.length === 0) {
+    console.warn(
+      'Position apply screening: REJECTION_NOTIFICATION_IDS matched no Users — rejections will not be sent until this is fixed'
+    );
+  }
 }
 
 export function computeScreeningResponseDueAt(fromDate = new Date(), minutes = null) {
@@ -195,6 +249,8 @@ export async function processDueScreeningResponses({
     skipped: 0,
     filtered: 0,
     rejectionNotificationChatIds: rejectionNotificationChatIdsForResult(chatIdAllowlist),
+    matchedUsers: [],
+    warning: null,
   };
   if (!telegram || !models.UserApplications) return result;
 
@@ -204,15 +260,17 @@ export async function processDueScreeningResponses({
   };
 
   if (chatIdAllowlist) {
-    const allowedUsers = await models.Users.findAll({
-      where: { TelegramChatId: { [Op.in]: Array.from(chatIdAllowlist) } },
-      attributes: ['Id'],
-      raw: true,
-    });
-    const allowedUserIds = allowedUsers
-      .map((row) => Number(row.Id))
-      .filter((id) => Number.isSafeInteger(id) && id > 0);
-    if (allowedUserIds.length === 0) return result;
+    const { userIds: allowedUserIds, matchedUsers } =
+      await resolveRejectionNotificationUserIds(chatIdAllowlist);
+    result.matchedUsers = matchedUsers;
+    if (!allowedUserIds?.length) {
+      result.warning =
+        'REJECTION_NOTIFICATION_IDS did not match any Users (use TelegramChatId from Users table, or Users.Id for testing)';
+      console.warn('Position apply screening:', result.warning, {
+        allowlist: result.rejectionNotificationChatIds,
+      });
+      return result;
+    }
     where.UserId = { [Op.in]: allowedUserIds };
   }
 

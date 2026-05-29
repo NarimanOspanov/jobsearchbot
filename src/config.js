@@ -49,8 +49,8 @@ export const config = {
   /** Job posters who may build tracked apply links (Telegram user ids). */
   botPublisherTelegramIds: parseTelegramUserIdSet(getEnv('BOT_PUBLISHER_TELEGRAM_IDS')),
   /**
-   * When non-empty, screening rejections are sent only to applicants whose TelegramChatId is listed.
-   * Comma-separated, same format as BOT_ADMIN_TELEGRAM_IDS. Unset/empty = all due applicants.
+   * When non-empty, screening rejections only for applicants whose Users.TelegramChatId or Users.Id is listed.
+   * Comma-separated. Unset/empty = all due applicants.
    */
   rejectionNotificationChatIds: parseCommaSeparatedIdSet(getEnv('REJECTION_NOTIFICATION_IDS')),
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),

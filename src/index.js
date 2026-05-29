@@ -72,6 +72,7 @@ import {
   buildScreeningAckText,
   computeScreeningResponseDueAt,
   getPositionApplyScreeningResponseMinutes,
+  logRejectionNotificationFilterStartup,
   processDueScreeningResponses,
   sendScreeningAcknowledgment,
   USER_APPLICATION_STATUS,
@@ -1652,7 +1653,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '',
       '<b>Position apply screening</b>',
       'Config <code>PositionApplyScreeningResponseMin</code> (default 4320 = 3 days) — minutes until auto rejection',
-      'Env <code>REJECTION_NOTIFICATION_IDS</code> — optional comma-separated TelegramChatIds for screening (testing; empty = all)',
+      'Env <code>REJECTION_NOTIFICATION_IDS</code> — optional comma-separated Users.TelegramChatId (or Users.Id for testing); empty = all',
       'API <code>POST /api/app/admin/position-apply-screening/run</code> — process due screening responses',
       'API <code>GET /api/app/admin/user-application-outreach</code> — applicant outreach audit log',
       '',
@@ -1962,6 +1963,10 @@ async function main() {
   const hireAgentSimulationVisible = await ensureHireAgentSimulationVisibleConfig();
   registerHandlers(bot, appBaseUrl, { hireAgentSimulationVisible });
 
+  await logRejectionNotificationFilterStartup().catch((err) => {
+    console.warn('Position apply screening startup filter check failed:', err?.message || err);
+  });
+
   if (config.isProduction) {
     app.use(bot.webhookCallback('/'));
     const webhookUrl = config.webhookUrl.replace(/\/$/, '');
@@ -1992,7 +1997,7 @@ async function main() {
         telegram: runtimeBot.telegram,
         jobsUi: screeningJobsUi,
       });
-      if (result.processed > 0) {
+      if (result.processed > 0 || result.warning || result.rejectionNotificationChatIds) {
         console.log('Position apply screening cron:', result);
       }
     } catch (err) {

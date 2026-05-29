@@ -111,7 +111,7 @@ Test each command in a **private chat** with the bot.
 | `POST /api/app/admin/position-apply-screening/run` | Manual cron trigger; returns `{ processed, sent, failed, skipped }` |
 | `GET /api/app/admin/user-application-outreach?limit=100` | Audit log (`screening_ack`, `rejection_default`) |
 | Test rejection | Set `ScreeningResponseDueAt` in the past for a test row, then call the run endpoint |
-| Test filter (chat ids) | Set `REJECTION_NOTIFICATION_IDS=5934959951` in `.env` (comma-separated `Users.TelegramChatId` values, like `BOT_ADMIN_TELEGRAM_IDS`). Empty = all applicants. |
+| Test filter | Set `REJECTION_NOTIFICATION_IDS` to your `Users.TelegramChatId` (not `Users.Id` unless testing — `3` works as Id). Verify: `SELECT Id, TelegramChatId FROM Users WHERE Id = 3`. Empty = all applicants. |
 | Manual run with filter | `POST .../position-apply-screening/run` with body `{ "rejectionNotificationIds": "5934959951" }` |
 
 ---
