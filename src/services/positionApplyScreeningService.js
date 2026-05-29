@@ -139,16 +139,20 @@ export async function sendScreeningAcknowledgment({
 
   const lang = resolveApplicantLanguage(applicantUser, telegramLanguageCode);
   const text = buildScreeningAckText(lang);
+  const replyMarkup =
+    jobsUi?.seekerJobsUrl != null ? buildOpenJobsReplyMarkup(lang, jobsUi) : null;
 
   try {
-    const sent = await telegram.sendMessage(chatId, text);
+    const sent = await telegram.sendMessage(chatId, text, {
+      reply_markup: replyMarkup || undefined,
+    });
     await recordUserApplicationOutreach({
       userApplicationId,
       userId: applicantUser.Id,
       messageType: OUTREACH_MESSAGE_TYPES.SCREENING_ACK,
       language: lang,
       text,
-      replyMarkup: null,
+      replyMarkup,
       status: 'sent',
       telegramMessageId: sent?.message_id ?? null,
       sentAt: new Date(),
@@ -161,7 +165,7 @@ export async function sendScreeningAcknowledgment({
       messageType: OUTREACH_MESSAGE_TYPES.SCREENING_ACK,
       language: lang,
       text,
-      replyMarkup: null,
+      replyMarkup,
       status: 'failed',
       error: err?.message || String(err),
     });

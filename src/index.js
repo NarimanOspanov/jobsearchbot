@@ -68,6 +68,7 @@ import {
 import { tailorResumeForSeeker } from './services/tailoredCvService.js';
 import { notifyPublisherOfNewApplication } from './services/publisherApplyNotificationService.js';
 import {
+  buildOpenJobsReplyMarkup,
   buildScreeningAckText,
   computeScreeningResponseDueAt,
   getPositionApplyScreeningResponseMinutes,
@@ -1265,10 +1266,16 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
             applicantUser: user,
             userApplicationId: application.Id,
             telegramLanguageCode: ctx.from?.language_code,
+            jobsUi: { seekerJobsUrl, canUseSeekerJobsWebApp },
           });
         } else {
-          const text = buildScreeningAckText(langFromCtx(ctx));
-          await ctx.reply(text);
+          const lang = langFromCtx(ctx);
+          const text = buildScreeningAckText(lang);
+          const replyMarkup = buildOpenJobsReplyMarkup(lang, {
+            seekerJobsUrl,
+            canUseSeekerJobsWebApp,
+          });
+          await ctx.reply(text, { reply_markup: replyMarkup });
         }
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
         clearPositionApplyChannelBypass(chatId);

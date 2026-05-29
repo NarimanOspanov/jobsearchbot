@@ -147,7 +147,7 @@ export const BOT_LOCALES = {
     position_resume_accepted:
       '✅ Ваше резюме по этой вакансии получено.\n\nРекрутер позиции рассмотрит его. Если решит двигаться дальше, свяжется с вами здесь в Telegram или по контактам, которые вы указали.\n\nПока можно посмотреть другие открытые вакансии.',
     position_apply_screening_received:
-      '✅ Спасибо! Заявка принята и передана на рассмотрение. Рассмотрение обычно занимает до 3 рабочих дней. Мы обязательно напишем вам в этот чат — вне зависимости от результата.',
+      '✅ Спасибо! Заявка принята и передана на рассмотрение. Рассмотрение обычно занимает до 3 рабочих дней. Мы обязательно напишем вам в этот чат — вне зависимости от результата.\n\nПока можете посмотреть другие открытые вакансии.',
     position_apply_rejection_default:
       'Спасибо за интерес к вакансии и за то, что поделились резюме.\n\nПосле внимательного рассмотрения мы не можем предложить продолжение по этой позиции. Это не отражает вашу ценность как специалиста — просто сейчас профиль не совпал с требованиями роли.\n\nЗагляните в другие открытые вакансии — возможно, там найдётся подходящий вариант.',
     hireagent_found_jobs:
@@ -357,7 +357,7 @@ export const BOT_LOCALES = {
     position_resume_accepted:
       '✅ We received your resume for this role.\n\nThe recruiter will review it. If they decide to move forward, they will contact you here in Telegram or using the contact details you provided.\n\nIn the meantime, feel free to browse other open positions.',
     position_apply_screening_received:
-      '✅ Thank you! Your application has been received and is under review. Review usually takes up to 3 business days. We will message you in this chat regardless of the outcome.',
+      '✅ Thank you! Your application has been received and is under review. Review usually takes up to 3 business days. We will message you in this chat regardless of the outcome.\n\nIn the meantime, you can check other open positions.',
     position_apply_rejection_default:
       'Thank you for your interest in this role and for sharing your resume.\n\nAfter careful review, we are unable to move forward with your application for this position. This does not reflect your value as a professional — the profile simply did not match this role at this time.\n\nFeel free to browse other open positions — you may find a better fit.',
     hireagent_found_jobs:
