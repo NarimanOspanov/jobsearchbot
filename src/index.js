@@ -1267,7 +1267,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
             telegramLanguageCode: ctx.from?.language_code,
           });
         } else {
-          const text = await buildScreeningAckText(langFromCtx(ctx));
+          const text = buildScreeningAckText(langFromCtx(ctx));
           await ctx.reply(text);
         }
         hireAgentStateByChatId.set(chatId, { step: 'idle' });

@@ -53,53 +53,6 @@ export function rejectionNotificationChatIdsForResult(allowlist) {
   return allowlist ? Array.from(allowlist).sort((a, b) => a - b) : null;
 }
 
-export function formatScreeningResponseWindow(lang, minutes) {
-  const total = Math.max(1, Math.round(Number(minutes) || 1));
-  const locale = normalizeUserLanguage(lang);
-  if (total < 60) {
-    if (locale === 'ru') {
-      const mod10 = total % 10;
-      const mod100 = total % 100;
-      const word =
-        mod10 === 1 && mod100 !== 11
-          ? 'минуту'
-          : mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)
-            ? 'минуты'
-            : 'минут';
-      return `${total} ${word}`;
-    }
-    return `${total} minute${total === 1 ? '' : 's'}`;
-  }
-  if (total < 24 * 60) {
-    const hours = Math.max(1, Math.ceil(total / 60));
-    if (locale === 'ru') {
-      const mod10 = hours % 10;
-      const mod100 = hours % 100;
-      const word =
-        mod10 === 1 && mod100 !== 11
-          ? 'час'
-          : mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)
-            ? 'часа'
-            : 'часов';
-      return `${hours} ${word}`;
-    }
-    return `${hours} hour${hours === 1 ? '' : 's'}`;
-  }
-  const days = Math.max(1, Math.ceil(total / (24 * 60)));
-  if (locale === 'ru') {
-    const mod10 = days % 10;
-    const mod100 = days % 100;
-    const word =
-      mod10 === 1 && mod100 !== 11
-        ? 'день'
-        : mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)
-          ? 'дня'
-          : 'дней';
-    return `${days} ${word}`;
-  }
-  return `${days} day${days === 1 ? '' : 's'}`;
-}
-
 export function computeScreeningResponseDueAt(fromDate = new Date(), minutes = null) {
   const n = Number.isSafeInteger(minutes) && minutes > 0 ? minutes : 4320;
   const base = fromDate instanceof Date ? fromDate : new Date(fromDate);
@@ -123,10 +76,8 @@ export function buildOpenJobsReplyMarkup(lang, { seekerJobsUrl, canUseSeekerJobs
   return { inline_keyboard: [[button]] };
 }
 
-export async function buildScreeningAckText(lang) {
-  const minutes = await getPositionApplyScreeningResponseMinutes();
-  const responseWindow = formatScreeningResponseWindow(lang, minutes);
-  return t(lang, 'position_apply_screening_received', { responseWindow });
+export function buildScreeningAckText(lang) {
+  return t(lang, 'position_apply_screening_received');
 }
 
 export function buildRejectionText(lang) {
@@ -187,7 +138,7 @@ export async function sendScreeningAcknowledgment({
   if (!Number.isSafeInteger(chatId) || chatId <= 0) return { ok: false, skipped: true };
 
   const lang = resolveApplicantLanguage(applicantUser, telegramLanguageCode);
-  const text = await buildScreeningAckText(lang);
+  const text = buildScreeningAckText(lang);
 
   try {
     const sent = await telegram.sendMessage(chatId, text);
