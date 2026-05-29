@@ -67,6 +67,14 @@ import {
 } from './services/agentAccessService.js';
 import { tailorResumeForSeeker } from './services/tailoredCvService.js';
 import { notifyPublisherOfNewApplication } from './services/publisherApplyNotificationService.js';
+import {
+  buildScreeningAckText,
+  computeScreeningResponseDueAt,
+  getPositionApplyScreeningResponseMinutes,
+  processDueScreeningResponses,
+  sendScreeningAcknowledgment,
+  USER_APPLICATION_STATUS,
+} from './services/positionApplyScreeningService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
 import {
   tr,
@@ -1225,12 +1233,15 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
             positionId,
             hireAgentStateByChatId.get(chatId)
           );
-          await models.UserApplications.create({
+          const screeningMinutes = await getPositionApplyScreeningResponseMinutes();
+          const application = await models.UserApplications.create({
             UserId: user.Id,
             PositionId: String(positionId).trim().toLowerCase(),
             DateTime: Sequelize.literal('GETUTCDATE()'),
             Publisher: attribution?.publisherUserId ?? null,
             PublishedIn: attribution?.publishedInChatId ?? null,
+            Status: USER_APPLICATION_STATUS.PENDING_SCREENING,
+            ScreeningResponseDueAt: computeScreeningResponseDueAt(new Date(), screeningMinutes),
           });
           clearPositionApplyAttributionStores(chatId);
           if (attribution?.publisherUserId != null && attribution?.publishedInChatId != null) {
@@ -1249,19 +1260,18 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
               positionId,
             });
           }
+          await sendScreeningAcknowledgment({
+            telegram: ctx.telegram || runtimeBot.telegram,
+            applicantUser: user,
+            userApplicationId: application.Id,
+            telegramLanguageCode: ctx.from?.language_code,
+          });
+        } else {
+          const text = await buildScreeningAckText(langFromCtx(ctx));
+          await ctx.reply(text);
         }
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
         clearPositionApplyChannelBypass(chatId);
-        const lang = langFromCtx(ctx);
-        if (canUseSeekerJobsWebApp) {
-          await ctx.reply(tr(ctx, 'position_resume_accepted'), {
-            reply_markup: {
-              inline_keyboard: [[{ text: t(lang, 'btn_jobsearch'), web_app: { url: seekerJobsUrl } }]],
-            },
-          });
-        } else {
-          await ctx.reply(tr(ctx, 'position_resume_accepted'));
-        }
       } else if (hireAgentSimulationVisible) {
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_confirm' });
         const lang = langFromCtx(ctx);
@@ -1633,6 +1643,12 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<code>/publisher_stats</code> [days] — job poster apply-link efficiency (default 7 days)',
       '<i>Alias:</i> <code>/publisher-stats</code>',
       '',
+      '<b>Position apply screening</b>',
+      'Config <code>PositionApplyScreeningResponseMin</code> (default 4320 = 3 days) — minutes until auto rejection',
+      'Env <code>REJECTION_NOTIFICATION_IDS</code> — optional comma-separated TelegramChatIds for screening (testing; empty = all)',
+      'API <code>POST /api/app/admin/position-apply-screening/run</code> — process due screening responses',
+      'API <code>GET /api/app/admin/user-application-outreach</code> — applicant outreach audit log',
+      '',
       '<b>Maintenance</b>',
       '<code>/refreshmenus</code> — refresh bot command menus for all users',
       '<code>/removeuser</code> &lt;telegramChatId&gt; — delete user and applications',
@@ -1953,6 +1969,44 @@ async function main() {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch();
     console.log('Polling started. Bot is ready.');
+  }
+
+  const seekerJobsUrl = appBaseUrl ? `${appBaseUrl}/app/seeker-jobs` : '';
+  const screeningJobsUi = {
+    seekerJobsUrl,
+    canUseSeekerJobsWebApp: isValidTelegramWebAppUrl(seekerJobsUrl),
+  };
+  let screeningCronRunning = false;
+  const runScreeningCron = async () => {
+    if (screeningCronRunning || !runtimeBot.telegram) return;
+    screeningCronRunning = true;
+    try {
+      const result = await processDueScreeningResponses({
+        telegram: runtimeBot.telegram,
+        jobsUi: screeningJobsUi,
+      });
+      if (result.processed > 0) {
+        console.log('Position apply screening cron:', result);
+      }
+    } catch (err) {
+      console.error('Position apply screening cron error:', err?.message || err);
+    } finally {
+      screeningCronRunning = false;
+    }
+  };
+  setTimeout(() => {
+    runScreeningCron().catch((err) => {
+      console.error('Position apply screening startup run error:', err?.message || err);
+    });
+  }, 30 * 1000);
+  setInterval(runScreeningCron, 60 * 1000);
+  const rejectionChatFilter = config.rejectionNotificationChatIds;
+  if (rejectionChatFilter.size > 0) {
+    console.log(
+      `Position apply screening cron: TEST MODE — only TelegramChatIds=[${Array.from(rejectionChatFilter).join(', ')}] (unset REJECTION_NOTIFICATION_IDS for all users)`
+    );
+  } else {
+    console.log('Position apply screening cron scheduled (every 1 min, first run in ~30 s)');
   }
 }
 

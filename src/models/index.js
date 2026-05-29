@@ -13,6 +13,7 @@ import defineUserBonusOpen from './UserBonusOpen.js';
 import defineReferral from './Referral.js';
 import definePosition from './Position.js';
 import defineUserApplication from './UserApplication.js';
+import defineUserApplicationOutreach from './UserApplicationOutreach.js';
 import defineAdminNotification from './AdminNotification.js';
 import defineAdminNotificationRun from './AdminNotificationRun.js';
 import defineAgentClient from './AgentClient.js';
@@ -36,6 +37,7 @@ export function initModels(sequelize) {
   const Referral = defineReferral(sequelize);
   const Position = definePosition(sequelize);
   const UserApplication = defineUserApplication(sequelize);
+  const UserApplicationOutreach = defineUserApplicationOutreach(sequelize);
   const AdminNotification = defineAdminNotification(sequelize);
   const AdminNotificationRun = defineAdminNotificationRun(sequelize);
   const AgentClient = defineAgentClient(sequelize);
@@ -66,6 +68,10 @@ export function initModels(sequelize) {
   UserApplication.belongsTo(User, { foreignKey: 'UserId' });
   Position.hasMany(UserApplication, { foreignKey: 'PositionId' });
   UserApplication.belongsTo(Position, { foreignKey: 'PositionId' });
+  UserApplication.hasMany(UserApplicationOutreach, { foreignKey: 'UserApplicationId' });
+  UserApplicationOutreach.belongsTo(UserApplication, { foreignKey: 'UserApplicationId' });
+  User.hasMany(UserApplicationOutreach, { foreignKey: 'UserId' });
+  UserApplicationOutreach.belongsTo(User, { foreignKey: 'UserId' });
   User.hasMany(AgentClient, { as: 'AgentAssignments', foreignKey: 'AgentUserId' });
   AgentClient.belongsTo(User, { as: 'Agent', foreignKey: 'AgentUserId' });
   User.hasOne(AgentClient, { as: 'ClientAssignment', foreignKey: 'ClientUserId' });
@@ -101,6 +107,8 @@ export function initModels(sequelize) {
     Positions: Position,
     UserApplication,
     UserApplications: UserApplication,
+    UserApplicationOutreach,
+    UserApplicationOutreaches: UserApplicationOutreach,
     AdminNotification,
     AdminNotifications: AdminNotification,
     AdminNotificationRun,

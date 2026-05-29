@@ -146,6 +146,10 @@ export const BOT_LOCALES = {
 
     position_resume_accepted:
       '✅ Ваше резюме по этой вакансии получено.\n\nРекрутер позиции рассмотрит его. Если решит двигаться дальше, свяжется с вами здесь в Telegram или по контактам, которые вы указали.\n\nПока можно посмотреть другие открытые вакансии.',
+    position_apply_screening_received:
+      '✅ Спасибо! Мы получили ваше резюме и передали его рекрутерам.\n\nОбычно они отвечают в течение {responseWindow}. Если решат продолжить, свяжутся с вами здесь в Telegram или по указанным контактам.',
+    position_apply_rejection_default:
+      'Спасибо за интерес к вакансии и за то, что поделились резюме.\n\nПосле внимательного рассмотрения мы не можем предложить продолжение по этой позиции. Это не отражает вашу ценность как специалиста — просто сейчас профиль не совпал с требованиями роли.\n\nЗагляните в другие открытые вакансии — возможно, там найдётся подходящий вариант.',
     hireagent_found_jobs:
       'Готово. Я сохранил ваше резюме и нашёл 263 вакансии с полной удалёнкой (100%), которые вам подходят.\n\nЗапустить автоматические отклики?',
     btn_hireagent_yes: 'Да, начинай',
@@ -352,6 +356,10 @@ export const BOT_LOCALES = {
 
     position_resume_accepted:
       '✅ We received your resume for this role.\n\nThe recruiter will review it. If they decide to move forward, they will contact you here in Telegram or using the contact details you provided.\n\nIn the meantime, feel free to browse other open positions.',
+    position_apply_screening_received:
+      '✅ Thank you! We received your resume and passed it to the recruiters.\n\nThey usually respond within {responseWindow}. If they decide to move forward, they will reach out here on Telegram or using the contact details you provided.',
+    position_apply_rejection_default:
+      'Thank you for your interest in this role and for sharing your resume.\n\nAfter careful review, we are unable to move forward with your application for this position. This does not reflect your value as a professional — the profile simply did not match this role at this time.\n\nFeel free to browse other open positions — you may find a better fit.',
     hireagent_found_jobs:
       'Done. I saved your resume and found 263 fully remote (100%) jobs that match you.\n\nStart automatic applications?',
     btn_hireagent_yes: 'Yes, start',

@@ -41,6 +41,8 @@ Test each command in a **private chat** with the bot.
 | Channel joined → press "Я подписался" button | Bot detects subscription | Confirmation message + bonus opens granted once |
 | `/start ref_<chatId>` deeplink | Friend opens bot via your referral link | Referrer receives bonus opens notification |
 | `/start apply_<positionId>` deeplink | Candidate opens apply link | Hire Agent scenario starts for that position |
+| Position apply — upload resume | Complete apply flow after deeplink | Screening acknowledgment (text only); DB row `Status=pending_screening`, `ScreeningResponseDueAt` set |
+| Position apply — after N minutes | Cron (every 1 min) or `POST /api/app/admin/position-apply-screening/run` | Polite rejection + Open jobs button; `Status=does_not_match`; audit in `UserApplicationOutreach` |
 | `/start buy_silver` deeplink | Payment initiation | Telegram Stars invoice for Silver plan is sent |
 
 ### 1.2 `/cvscore` — resume review + enhanced CV
@@ -100,6 +102,17 @@ Test each command in a **private chat** with the bot.
 | `/stat2` | Link to stat2 Mini App |
 | `/publisher_stats` | Job poster apply-link efficiency (tracked UserApplications) |
 | `/removeuser <telegramId>` | Deletes all user data; replies with counts |
+
+**Position apply screening (config + ops)**
+
+| Item | Notes |
+|------|--------|
+| Config `PositionApplyScreeningResponseMin` | Default `4320` (3 days) — minutes until auto rejection |
+| `POST /api/app/admin/position-apply-screening/run` | Manual cron trigger; returns `{ processed, sent, failed, skipped }` |
+| `GET /api/app/admin/user-application-outreach?limit=100` | Audit log (`screening_ack`, `rejection_default`) |
+| Test rejection | Set `ScreeningResponseDueAt` in the past for a test row, then call the run endpoint |
+| Test filter (chat ids) | Set `REJECTION_NOTIFICATION_IDS=5934959951` in `.env` (comma-separated `Users.TelegramChatId` values, like `BOT_ADMIN_TELEGRAM_IDS`). Empty = all applicants. |
+| Manual run with filter | `POST .../position-apply-screening/run` with body `{ "rejectionNotificationIds": "5934959951" }` |
 
 ---
 

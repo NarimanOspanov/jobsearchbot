@@ -30,6 +30,15 @@ export default function defineUserApplication(sequelize) {
         type: DataTypes.BIGINT,
         allowNull: true,
       },
+      Status: {
+        type: DataTypes.STRING(32),
+        allowNull: false,
+        defaultValue: 'pending_screening',
+      },
+      ScreeningResponseDueAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       tableName: 'UserApplications',

@@ -17,14 +17,19 @@ function getEnv(name) {
   return process.env[name] || '';
 }
 
-/** Comma-separated Telegram user IDs (positive). */
-function parseTelegramUserIdSet(raw) {
+/** Comma-separated positive numeric IDs (Telegram user/chat ids, etc.). */
+export function parseCommaSeparatedIdSet(raw) {
   const set = new Set();
   for (const part of (raw || '').split(',')) {
     const n = Number.parseInt(part.trim(), 10);
     if (Number.isSafeInteger(n) && n > 0) set.add(n);
   }
   return set;
+}
+
+/** @param {string} raw */
+function parseTelegramUserIdSet(raw) {
+  return parseCommaSeparatedIdSet(raw);
 }
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -43,6 +48,11 @@ export const config = {
   botAdminTelegramIds: parseTelegramUserIdSet(getEnv('BOT_ADMIN_TELEGRAM_IDS')),
   /** Job posters who may build tracked apply links (Telegram user ids). */
   botPublisherTelegramIds: parseTelegramUserIdSet(getEnv('BOT_PUBLISHER_TELEGRAM_IDS')),
+  /**
+   * When non-empty, screening rejections are sent only to applicants whose TelegramChatId is listed.
+   * Comma-separated, same format as BOT_ADMIN_TELEGRAM_IDS. Unset/empty = all due applicants.
+   */
+  rejectionNotificationChatIds: parseCommaSeparatedIdSet(getEnv('REJECTION_NOTIFICATION_IDS')),
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',

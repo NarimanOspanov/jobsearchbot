@@ -6,6 +6,12 @@ import { models, sequelize } from '../../db.js';
 import { buildAdminUserContactProjection } from '../../services/userService.js';
 import { extractResumeTextFromUrl } from '../../services/resumeService.js';
 import { resolveUserFromMiniApp, assertCanAccessClient } from '../../services/agentAccessService.js';
+import {
+  listUserApplicationOutreach,
+  processDueScreeningResponses,
+} from '../../services/positionApplyScreeningService.js';
+import { isValidTelegramWebAppUrl } from '../../utils/telegramUtils.js';
+import { runtimeBot } from '../../bot/state.js';
 
 export function createAdminRouter() {
   const router = Router();
@@ -523,6 +529,49 @@ export function createAdminRouter() {
     } catch (err) {
       console.error('GET /api/app/admin/users/:id/resume-text:', err);
       return res.status(500).json({ error: 'Failed to extract resume text' });
+    }
+  });
+
+  router.post('/api/app/admin/position-apply-screening/run', adminMiniAppAuth, async (req, res) => {
+    try {
+      if (!runtimeBot.telegram) {
+        return res.status(503).json({ error: 'Telegram bot is unavailable' });
+      }
+      const limit = Math.min(200, Math.max(1, parseInt(String(req.body?.limit || '50'), 10) || 50));
+      const rejectionIdsRaw =
+        req.body?.rejectionNotificationIds ??
+        req.body?.rejection_notification_Ids ??
+        req.query?.rejectionNotificationIds;
+      const appBaseUrl = (process.env.ADMIN_APP_URL || config.webhookUrl || '').replace(/\/$/, '');
+      const seekerJobsUrl = appBaseUrl ? `${appBaseUrl}/app/seeker-jobs` : '';
+      const result = await processDueScreeningResponses({
+        telegram: runtimeBot.telegram,
+        limit,
+        rejectionNotificationIds:
+          rejectionIdsRaw != null && String(rejectionIdsRaw).trim() !== ''
+            ? String(rejectionIdsRaw)
+            : undefined,
+        jobsUi: {
+          seekerJobsUrl,
+          canUseSeekerJobsWebApp: isValidTelegramWebAppUrl(seekerJobsUrl),
+        },
+      });
+      return res.json(result);
+    } catch (err) {
+      console.error('POST /api/app/admin/position-apply-screening/run:', err);
+      return res.status(500).json({ error: 'Failed to run position apply screening' });
+    }
+  });
+
+  router.get('/api/app/admin/user-application-outreach', adminMiniAppAuth, async (req, res) => {
+    try {
+      const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '100'), 10) || 100));
+      const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
+      const data = await listUserApplicationOutreach({ limit, offset });
+      return res.json(data);
+    } catch (err) {
+      console.error('GET /api/app/admin/user-application-outreach:', err);
+      return res.status(500).json({ error: 'Failed to load user application outreach' });
     }
   });
 
