@@ -53,6 +53,8 @@ export const config = {
    * Comma-separated. Unset/empty = all due applicants.
    */
   rejectionNotificationChatIds: parseCommaSeparatedIdSet(getEnv('REJECTION_NOTIFICATION_IDS')),
+  /** Shared secret for POST/GET /api/cron/position-apply-screening/* (manual or external scheduler). */
+  screeningCronSecret: getEnv('SCREENING_CRON_SECRET'),
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',

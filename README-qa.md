@@ -113,6 +113,8 @@ Test each command in a **private chat** with the bot.
 | Test rejection | Set `ScreeningResponseDueAt` in the past for a test row, then call the run endpoint |
 | Test filter | Set `REJECTION_NOTIFICATION_IDS` to your `Users.TelegramChatId` (not `Users.Id` unless testing — `3` works as Id). Verify: `SELECT Id, TelegramChatId FROM Users WHERE Id = 3`. Empty = all applicants. |
 | Manual run with filter | `POST .../position-apply-screening/run` with body `{ "rejectionNotificationIds": "5934959951" }` |
+| Cron trigger (no Mini App auth) | Set `SCREENING_CRON_SECRET` on server, then `GET /api/cron/position-apply-screening/run?secret=...&userApplicationId=2763` |
+| Cron status (dry run counts) | `GET /api/cron/position-apply-screening/status?secret=...&userApplicationId=2763` |
 
 ---
 

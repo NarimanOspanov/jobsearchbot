@@ -4,6 +4,7 @@ import { models, sequelize } from '../db.js';
 import { getConfigInt } from './planService.js';
 import { t } from '../i18n/botI18n.js';
 import { normalizeUserLanguage } from '../utils/userLanguage.js';
+import { isValidTelegramWebAppUrl } from '../utils/telegramUtils.js';
 
 export const USER_APPLICATION_STATUS = {
   PENDING_SCREENING: 'pending_screening',
@@ -138,6 +139,69 @@ export function buildRejectionText(lang) {
   return t(lang, 'position_apply_rejection_default');
 }
 
+export function buildScreeningJobsUi() {
+  const appBaseUrl = (process.env.ADMIN_APP_URL || config.webhookUrl || '').replace(/\/$/, '');
+  const seekerJobsUrl = appBaseUrl ? `${appBaseUrl}/app/seeker-jobs` : '';
+  return {
+    appBaseUrl,
+    seekerJobsUrl,
+    canUseSeekerJobsWebApp: isValidTelegramWebAppUrl(seekerJobsUrl),
+  };
+}
+
+function buildDueScreeningWhere(rejectionNotificationIds, onlyUserApplicationId = null) {
+  const chatIdAllowlist = getRejectionNotificationChatIdFilter(rejectionNotificationIds);
+  const where = {
+    Status: USER_APPLICATION_STATUS.PENDING_SCREENING,
+    ScreeningResponseDueAt: { [Op.lte]: new Date() },
+  };
+  if (onlyUserApplicationId != null) {
+    const appId = Number.parseInt(String(onlyUserApplicationId), 10);
+    if (Number.isSafeInteger(appId) && appId > 0) where.Id = appId;
+  }
+  return { where, chatIdAllowlist };
+}
+
+export async function getPositionApplyScreeningStatus({
+  rejectionNotificationIds = undefined,
+  onlyUserApplicationId = null,
+} = {}) {
+  const { where, chatIdAllowlist } = buildDueScreeningWhere(
+    rejectionNotificationIds,
+    onlyUserApplicationId
+  );
+  const result = {
+    dueTotal: 0,
+    eligibleCount: 0,
+    rejectionNotificationChatIds: rejectionNotificationChatIdsForResult(chatIdAllowlist),
+    matchedUsers: [],
+    warning: null,
+    onlyUserApplicationId: where.Id ?? null,
+  };
+  if (!models.UserApplications) return result;
+
+  const dueBase = {
+    Status: USER_APPLICATION_STATUS.PENDING_SCREENING,
+    ScreeningResponseDueAt: { [Op.lte]: new Date() },
+  };
+  result.dueTotal = await models.UserApplications.count({ where: dueBase });
+
+  if (chatIdAllowlist) {
+    const { userIds: allowedUserIds, matchedUsers } =
+      await resolveRejectionNotificationUserIds(chatIdAllowlist);
+    result.matchedUsers = matchedUsers;
+    if (!allowedUserIds?.length) {
+      result.warning =
+        'REJECTION_NOTIFICATION_IDS did not match any Users (use TelegramChatId from Users table, or Users.Id for testing)';
+      return result;
+    }
+    where.UserId = { [Op.in]: allowedUserIds };
+  }
+
+  result.eligibleCount = await models.UserApplications.count({ where });
+  return result;
+}
+
 export async function recordUserApplicationOutreach({
   userApplicationId,
   userId,
@@ -233,6 +297,7 @@ export async function sendScreeningAcknowledgment({
  * @param {import('telegraf').Telegram} opts.telegram
  * @param {number} [opts.limit]
  * @param {string | string[] | null} [opts.rejectionNotificationIds] — TelegramChatId allowlist; env default if omitted
+ * @param {number | null} [opts.onlyUserApplicationId] — process a single UserApplications.Id
  * @param {{ seekerJobsUrl: string, canUseSeekerJobsWebApp: boolean }} opts.jobsUi
  */
 export async function processDueScreeningResponses({
@@ -240,37 +305,38 @@ export async function processDueScreeningResponses({
   limit = 50,
   jobsUi,
   rejectionNotificationIds = undefined,
+  onlyUserApplicationId = null,
 }) {
-  const chatIdAllowlist = getRejectionNotificationChatIdFilter(rejectionNotificationIds);
+  const status = await getPositionApplyScreeningStatus({
+    rejectionNotificationIds,
+    onlyUserApplicationId,
+  });
   const result = {
     processed: 0,
     sent: 0,
     failed: 0,
     skipped: 0,
-    filtered: 0,
-    rejectionNotificationChatIds: rejectionNotificationChatIdsForResult(chatIdAllowlist),
-    matchedUsers: [],
-    warning: null,
+    dueTotal: status.dueTotal,
+    eligibleCount: status.eligibleCount,
+    rejectionNotificationChatIds: status.rejectionNotificationChatIds,
+    matchedUsers: status.matchedUsers,
+    warning: status.warning,
+    onlyUserApplicationId: status.onlyUserApplicationId,
+    applicationIds: [],
   };
   if (!telegram || !models.UserApplications) return result;
+  if (result.warning) {
+    console.warn('Position apply screening:', result.warning, {
+      allowlist: result.rejectionNotificationChatIds,
+    });
+    return result;
+  }
 
-  const where = {
-    Status: USER_APPLICATION_STATUS.PENDING_SCREENING,
-    ScreeningResponseDueAt: { [Op.lte]: new Date() },
-  };
-
-  if (chatIdAllowlist) {
-    const { userIds: allowedUserIds, matchedUsers } =
-      await resolveRejectionNotificationUserIds(chatIdAllowlist);
-    result.matchedUsers = matchedUsers;
-    if (!allowedUserIds?.length) {
-      result.warning =
-        'REJECTION_NOTIFICATION_IDS did not match any Users (use TelegramChatId from Users table, or Users.Id for testing)';
-      console.warn('Position apply screening:', result.warning, {
-        allowlist: result.rejectionNotificationChatIds,
-      });
-      return result;
-    }
+  const { where } = buildDueScreeningWhere(rejectionNotificationIds, onlyUserApplicationId);
+  if (result.rejectionNotificationChatIds) {
+    const { userIds: allowedUserIds } = await resolveRejectionNotificationUserIds(
+      getRejectionNotificationChatIdFilter(rejectionNotificationIds)
+    );
     where.UserId = { [Op.in]: allowedUserIds };
   }
 
@@ -279,6 +345,8 @@ export async function processDueScreeningResponses({
     order: [['ScreeningResponseDueAt', 'ASC'], ['Id', 'ASC']],
     limit: Math.min(200, Math.max(1, Number(limit) || 50)),
   });
+
+  result.applicationIds = rows.map((row) => row.Id);
 
   for (const row of rows) {
     result.processed += 1;

@@ -7,10 +7,10 @@ import { buildAdminUserContactProjection } from '../../services/userService.js';
 import { extractResumeTextFromUrl } from '../../services/resumeService.js';
 import { resolveUserFromMiniApp, assertCanAccessClient } from '../../services/agentAccessService.js';
 import {
+  buildScreeningJobsUi,
   listUserApplicationOutreach,
   processDueScreeningResponses,
 } from '../../services/positionApplyScreeningService.js';
-import { isValidTelegramWebAppUrl } from '../../utils/telegramUtils.js';
 import { runtimeBot } from '../../bot/state.js';
 
 export function createAdminRouter() {
@@ -542,8 +542,11 @@ export function createAdminRouter() {
         req.body?.rejectionNotificationIds ??
         req.body?.rejection_notification_Ids ??
         req.query?.rejectionNotificationIds;
-      const appBaseUrl = (process.env.ADMIN_APP_URL || config.webhookUrl || '').replace(/\/$/, '');
-      const seekerJobsUrl = appBaseUrl ? `${appBaseUrl}/app/seeker-jobs` : '';
+      const appIdRaw = req.body?.userApplicationId ?? req.query?.userApplicationId;
+      const onlyUserApplicationId =
+        appIdRaw != null && String(appIdRaw).trim() !== ''
+          ? Number.parseInt(String(appIdRaw), 10)
+          : null;
       const result = await processDueScreeningResponses({
         telegram: runtimeBot.telegram,
         limit,
@@ -551,10 +554,11 @@ export function createAdminRouter() {
           rejectionIdsRaw != null && String(rejectionIdsRaw).trim() !== ''
             ? String(rejectionIdsRaw)
             : undefined,
-        jobsUi: {
-          seekerJobsUrl,
-          canUseSeekerJobsWebApp: isValidTelegramWebAppUrl(seekerJobsUrl),
-        },
+        onlyUserApplicationId:
+          Number.isSafeInteger(onlyUserApplicationId) && onlyUserApplicationId > 0
+            ? onlyUserApplicationId
+            : null,
+        jobsUi: buildScreeningJobsUi(),
       });
       return res.json(result);
     } catch (err) {

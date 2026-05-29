@@ -70,6 +70,7 @@ import { notifyPublisherOfNewApplication } from './services/publisherApplyNotifi
 import {
   buildOpenJobsReplyMarkup,
   buildScreeningAckText,
+  buildScreeningJobsUi,
   computeScreeningResponseDueAt,
   getPositionApplyScreeningResponseMinutes,
   logRejectionNotificationFilterStartup,
@@ -107,6 +108,7 @@ import { createApplicationsRouter } from './routes/api/applications.js';
 import { createCompaniesRouter } from './routes/api/companies.js';
 import { createPositionsRouter } from './routes/api/positions.js';
 import { createAdminRouter } from './routes/api/admin.js';
+import { createCronRouter } from './routes/api/cron.js';
 import { createAgentClientsRouter } from './routes/api/agentClients.js';
 import { createApplyLinkRouter } from './routes/api/applyLink.js';
 import { createNotificationsRouter } from './routes/api/notifications.js';
@@ -1654,6 +1656,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<b>Position apply screening</b>',
       'Config <code>PositionApplyScreeningResponseMin</code> (default 4320 = 3 days) — minutes until auto rejection',
       'Env <code>REJECTION_NOTIFICATION_IDS</code> — optional comma-separated Users.TelegramChatId (or Users.Id for testing); empty = all',
+      'Env <code>SCREENING_CRON_SECRET</code> — secret for <code>GET/POST /api/cron/position-apply-screening/run</code>',
       'API <code>POST /api/app/admin/position-apply-screening/run</code> — process due screening responses',
       'API <code>GET /api/app/admin/user-application-outreach</code> — applicant outreach audit log',
       '',
@@ -1932,6 +1935,7 @@ async function main() {
   app.use(createCompaniesRouter());
   app.use(createPositionsRouter());
   app.use(createAdminRouter());
+  app.use(createCronRouter());
   app.use(createAgentClientsRouter());
   app.use(createApplyLinkRouter());
   app.use(createNotificationsRouter());
@@ -1983,11 +1987,7 @@ async function main() {
     console.log('Polling started. Bot is ready.');
   }
 
-  const seekerJobsUrl = appBaseUrl ? `${appBaseUrl}/app/seeker-jobs` : '';
-  const screeningJobsUi = {
-    seekerJobsUrl,
-    canUseSeekerJobsWebApp: isValidTelegramWebAppUrl(seekerJobsUrl),
-  };
+  const screeningJobsUi = buildScreeningJobsUi();
   let screeningCronRunning = false;
   const runScreeningCron = async () => {
     if (screeningCronRunning || !runtimeBot.telegram) return;
