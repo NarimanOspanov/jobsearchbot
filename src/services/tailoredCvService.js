@@ -83,11 +83,11 @@ export async function generateTailoredCvSimple({ existingCvText, jobRequirements
   const tailoredBase = String(config.tailoredCvServiceUrl || '').trim().replace(/\/$/, '');
   if (!tailoredBase) throw new Error('Tailored CV service URL is not configured');
 
-  const upstreamRes = await fetch(`${tailoredBase}/generate-simple`, {
+  const upstreamRes = await fetch(`${tailoredBase}/cv`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      existingCvText: cvText,
+      resumeText: cvText,
       jobRequirements: requirements,
     }),
   });

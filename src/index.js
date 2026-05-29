@@ -927,7 +927,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     try {
       const enhancedCvRes = await runWithTyping(ctx.telegram, chatId, () =>
-        fetch('https://tailered-cv.onrender.com/generate-from-review', {
+        fetch('https://tailered-cv.onrender.com/cv', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ resumeText, review }),
