@@ -1,8 +1,9 @@
 import { Router } from 'express';
+import express from 'express';
 import { Sequelize } from 'sequelize';
 import { adminMiniAppAuth, agentMiniAppAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
-import { buildAdminUserContactProjection } from '../../services/userService.js';
+import { buildAdminUserContactProjection, isSupportedResumeMimeType, saveUserResumeFromBuffer } from '../../services/userService.js';
 import {
   assertCanAccessClient,
   mapUserToAgentClientPayload,
@@ -309,6 +310,49 @@ export function createAgentClientsRouter() {
       } catch (err) {
         console.error('PATCH /api/app/agent/clients/:clientUserId/comment:', err);
         return res.status(500).json({ error: 'Failed to save client comment' });
+      }
+    }
+  );
+
+  router.post(
+    '/api/app/agent/clients/:clientUserId/resume-upload',
+    agentMiniAppAuth,
+    express.raw({ type: 'application/octet-stream', limit: '15mb' }),
+    async (req, res) => {
+      try {
+        const clientUserId = Number.parseInt(String(req.params.clientUserId), 10);
+        if (!Number.isSafeInteger(clientUserId) || clientUserId <= 0) {
+          return res.status(400).json({ error: 'Invalid client user id' });
+        }
+        if (!(await enforceAgentClientAccess(req, res, clientUserId))) return;
+
+        const client = await models.Users.findByPk(clientUserId);
+        if (!client) return res.status(404).json({ error: 'Client not found' });
+
+        const bodyBuffer = Buffer.isBuffer(req.body) ? req.body : null;
+        if (!bodyBuffer || bodyBuffer.length === 0) {
+          return res.status(400).json({ error: 'Resume file bytes are required' });
+        }
+
+        const headerFileNameRaw = String(req.headers['x-file-name'] || '').trim();
+        const headerMimeTypeRaw = String(req.headers['x-file-type'] || '').trim().toLowerCase();
+        const fileName = headerFileNameRaw || `resume-${Date.now()}.pdf`;
+        const mimeType = headerMimeTypeRaw || 'application/octet-stream';
+        if (!isSupportedResumeMimeType(mimeType)) {
+          return res.status(400).json({ error: 'Unsupported resume type. Use PDF or image (JPG/PNG/WEBP).' });
+        }
+
+        const resumeUrl = await saveUserResumeFromBuffer({
+          user: client,
+          buffer: bodyBuffer,
+          fileName,
+          mimeType,
+          fileIdPrefix: `agent-${req.actorUser.Id}`,
+        });
+        return res.json({ ok: true, resumeUrl });
+      } catch (err) {
+        console.error('POST /api/app/agent/clients/:clientUserId/resume-upload:', err);
+        return res.status(500).json({ error: 'Failed to upload client resume' });
       }
     }
   );

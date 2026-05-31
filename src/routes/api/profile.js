@@ -3,11 +3,8 @@ import express from 'express';
 import { miniAppAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
 import { config } from '../../config.js';
-import { ensureUserByTelegramId, runResumeEnrichmentInBackground } from '../../services/userService.js';
+import { ensureUserByTelegramId, saveUserResumeFromBuffer, isSupportedResumeMimeType } from '../../services/userService.js';
 import { buildMonetizationStatus } from '../../services/planService.js';
-import { resumeStorage } from '../../services/resumeStorage.js';
-import { extractResumeTextFromUrl } from '../../services/resumeService.js';
-import { extractResumeContactsWithAI } from '../../services/aiService.js';
 import { normalizeSkillIds } from '../../services/userService.js';
 import {
   toBoolOrUndefined,
@@ -92,35 +89,17 @@ export function createProfileRouter() {
         const headerMimeTypeRaw = String(req.headers['x-file-type'] || '').trim().toLowerCase();
         const fileName = headerFileNameRaw || `resume-${Date.now()}.pdf`;
         const mimeType = headerMimeTypeRaw || 'application/octet-stream';
-        const isSupported =
-          mimeType.includes('pdf') ||
-          mimeType.includes('jpeg') ||
-          mimeType.includes('jpg') ||
-          mimeType.includes('png') ||
-          mimeType.includes('webp');
-        if (!isSupported) {
+        if (!isSupportedResumeMimeType(mimeType)) {
           return res.status(400).json({ error: 'Unsupported resume type. Use PDF or image (JPG/PNG/WEBP).' });
         }
 
-        const resumeUrl = await resumeStorage.uploadResumeBuffer({
-          chatId: user.TelegramChatId,
-          fileId: `webapp-${user.TelegramChatId}-${Date.now()}`,
+        const resumeUrl = await saveUserResumeFromBuffer({
+          user,
+          buffer: bodyBuffer,
           fileName,
           mimeType,
-          buffer: bodyBuffer,
+          fileIdPrefix: 'webapp',
         });
-
-        let resumeContactsJson = user.ResumeContactsJson ?? null;
-        try {
-          const resumeText = await extractResumeTextFromUrl(resumeUrl);
-          const resumeContacts = await extractResumeContactsWithAI(resumeText);
-          if (resumeContacts) resumeContactsJson = JSON.stringify(resumeContacts);
-        } catch (parseErr) {
-          console.warn('WebApp resume contact extraction failed, keeping upload flow:', parseErr?.message || parseErr);
-        }
-
-        await user.update({ ResumeURL: resumeUrl, ResumeContactsJson: resumeContactsJson });
-        runResumeEnrichmentInBackground({ userId: user.Id, resumeUrl, includeSkills: true });
         return res.json({ ok: true, resumeUrl });
       } catch (err) {
         console.error('POST /api/app/profile/resume-upload:', err);

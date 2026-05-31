@@ -3,8 +3,51 @@ import { models, sequelize } from '../db.js';
 import { parseResumeContactsJson, normalizeSkillIds, extractResumeTextFromUrl } from './resumeService.js';
 import { normalizeWorkAuthCountries } from '../utils/validators.js';
 import { extractResumeContactsWithAI, fetchScreenlySkillsCatalog, extractResumeSkillIdsWithAI, extractResumeWorkAuthCountriesWithAI } from './aiService.js';
+import { resumeStorage } from './resumeStorage.js';
 
 export { normalizeSkillIds };
+
+const SUPPORTED_RESUME_MIME_FRAGMENTS = ['pdf', 'jpeg', 'jpg', 'png', 'webp'];
+
+export function isSupportedResumeMimeType(mimeType) {
+  const mime = String(mimeType || '').trim().toLowerCase();
+  return SUPPORTED_RESUME_MIME_FRAGMENTS.some((part) => mime.includes(part));
+}
+
+/**
+ * @param {{ user: import('../models/User.js').default, buffer: Buffer, fileName: string, mimeType: string, fileIdPrefix?: string, runEnrichment?: boolean }} params
+ */
+export async function saveUserResumeFromBuffer({
+  user,
+  buffer,
+  fileName,
+  mimeType,
+  fileIdPrefix = 'webapp',
+  runEnrichment = true,
+}) {
+  const resumeUrl = await resumeStorage.uploadResumeBuffer({
+    chatId: user.TelegramChatId,
+    fileId: `${fileIdPrefix}-${user.TelegramChatId}-${Date.now()}`,
+    fileName,
+    mimeType,
+    buffer,
+  });
+
+  let resumeContactsJson = user.ResumeContactsJson ?? null;
+  try {
+    const resumeText = await extractResumeTextFromUrl(resumeUrl);
+    const resumeContacts = await extractResumeContactsWithAI(resumeText);
+    if (resumeContacts) resumeContactsJson = JSON.stringify(resumeContacts);
+  } catch (parseErr) {
+    console.warn('Resume contact extraction failed:', parseErr?.message || parseErr);
+  }
+
+  await user.update({ ResumeURL: resumeUrl, ResumeContactsJson: resumeContactsJson });
+  if (runEnrichment) {
+    runResumeEnrichmentInBackground({ userId: user.Id, resumeUrl, includeSkills: true });
+  }
+  return resumeUrl;
+}
 
 /** @param {import('../models/User.js').default | Record<string, unknown> | null | undefined} user */
 export function userCanReceiveMarketingNotifications(user) {

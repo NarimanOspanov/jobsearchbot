@@ -102,6 +102,54 @@
         cursor: pointer;
       }
       .ok { color: #22c55e; font-size: 13px; margin-top: 8px; }
+      .ghost-btn {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+      }
+      .resume-file-input { display: none; }
+      .resume-file-picker {
+        display: block;
+        border: 1px dashed var(--border);
+        border-radius: 10px;
+        min-height: 72px;
+        padding: 12px;
+        text-align: center;
+        background: #10182d;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .resume-file-picker:hover { border-color: rgba(158, 176, 209, 0.7); color: var(--text); }
+      .resume-file-picker-name { margin-top: 6px; font-size: 12px; }
+      .resume-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+      .resume-actions button { flex: 1; min-width: 120px; }
+      .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+        display: none; align-items: center; justify-content: center; z-index: 9999;
+      }
+      .modal-backdrop.on { display: flex; }
+      .modal-card {
+        width: min(1100px, 95vw); height: min(85vh, 900px); background: #0a1020;
+        border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: grid;
+        grid-template-rows: auto 1fr;
+      }
+      .modal-head {
+        display: flex; justify-content: space-between; align-items: center; gap: 8px;
+        padding: 8px 10px; border-bottom: 1px solid var(--border);
+      }
+      .modal-body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+      .loader {
+        display: none;
+        width: 16px;
+        height: 16px;
+        margin-top: 8px;
+        border: 2px solid rgba(158, 176, 209, 0.45);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      .loader.on { display: inline-block; }
+      @keyframes spin { to { transform: rotate(360deg); } }
     </style>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
@@ -124,6 +172,26 @@
         <h2 id="userSectionTitle">User</h2>
         <div class="row"><span id="telegramLabel">Telegram</span><span id="profileUser" class="muted">loading...</span></div>
         <div class="row"><span id="chatIdLabel">Chat ID</span><span id="profileChatId" class="muted">loading...</span></div>
+      </section>
+
+      <section class="card">
+        <h2 id="resumeSectionTitle">Resume</h2>
+        <p id="resumeStatus" class="field-hint">No resume uploaded yet.</p>
+        <div class="resume-actions">
+          <button id="viewResumeBtn" type="button" class="ghost-btn" disabled>View resume</button>
+        </div>
+        <div class="field" style="padding-bottom:0;border-bottom:none">
+          <input id="resumeFileInput" class="resume-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
+          <label for="resumeFileInput" id="resumeFilePickerLabel" class="resume-file-picker">
+            <div>
+              <div id="resumePickerTitle">Tap to choose a file</div>
+              <div class="resume-file-picker-name">PDF/JPG/PNG/WEBP — up to 15 MB</div>
+            </div>
+          </label>
+          <button id="uploadResumeBtn" type="button" disabled style="width:100%;margin-top:10px">Upload resume</button>
+          <span id="uploadResumeLoader" class="loader" aria-hidden="true"></span>
+          <p id="resumeUploadMsg" class="bad hidden" role="alert"></p>
+        </div>
       </section>
 
       <section class="card">
@@ -171,6 +239,18 @@
       <section id="jobSearchSettings" class="card hidden" aria-hidden="true"></section>
     </div>
 
+    <div id="cvModal" class="modal-backdrop" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="cvModalTitle">Resume</strong>
+          <button id="cvModalClose" type="button" class="ghost-btn">Close</button>
+        </div>
+        <div class="modal-body">
+          <iframe id="cvModalFrame" title="Resume preview"></iframe>
+        </div>
+      </div>
+    </div>
+
     <script src="/app/tma-i18n.js"></script>
     <script src="/app/seeker-jobs-i18n.js"></script>
     <script>
@@ -190,6 +270,18 @@
           noUsername: '(без username)',
           loadError: 'Не удалось загрузить профиль',
           saveError: 'Не удалось сохранить настройку',
+          resumeSection: 'Резюме',
+          resumeNone: 'Резюме ещё не загружено.',
+          resumeUploaded: 'Резюме загружено: {date}',
+          viewResume: 'Открыть резюме',
+          pickFile: 'Нажмите, чтобы выбрать файл',
+          fileSelected: 'Выбран файл',
+          uploadResume: 'Загрузить резюме',
+          resumeUploadOk: 'Резюме обновлено',
+          errPickFile: 'Выберите файл',
+          errFileSize: 'Файл больше 15 MB',
+          errFileType: 'Поддерживаются PDF, JPG, PNG, WEBP',
+          errUploadResume: 'Не удалось загрузить резюме',
           jobSearchSection: 'Поиск работы',
           skillsLabel: 'Навыки',
           skillsHint: 'Роли для персонализации подбора вакансий',
@@ -212,6 +304,18 @@
           noUsername: '(no username)',
           loadError: 'Failed to load profile',
           saveError: 'Failed to save setting',
+          resumeSection: 'Resume',
+          resumeNone: 'No resume uploaded yet.',
+          resumeUploaded: 'Resume uploaded: {date}',
+          viewResume: 'View resume',
+          pickFile: 'Tap to choose a file',
+          fileSelected: 'File selected',
+          uploadResume: 'Upload resume',
+          resumeUploadOk: 'Resume updated',
+          errPickFile: 'Choose a file first',
+          errFileSize: 'File is larger than 15 MB',
+          errFileType: 'Use PDF, JPG, PNG, or WEBP',
+          errUploadResume: 'Failed to upload resume',
           jobSearchSection: 'Job search',
           skillsLabel: 'Skills',
           skillsHint: 'Roles used to personalize job recommendations',
@@ -233,6 +337,8 @@
       let isCountryPickerOpen = false;
       let skillsCatalog = [];
       let uiLang = 'en';
+      let currentResumeUrl = '';
+      let isUploadingResume = false;
 
       function telegramLang() {
         const code = String(tg?.initDataUnsafe?.user?.language_code || '').toLowerCase();
@@ -265,6 +371,9 @@
         document.title = s.pageTitle;
         document.getElementById('pageTitle').textContent = s.pageTitle;
         document.getElementById('userSectionTitle').textContent = s.userSection;
+        document.getElementById('resumeSectionTitle').textContent = s.resumeSection;
+        document.getElementById('viewResumeBtn').textContent = s.viewResume;
+        document.getElementById('uploadResumeBtn').textContent = s.uploadResume;
         document.getElementById('notificationsSectionTitle').textContent = s.notificationsSection;
         document.getElementById('pushNotificationsLabel').textContent = s.pushNotifications;
         document.getElementById('pushNotificationsDesc').textContent = s.pushNotificationsDesc;
@@ -276,6 +385,7 @@
         document.getElementById('workAuthLabel').textContent = s.workAuthLabel;
         renderSkillPickerSummary();
         renderCountryPickerSummary();
+        renderResumeUi();
         const profileUser = document.getElementById('profileUser');
         if (profileUser.dataset.noUsername === '1') {
           profileUser.textContent = s.noUsername;
@@ -436,6 +546,125 @@
         }
       }
 
+      function setResumeMsg(text, isOk = false) {
+        const el = document.getElementById('resumeUploadMsg');
+        if (!text) {
+          el.textContent = '';
+          el.className = 'bad hidden';
+          return;
+        }
+        el.textContent = text;
+        el.className = isOk ? 'ok' : 'bad';
+        el.classList.remove('hidden');
+      }
+
+      function onLoading(id, on) {
+        const el = document.getElementById(id);
+        if (el) el.className = on ? 'loader on' : 'loader';
+      }
+
+      function attachMiniAppAuthHeaders(headers) {
+        const data = String(tg?.initData || '').trim();
+        if (data) {
+          headers['x-init-data'] = data;
+          headers.Authorization = `tma ${data}`;
+        }
+      }
+
+      function renderResumeUi() {
+        const s = strings(uiLang);
+        const status = document.getElementById('resumeStatus');
+        const viewBtn = document.getElementById('viewResumeBtn');
+        if (currentResumeUrl) {
+          status.textContent = s.resumeUploaded;
+          viewBtn.disabled = false;
+        } else {
+          status.textContent = s.resumeNone;
+          viewBtn.disabled = true;
+        }
+        refreshResumeFileUi();
+      }
+
+      function refreshResumeFileUi() {
+        const s = strings(uiLang);
+        const input = document.getElementById('resumeFileInput');
+        const uploadBtn = document.getElementById('uploadResumeBtn');
+        const picker = document.getElementById('resumeFilePickerLabel');
+        const pickerTitle = document.getElementById('resumePickerTitle');
+        const file = input?.files?.[0] || null;
+        if (!file) {
+          if (uploadBtn) uploadBtn.disabled = true;
+          if (pickerTitle) pickerTitle.textContent = s.pickFile;
+          return;
+        }
+        if (uploadBtn) uploadBtn.disabled = isUploadingResume;
+        if (pickerTitle) pickerTitle.textContent = s.fileSelected;
+        if (picker) {
+          picker.innerHTML = `<div><div>${esc(s.fileSelected)}</div><div class="resume-file-picker-name">${esc(file.name)}</div></div>`;
+        }
+      }
+
+      function openCvModal(url) {
+        document.getElementById('cvModalTitle').textContent = strings(uiLang).viewResume;
+        document.getElementById('cvModalFrame').src = url || 'about:blank';
+        document.getElementById('cvModal').classList.add('on');
+      }
+
+      function closeCvModal() {
+        document.getElementById('cvModal').classList.remove('on');
+        document.getElementById('cvModalFrame').src = 'about:blank';
+      }
+
+      async function uploadResumeFromUi() {
+        const fileInput = document.getElementById('resumeFileInput');
+        const file = fileInput?.files?.[0];
+        if (!file) throw new Error(strings(uiLang).errPickFile);
+        if (file.size > 15 * 1024 * 1024) throw new Error(strings(uiLang).errFileSize);
+        const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) throw new Error(strings(uiLang).errFileType);
+
+        isUploadingResume = true;
+        refreshResumeFileUi();
+        onLoading('uploadResumeLoader', true);
+        setResumeMsg('');
+        try {
+          const resolveExtension = () => {
+            const name = String(file.name || '').toLowerCase();
+            const extMatch = name.match(/\.([a-z0-9]+)$/);
+            if (extMatch?.[1]) return extMatch[1];
+            if (file.type === 'application/pdf') return 'pdf';
+            if (file.type === 'image/png') return 'png';
+            if (file.type === 'image/webp') return 'webp';
+            return 'jpg';
+          };
+          const headers = {
+            'Content-Type': 'application/octet-stream',
+            'x-file-name': `resume-${Date.now()}.${resolveExtension()}`,
+            'x-file-type': file.type || 'application/octet-stream',
+          };
+          attachMiniAppAuthHeaders(headers);
+          const response = await fetch('/api/app/profile/resume-upload', {
+            method: 'POST',
+            headers,
+            body: await file.arrayBuffer(),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(typeof payload?.error === 'string' ? payload.error : strings(uiLang).errUploadResume);
+          }
+          currentResumeUrl = String(payload?.resumeUrl || '').trim();
+          if (!currentResumeUrl) throw new Error(strings(uiLang).errUploadResume);
+          fileInput.value = '';
+          renderResumeUi();
+          setResumeMsg(strings(uiLang).resumeUploadOk, true);
+          setTimeout(() => setResumeMsg(''), 2000);
+        } finally {
+          isUploadingResume = false;
+          onLoading('uploadResumeLoader', false);
+          refreshResumeFileUi();
+        }
+      }
+
       function setPushMsg(text) {
         const el = document.getElementById('pushNotificationsMsg');
         if (!text) {
@@ -501,6 +730,7 @@
           profileUser.dataset.noUsername = '1';
         }
         document.getElementById('profileChatId').textContent = profile.telegramChatId;
+        currentResumeUrl = String(profile?.resumeUrl || '').trim();
         pushNotificationsEnabled = profile?.settings?.pushNotificationsEnabled !== false;
         isApplyingProfile = true;
         applySelectedSkillIds(profile?.skills || []);
@@ -509,6 +739,18 @@
         renderPushToggle();
         applyLocale(lang);
       }
+
+      document.getElementById('viewResumeBtn').addEventListener('click', () => {
+        if (currentResumeUrl) openCvModal(currentResumeUrl);
+      });
+      document.getElementById('cvModalClose').addEventListener('click', closeCvModal);
+      document.getElementById('cvModal').addEventListener('click', (event) => {
+        if (event.target.id === 'cvModal') closeCvModal();
+      });
+      document.getElementById('resumeFileInput').addEventListener('change', refreshResumeFileUi);
+      document.getElementById('uploadResumeBtn').addEventListener('click', () => {
+        uploadResumeFromUi().catch((err) => setResumeMsg(err.message));
+      });
 
       document.getElementById('pushNotificationsToggle').addEventListener('click', async () => {
         if (isSavingPush) return;
