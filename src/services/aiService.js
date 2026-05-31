@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '../config.js';
+import { normalizeWorkAuthCountries } from '../utils/validators.js';
 import {
   extractFirstJsonObject,
   extractFirstJsonArray,
@@ -346,4 +347,36 @@ ${text}`;
   const jsonText = extractFirstJsonArray(raw);
   const parsed = JSON.parse(jsonText);
   return normalizeSkillIds(parsed).filter((id) => allowedIds.has(id)).slice(0, 3);
+}
+
+const RESUME_WORK_AUTH_COUNTRY_TOKENS = ['kazakhstan', 'Russian', 'uzbekistan', 'kyrgyzstan'];
+
+export async function extractResumeWorkAuthCountriesWithAI(resumeText) {
+  if (!genAI) return [];
+  const text = String(resumeText || '').trim();
+  if (!text) return [];
+
+  const allowedList = RESUME_WORK_AUTH_COUNTRY_TOKENS.join(', ');
+  const prompt = `Extract countries where this candidate explicitly states they can legally work (work authorization, right to work, work permit, citizenship used for employment).
+Return strict JSON only as an array of country tokens, for example: ["kazakhstan","Russian"]
+Rules:
+- Use ONLY these exact tokens (case-sensitive): ${allowedList}
+- Map Kazakhstan -> kazakhstan, Russia -> Russian, Uzbekistan -> uzbekistan, Kyrgyzstan -> kyrgyzstan
+- Include a country only if the resume clearly states work authorization, legal right to work, citizenship for employment, or an active work permit there
+- Do not guess from location alone, job history alone, or language skills alone
+- Return [] when nothing is clearly stated
+
+Resume text:
+${text}`;
+
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const raw = response.text?.trim();
+  if (!raw) return [];
+
+  const jsonText = extractFirstJsonArray(raw);
+  const parsed = JSON.parse(jsonText);
+  return normalizeWorkAuthCountries(parsed);
 }

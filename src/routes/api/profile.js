@@ -3,7 +3,7 @@ import express from 'express';
 import { miniAppAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
 import { config } from '../../config.js';
-import { ensureUserByTelegramId } from '../../services/userService.js';
+import { ensureUserByTelegramId, runResumeEnrichmentInBackground } from '../../services/userService.js';
 import { buildMonetizationStatus } from '../../services/planService.js';
 import { resumeStorage } from '../../services/resumeStorage.js';
 import { extractResumeTextFromUrl } from '../../services/resumeService.js';
@@ -120,6 +120,7 @@ export function createProfileRouter() {
         }
 
         await user.update({ ResumeURL: resumeUrl, ResumeContactsJson: resumeContactsJson });
+        runResumeEnrichmentInBackground({ userId: user.Id, resumeUrl, includeSkills: true });
         return res.json({ ok: true, resumeUrl });
       } catch (err) {
         console.error('POST /api/app/profile/resume-upload:', err);
