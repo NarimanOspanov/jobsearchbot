@@ -398,7 +398,7 @@
             <div class="row date-range-row">
               <label>Work auth</label>
               <div class="skills-picker">
-                <button id="countryPickerBtn" type="button" class="skills-picker-btn">Any country</button>
+                <button id="countryPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
                 <div id="countryPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
               </div>
               <button type="button" id="workAuthHintBtn" class="hint-btn" title="What is Work auth?" aria-label="What is Work auth?">?</button>
@@ -1196,7 +1196,7 @@
       function renderCountryPickerSummary() {
         const selected = getSelectedCountries();
         const btn = document.getElementById('countryPickerBtn');
-        btn.textContent = selected.length ? `${selected.length} country(ies)` : 'Any country';
+        btn.textContent = selected.length ? `${selected.length} country(ies)` : 'Not specified';
       }
 
       function openCountryPicker() {

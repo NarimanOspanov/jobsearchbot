@@ -19,7 +19,7 @@
       highlyRelevantHintTitle: 'Что значит Топ-совпадения?',
       searchIn: 'Искать в',
       workAuthLabel: 'Могу официально работать в',
-      workAuthAny: 'Любая страна',
+      workAuthAny: 'Не указано',
       workAuthSelected: 'Выбрано: {count}',
       workAuthHintTitle: 'Что делает этот фильтр?',
       workAuthP1:
@@ -147,7 +147,7 @@
       highlyRelevantHintTitle: 'What does Top matches mean?',
       searchIn: 'Search in',
       workAuthLabel: 'I can officially work in',
-      workAuthAny: 'Any country',
+      workAuthAny: 'Not specified',
       workAuthSelected: '{count} selected',
       workAuthHintTitle: 'What does this filter do?',
       workAuthP1:
