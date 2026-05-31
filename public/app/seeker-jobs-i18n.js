@@ -18,6 +18,18 @@
       highlyRelevant: 'Топ-совпадения',
       highlyRelevantHintTitle: 'Что значит Топ-совпадения?',
       searchIn: 'Искать в',
+      workAuthLabel: 'Разрешение на работу в',
+      workAuthAny: 'Любая страна',
+      workAuthSelected: 'Выбрано: {count}',
+      workAuthHintTitle: 'Что значит «Разрешение на работу в»?',
+      workAuthP1:
+        'Показывает удалённые вакансии, подходящие соискателям с правом работать в выбранных странах.',
+      workAuthP2:
+        'Вакансии с явным совпадением по стране показываются первыми, затем остальные по id (новые выше).',
+      countryKazakhstan: 'Казахстан',
+      countryRussia: 'Россия',
+      countryUzbekistan: 'Узбекистан',
+      countryKyrgyzstan: 'Кыргызстан',
       allSources: 'Все источники',
       sourcesSelected: 'Выбрано источников: {count}',
       sourceLabel: 'Source',
@@ -134,6 +146,18 @@
       highlyRelevant: 'Top matches',
       highlyRelevantHintTitle: 'What does Top matches mean?',
       searchIn: 'Search in',
+      workAuthLabel: 'I have work authorization in',
+      workAuthAny: 'Any country',
+      workAuthSelected: '{count} selected',
+      workAuthHintTitle: 'What does work authorization mean?',
+      workAuthP1:
+        'Shows remote vacancies suitable for job seekers who can legally work in the selected countries.',
+      workAuthP2:
+        'Jobs with an explicit country match are listed first, then others by id (newest first).',
+      countryKazakhstan: 'Kazakhstan',
+      countryRussia: 'Russia',
+      countryUzbekistan: 'Uzbekistan',
+      countryKyrgyzstan: 'Kyrgyzstan',
       allSources: 'All sources',
       sourcesSelected: 'Sources selected: {count}',
       sourceLabel: 'Source',
@@ -278,6 +302,17 @@
       if (t === 'Искать в' || t === 'Search in') label.textContent = sj(L, 'searchIn');
       if (t === 'Source') label.textContent = sj(L, 'sourceLabel');
     });
+    const workAuthLabel = document.getElementById('workAuthFilterLabel');
+    if (workAuthLabel) workAuthLabel.textContent = sj(L, 'workAuthLabel');
+    const workAuthHintBtn = document.getElementById('workAuthHintBtn');
+    if (workAuthHintBtn) {
+      workAuthHintBtn.title = sj(L, 'workAuthHintTitle');
+      workAuthHintBtn.setAttribute('aria-label', sj(L, 'workAuthHintTitle'));
+    }
+    setText('workAuthHintTitle', 'workAuthHintTitle');
+    const workAuthP = document.querySelectorAll('#workAuthHintModal .job-summary');
+    if (workAuthP[0]) workAuthP[0].textContent = sj(L, 'workAuthP1');
+    if (workAuthP[1]) workAuthP[1].textContent = sj(L, 'workAuthP2');
 
     const highlyLabel = document.querySelector('#highlyRelevantFilterWrap label');
     const highlyCb = document.getElementById('showOnlyHighlyRelevant');
@@ -405,6 +440,58 @@
     };
   }
 
+  const WORK_AUTH_COUNTRY_DEFS = [
+    { value: 'kazakhstan', labelKey: 'countryKazakhstan' },
+    { value: 'Russian', labelKey: 'countryRussia' },
+    { value: 'uzbekistan', labelKey: 'countryUzbekistan' },
+    { value: 'kyrgyzstan', labelKey: 'countryKyrgyzstan' },
+  ];
+
+  function getWorkAuthCountryOptions(lang) {
+    const L = global.TmaI18n.normalizeLang(lang);
+    return WORK_AUTH_COUNTRY_DEFS.map((row) => ({
+      value: row.value,
+      label: sj(L, row.labelKey),
+    }));
+  }
+
+  function renderWorkAuthCountryMenu(menuEl, lang, selectedCsv, escFn, attrEscFn) {
+    if (!menuEl) return;
+    menuEl.innerHTML = getWorkAuthCountryOptions(lang)
+      .map(
+        (item) =>
+          `<label class="skill-check"><input type="checkbox" value="${attrEscFn(item.value)}" />${escFn(item.label)}</label>`
+      )
+      .join('');
+    applyWorkAuthCountriesCsv(menuEl, selectedCsv);
+  }
+
+  function getWorkAuthCountriesCsv(menuEl) {
+    const checked = menuEl?.querySelectorAll('input[type="checkbox"]:checked') || [];
+    return [...checked]
+      .map((opt) => String(opt.value || '').trim())
+      .filter(Boolean)
+      .join(',');
+  }
+
+  function applyWorkAuthCountriesCsv(menuEl, csv) {
+    const selected = new Set(
+      String(csv || '')
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean)
+    );
+    menuEl?.querySelectorAll('input[type="checkbox"]').forEach((opt) => {
+      opt.checked = selected.has(String(opt.value || '').trim());
+    });
+  }
+
+  function workAuthPickerSummary(lang, count) {
+    const L = global.TmaI18n.normalizeLang(lang);
+    if (!count) return sj(L, 'workAuthAny');
+    return sj(L, 'workAuthSelected', { count });
+  }
+
   global.SeekerJobsI18n = {
     STRINGS,
     sj,
@@ -412,5 +499,10 @@
     refreshResumePickerStatic,
     getApplyTypeOptions,
     getApplyTypeLabels,
+    getWorkAuthCountryOptions,
+    renderWorkAuthCountryMenu,
+    getWorkAuthCountriesCsv,
+    applyWorkAuthCountriesCsv,
+    workAuthPickerSummary,
   };
 })(window);

@@ -528,6 +528,14 @@
               <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
             </div>
           </div>
+          <div class="row date-range-row">
+            <label id="workAuthFilterLabel">Разрешение на работу в</label>
+            <div class="skills-picker">
+              <button id="countryPickerBtn" type="button" class="skills-picker-btn">Любая страна</button>
+              <div id="countryPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            </div>
+            <button type="button" id="workAuthHintBtn" class="hint-btn" title="Что значит «Разрешение на работу в»?" aria-label="Что значит «Разрешение на работу в»?">?</button>
+          </div>
           <div id="sourceFilterRow" class="row date-range-row" style="display:none">
             <label>Source
               <select id="sourceSel">
@@ -618,6 +626,22 @@
           </p>
           <p class="job-summary" style="margin:0">
             Если фильтр выключен, вы увидите и другие подходящие вакансии, которые могут быть полезны, но не входят в топ по релевантности.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div id="workAuthHintModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="workAuthHintTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="workAuthHintTitle">Разрешение на работу в</strong>
+          <button id="workAuthHintClose" type="button" class="ghost-btn" aria-label="Закрыть">×</button>
+        </div>
+        <div class="modal-body">
+          <p class="job-summary" style="margin:0 0 12px">
+            Показывает удалённые вакансии, подходящие соискателям с правом работать в выбранных странах.
+          </p>
+          <p class="job-summary" style="margin:0">
+            Вакансии с явным совпадением по стране показываются первыми, затем остальные по id (новые выше).
           </p>
         </div>
       </div>
@@ -783,7 +807,7 @@
 
       const API_BASE = '';
       const SKILLS_URL = '/api/admin/skills';
-      const POSITIONS_URL = '/api/admin/positions';
+      const POSITIONS_URL = '/api/admin/remote-positions';
 
       let seekerId = null;
       let isBotAdminUser = false;
@@ -803,6 +827,8 @@
       let dateBounds = { min: '', max: '' };
       let isSkillPickerOpen = false;
       let isSourcePickerOpen = false;
+      let isCountryPickerOpen = false;
+      let isWorkAuthHintModalOpen = false;
       let isResumeRequiredModalOpen = false;
       let isSubscribeRequiredModalOpen = false;
       let isPaymentRequiredModalOpen = false;
@@ -840,6 +866,7 @@
         'page',
         'pageSize',
         'showOnlyHighlyRelevant',
+        'country',
         'jobId',
         'skillId',
       ];
@@ -958,6 +985,7 @@
             applyTypes: normalizeApplyTypesCsv(pick('applyTypes') || pick('sourceIds')),
             source: normalizeSourceToken(pick('source')),
             showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
+            country: pick('country'),
             jobId: pick('jobId'),
             page: pick('page') || '1',
             pageSize: pick('pageSize') || '100',
@@ -980,6 +1008,7 @@
             applyTypes: normalizeApplyTypesCsv(pick('applyTypes') || pick('sourceIds')),
             source: normalizeSourceToken(pick('source')),
             showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
+            country: pick('country'),
             jobId: pick('jobId'),
             page: pick('page') || '1',
             pageSize: pick('pageSize') || '100',
@@ -995,6 +1024,7 @@
           ),
           source: normalizeSourceToken(p.get('source') || malformedFallback.get('source') || ''),
           showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || malformedFallback.get('showOnlyHighlyRelevant') || '',
+          country: p.get('country') || malformedFallback.get('country') || '',
           jobId: p.get('jobId') || malformedFallback.get('jobId') || '',
           page: p.get('page') || malformedFallback.get('page') || '1',
           pageSize: p.get('pageSize') || malformedFallback.get('pageSize') || '100',
@@ -1152,7 +1182,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourceSel', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'sourceSel', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -1265,6 +1295,14 @@
       function closeHighlyRelevantHintModal() {
         isHighlyRelevantHintModalOpen = false;
         document.getElementById('highlyRelevantHintModal').classList.remove('on');
+      }
+      function openWorkAuthHintModal() {
+        isWorkAuthHintModalOpen = true;
+        document.getElementById('workAuthHintModal').classList.add('on');
+      }
+      function closeWorkAuthHintModal() {
+        isWorkAuthHintModalOpen = false;
+        document.getElementById('workAuthHintModal').classList.remove('on');
       }
       function bindJobDetailInteractions(job) {
         document.querySelectorAll('.skill-tag[data-justification]').forEach((el) => {
@@ -1648,6 +1686,43 @@
         document.getElementById('sourcePickerMenu').classList.remove('open');
       }
 
+      function renderCountryPickerOptions() {
+        SeekerJobsI18n.renderWorkAuthCountryMenu(
+          document.getElementById('countryPickerMenu'),
+          uiLang,
+          q().country || '',
+          esc,
+          attrEsc
+        );
+        renderCountryPickerSummary();
+      }
+
+      function getSelectedCountriesCsv() {
+        return SeekerJobsI18n.getWorkAuthCountriesCsv(document.getElementById('countryPickerMenu'));
+      }
+
+      function applySelectedCountriesCsv(csv) {
+        SeekerJobsI18n.applyWorkAuthCountriesCsv(document.getElementById('countryPickerMenu'), csv);
+        renderCountryPickerSummary();
+      }
+
+      function renderCountryPickerSummary() {
+        const btn = document.getElementById('countryPickerBtn');
+        const csv = getSelectedCountriesCsv();
+        const count = csv ? csv.split(',').filter(Boolean).length : 0;
+        btn.textContent = SeekerJobsI18n.workAuthPickerSummary(uiLang, count);
+      }
+
+      function openCountryPicker() {
+        isCountryPickerOpen = true;
+        document.getElementById('countryPickerMenu').classList.add('open');
+      }
+
+      function closeCountryPicker() {
+        isCountryPickerOpen = false;
+        document.getElementById('countryPickerMenu').classList.remove('open');
+      }
+
       async function uploadMainResumeFromUi() {
         const fileInput = document.getElementById('resumeFileInput');
         const uploadBtn = document.getElementById('uploadResumeBtn');
@@ -1721,6 +1796,7 @@
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = 100;
         const applyTypes = getSelectedSources().join(',');
+        const countriesCsv = getSelectedCountriesCsv();
         const source = isBotAdminUser
           ? normalizeSourceToken(document.getElementById('sourceSel')?.value || query.source || '')
           : '';
@@ -1732,6 +1808,7 @@
           skillIds,
           applyTypes,
           source,
+          country: countriesCsv,
           showOnlyHighlyRelevant: showOnlyHighlyRelevant ? 'true' : '',
           page,
           pageSize,
@@ -1748,6 +1825,7 @@
             `${skillIds ? `&skillIds=${encodeURIComponent(skillIds)}` : ''}` +
             `${applyTypes ? `&applyTypes=${encodeURIComponent(applyTypes)}` : ''}` +
             `${source ? `&source=${encodeURIComponent(source)}` : ''}` +
+            `${countriesCsv ? `&country=${encodeURIComponent(countriesCsv)}` : ''}` +
             `${showOnlyHighlyRelevant ? '&showOnlyHighlyRelevant=true' : ''}` +
             `&page=${encodeURIComponent(page)}&pageSize=${encodeURIComponent(pageSize)}`;
           const data = await api(posUrl);
@@ -2037,6 +2115,8 @@
         applySelectedSkillIdsCsv('');
         applySelectedApplyTypesCsv('');
 
+        applySelectedCountriesCsv('');
+
         const sourceSel = document.getElementById('sourceSel');
         if (sourceSel) sourceSel.value = '';
 
@@ -2050,6 +2130,7 @@
           applyTypes: '',
           source: '',
           sourceIds: '',
+          country: '',
           showOnlyHighlyRelevant: '',
           page: '1',
           jobId: '',
@@ -2059,7 +2140,9 @@
       async function boot() {
         hydrateStateToInputs();
         renderSourcePickerOptions();
+        renderCountryPickerOptions();
         applySelectedApplyTypesCsv(q().applyTypes || '');
+        applySelectedCountriesCsv(q().country || '');
         updateSourceFilterVisibility();
         await waitForTelegramInitData();
         if (!String(getTgInitDataString()).trim() && !devTelegramId) {
@@ -2144,6 +2227,14 @@
       document.getElementById('sourcePickerMenu').addEventListener('change', () => {
         renderSourcePickerSummary();
         setQ({ applyTypes: getSelectedSources().join(','), page: '1' });
+      });
+      document.getElementById('countryPickerBtn').addEventListener('click', () => {
+        if (isCountryPickerOpen) closeCountryPicker();
+        else openCountryPicker();
+      });
+      document.getElementById('countryPickerMenu').addEventListener('change', () => {
+        renderCountryPickerSummary();
+        setQ({ country: getSelectedCountriesCsv(), page: '1' });
       });
       document.getElementById('sourceSel').addEventListener('change', (event) => {
         const source = normalizeSourceToken(event.target.value);
@@ -2259,6 +2350,15 @@
       document.getElementById('highlyRelevantHintModal').addEventListener('click', (event) => {
         if (event.target.id === 'highlyRelevantHintModal') closeHighlyRelevantHintModal();
       });
+      document.getElementById('workAuthHintBtn').addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openWorkAuthHintModal();
+      });
+      document.getElementById('workAuthHintClose').addEventListener('click', closeWorkAuthHintModal);
+      document.getElementById('workAuthHintModal').addEventListener('click', (event) => {
+        if (event.target.id === 'workAuthHintModal') closeWorkAuthHintModal();
+      });
       document.getElementById('jobModalClose').addEventListener('click', closeJobModal);
       document.getElementById('jobModal').addEventListener('click', (event) => {
         if (event.target.id === 'jobModal') closeJobModal();
@@ -2268,6 +2368,7 @@
         if (!picker) {
           if (isSkillPickerOpen) closeSkillPicker();
           if (isSourcePickerOpen) closeSourcePicker();
+          if (isCountryPickerOpen) closeCountryPicker();
         }
       });
       document.addEventListener('keydown', (event) => {
@@ -2275,6 +2376,7 @@
           if (isJobModalOpen) closeJobModal();
           if (isSkillPickerOpen) closeSkillPicker();
           if (isSourcePickerOpen) closeSourcePicker();
+          if (isCountryPickerOpen) closeCountryPicker();
           if (isResumeRequiredModalOpen) {
             continueGenerateAfterResumeUpload = false;
             closeResumeRequiredModal();
@@ -2283,6 +2385,7 @@
           if (isPaymentRequiredModalOpen) closePaymentRequiredModal();
           if (isInsightModalOpen) hideInsight();
           if (isHighlyRelevantHintModalOpen) closeHighlyRelevantHintModal();
+          if (isWorkAuthHintModalOpen) closeWorkAuthHintModal();
         }
       });
 
