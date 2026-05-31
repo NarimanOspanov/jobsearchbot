@@ -521,7 +521,7 @@
               <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="Что это значит?" aria-label="Что значит Топ-совпадения?">?</button>
             </span>
           </div>
-          <div class="row date-range-row">
+          <div id="searchInFilterRow" class="row date-range-row" style="display:none">
             <label>Искать в</label>
             <div class="skills-picker">
               <button id="sourcePickerBtn" type="button" class="skills-picker-btn">Все источники</button>
@@ -529,7 +529,7 @@
             </div>
           </div>
           <div class="row date-range-row">
-            <label id="workAuthFilterLabel">Могу официально работать в</label>
+            <label id="workAuthFilterLabel">Есть разрешение на работу в</label>
             <div class="skills-picker">
               <button id="countryPickerBtn" type="button" class="skills-picker-btn">Не указано</button>
               <div id="countryPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
@@ -633,7 +633,7 @@
     <div id="workAuthHintModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="workAuthHintTitle">
       <div class="modal-card">
         <div class="modal-head">
-          <strong id="workAuthHintTitle">Могу официально работать в</strong>
+          <strong id="workAuthHintTitle">Есть разрешение на работу в</strong>
           <button id="workAuthHintClose" type="button" class="ghost-btn" aria-label="Закрыть">×</button>
         </div>
         <div class="modal-body">
@@ -1189,8 +1189,18 @@
         updateHighlyRelevantFilterState();
       }
       function updateSourceFilterVisibility() {
+        const searchInRow = document.getElementById('searchInFilterRow');
         const row = document.getElementById('sourceFilterRow');
         const sourceSel = document.getElementById('sourceSel');
+        if (searchInRow) {
+          if (isBotAdminUser) {
+            searchInRow.style.display = '';
+          } else {
+            searchInRow.style.display = 'none';
+            applySelectedApplyTypesCsv('');
+            setQ({ applyTypes: '' });
+          }
+        }
         if (!row || !sourceSel) return;
         if (isBotAdminUser) {
           row.style.display = '';
@@ -1795,7 +1805,7 @@
         const query = q();
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = 100;
-        const applyTypes = getSelectedSources().join(',');
+        const applyTypes = isBotAdminUser ? getSelectedSources().join(',') : '';
         const countriesCsv = getSelectedCountriesCsv();
         const source = isBotAdminUser
           ? normalizeSourceToken(document.getElementById('sourceSel')?.value || query.source || '')
@@ -2141,9 +2151,7 @@
         hydrateStateToInputs();
         renderSourcePickerOptions();
         renderCountryPickerOptions();
-        applySelectedApplyTypesCsv(q().applyTypes || '');
         applySelectedCountriesCsv(q().country || '');
-        updateSourceFilterVisibility();
         await waitForTelegramInitData();
         if (!String(getTgInitDataString()).trim() && !devTelegramId) {
           const hrefLen = String(window.location.href || '').length;
@@ -2155,6 +2163,8 @@
         }
         await Promise.all([loadProfile(), loadSkills()]);
         const s = q();
+        if (isBotAdminUser) applySelectedApplyTypesCsv(s.applyTypes || '');
+        else applySelectedApplyTypesCsv('');
         bootDeepLinkSkillIdsCsv = String(s.skillIds || '').trim();
         const shouldUseProfileSkillsByDefault = !bootDeepLinkSkillIdsCsv && Boolean(profileSkillIdsCsv);
         if (shouldUseProfileSkillsByDefault) {
