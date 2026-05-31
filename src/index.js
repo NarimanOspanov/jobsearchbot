@@ -85,6 +85,8 @@ import {
   langFromCtx,
   textMatchesAnyLang,
   refreshBotMenus,
+  registerBotMenuCommands,
+  ensureUserBotMenuCurrent,
 } from './i18n/botI18n.js';
 import {
   hireAgentStateByChatId,
@@ -638,6 +640,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       }
     } catch (err) {
       console.error('ensureUser error:', err);
+    }
+    if (ctx.chat?.type === 'private' && Number.isSafeInteger(ctx.chat?.id)) {
+      ensureUserBotMenuCurrent(ctx.telegram, ctx.chat.id).catch(() => {});
     }
     return next();
   });
@@ -1959,6 +1964,8 @@ async function main() {
     runtimeBot.username = me?.username || '';
     runtimeBot.telegram = bot.telegram;
     console.log('Telegram OK.', runtimeBot.username ? `@${runtimeBot.username}` : '(username not set)');
+    await registerBotMenuCommands(bot.telegram);
+    console.log('Bot command menus registered.');
   } catch (err) {
     console.error('Cannot reach Telegram:', err.message);
     return;

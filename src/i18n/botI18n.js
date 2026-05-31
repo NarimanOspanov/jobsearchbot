@@ -13,7 +13,7 @@ export const SUPPORTED_BOT_LANGUAGES = SUPPORTED_USER_LANGUAGES;
 export const DEFAULT_BOT_LANGUAGE = 'en';
 
 /** Bump when BOT_MENU_COMMANDS change (run `/refreshmenus` or `npm run menus:refresh`). */
-export const BOT_MENU_VERSION = 4;
+export const BOT_MENU_VERSION = 5;
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -56,12 +56,35 @@ export function getMenuCommands(lang) {
   return BOT_MENU_COMMANDS[locale] || BOT_MENU_COMMANDS.en;
 }
 
+/** @type {Map<number, number>} */
+const menuSyncedVersionByChatId = new Map();
+
 /** Register global command menus (Telegram client language + default fallback). */
 export async function registerBotMenuCommands(telegram) {
   if (!telegram) return;
   await telegram.setMyCommands(getMenuCommands('en'));
   await telegram.setMyCommands(getMenuCommands('ru'), { language_code: 'ru' });
   await telegram.setMyCommands(getMenuCommands('en'), { language_code: 'en' });
+}
+
+/**
+ * Drop stale per-chat command overrides so the global menu (BOT_MENU_VERSION) is visible.
+ * Called lazily on user activity — no broadcast needed.
+ * @param {import('telegraf').Telegram} telegram
+ * @param {number} chatId
+ */
+export async function ensureUserBotMenuCurrent(telegram, chatId) {
+  if (!telegram || !Number.isSafeInteger(chatId)) return;
+  if (menuSyncedVersionByChatId.get(chatId) === BOT_MENU_VERSION) return;
+  try {
+    await telegram.deleteMyCommands({ scope: { type: 'chat', chat_id: chatId } });
+  } catch (err) {
+    console.warn('deleteMyCommands (chat scope) failed:', {
+      chatId,
+      error: err?.message || err,
+    });
+  }
+  menuSyncedVersionByChatId.set(chatId, BOT_MENU_VERSION);
 }
 
 /**
