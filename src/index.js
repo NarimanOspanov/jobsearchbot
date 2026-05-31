@@ -89,6 +89,7 @@ import {
   buildMainReplyKeyboard,
   resolveMainMenuKeyboardAction,
   ensureMainReplyKeyboard,
+  patchCtxWithMainReplyKeyboard,
 } from './i18n/botI18n.js';
 import {
   hireAgentStateByChatId,
@@ -223,11 +224,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           reply_markup: keyboard,
         }
       );
-      await ensureMainReplyKeyboard(ctx.telegram, ctx.chat?.id ?? ctx.from?.id, lang);
       return;
     }
     await ctx.reply(intro, { reply_markup: keyboard });
-    await ensureMainReplyKeyboard(ctx.telegram, ctx.chat?.id ?? ctx.from?.id, lang);
   };
 
   const buildStartRequiredChannelsKeyboard = (channels, lang) => {
@@ -597,12 +596,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.reply(tr(ctx, 'position_apply_prompt'));
   };
 
-  const tryRefreshMainReplyKeyboard = async (ctx) => {
-    if (ctx.chat?.type !== 'private') return;
-    const chatId = ctx.chat?.id ?? ctx.from?.id;
-    if (!Number.isSafeInteger(chatId)) return;
-    await ensureMainReplyKeyboard(ctx.telegram, chatId, langFromCtx(ctx));
-  };
+  bot.use(async (ctx, next) => {
+    patchCtxWithMainReplyKeyboard(ctx);
+    return next();
+  });
 
   const MAIN_MENU_BUSY_STEPS = new Set([
     'awaiting_cv',
@@ -613,18 +610,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     'awaiting_confirm',
     'applying',
   ]);
-
-  bot.use(async (ctx, next) => {
-    await next();
-    if (ctx.chat?.type !== 'private') return;
-    const isCommand = typeof ctx.message?.text === 'string' && ctx.message.text.trim().startsWith('/');
-    const isCallback = Boolean(ctx.callbackQuery);
-    const isMenuButton =
-      typeof ctx.message?.text === 'string' && resolveMainMenuKeyboardAction(ctx.message.text) != null;
-    if (isCommand || isCallback || isMenuButton) {
-      await tryRefreshMainReplyKeyboard(ctx);
-    }
-  });
 
   bot.use(async (ctx, next) => {
     try {
@@ -652,7 +637,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     if (ctx.chat?.type === 'private' && Number.isSafeInteger(ctx.chat?.id)) {
       ensureUserBotMenuCurrent(ctx.telegram, ctx.chat.id).catch(() => {});
-      ensureMainReplyKeyboard(ctx.telegram, ctx.chat.id, langFromCtx(ctx)).catch(() => {});
     }
     return next();
   });

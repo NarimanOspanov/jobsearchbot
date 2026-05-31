@@ -16,7 +16,7 @@ export const DEFAULT_BOT_LANGUAGE = 'en';
 export const BOT_MENU_VERSION = 5;
 
 /** Bump when main reply keyboard labels/layout change. */
-export const MAIN_REPLY_KEYBOARD_VERSION = 1;
+export const MAIN_REPLY_KEYBOARD_VERSION = 2;
 
 const MAIN_MENU_KEYBOARD_KEYS = {
   jobsearch: 'keyboard_job_search',
@@ -148,6 +148,34 @@ export function buildMainReplyKeyboard(lang) {
   };
 }
 
+/**
+ * Attach the main reply keyboard to outgoing messages that do not use inline buttons.
+ * @param {Record<string, unknown>} [extra]
+ * @param {string | null | undefined} lang
+ */
+export function withMainReplyKeyboard(extra = {}, lang) {
+  const markup = extra.reply_markup;
+  if (markup && typeof markup === 'object') {
+    if (Array.isArray(markup.inline_keyboard) && markup.inline_keyboard.length > 0) return extra;
+    if (markup.remove_keyboard === true) return extra;
+    if (Array.isArray(markup.keyboard) && markup.keyboard.length > 0) return extra;
+  }
+  return {
+    ...extra,
+    reply_markup: buildMainReplyKeyboard(lang),
+  };
+}
+
+function hasInlineReplyMarkup(extra = {}) {
+  const markup = extra.reply_markup;
+  return Boolean(
+    markup &&
+      typeof markup === 'object' &&
+      Array.isArray(markup.inline_keyboard) &&
+      markup.inline_keyboard.length > 0
+  );
+}
+
 /** @param {string | null | undefined} text @returns {'jobsearch' | 'cvscore' | 'news' | 'profile' | null} */
 export function resolveMainMenuKeyboardAction(text) {
   const normalized = String(text || '').trim();
@@ -170,15 +198,51 @@ export async function ensureMainReplyKeyboard(telegram, chatId, lang, options = 
   const force = options.force === true;
   if (!force && mainReplyKeyboardSyncedVersionByChatId.get(chatId) === MAIN_REPLY_KEYBOARD_VERSION) return;
   try {
-    const message = await telegram.sendMessage(chatId, '\u2060', {
+    await telegram.sendMessage(chatId, '\u2060', {
       reply_markup: buildMainReplyKeyboard(lang),
     });
-    if (message?.message_id) {
-      await telegram.deleteMessage(chatId, message.message_id).catch(() => {});
-    }
     mainReplyKeyboardSyncedVersionByChatId.set(chatId, MAIN_REPLY_KEYBOARD_VERSION);
   } catch (err) {
     console.warn('ensureMainReplyKeyboard failed:', { chatId, error: err?.message || err });
   }
+}
+
+/**
+ * Wrap Telegraf reply helpers so text replies carry the main menu keyboard.
+ * Inline-only replies get a follow-up keyboard message (Telegram allows one markup type per message).
+ * @param {import('telegraf').Context} ctx
+ */
+export function patchCtxWithMainReplyKeyboard(ctx) {
+  if (ctx.chat?.type !== 'private') return;
+  const chatId = ctx.chat?.id ?? ctx.from?.id;
+  if (!Number.isSafeInteger(chatId)) return;
+  if (!ctx.state) ctx.state = {};
+
+  const wrapReplyMethod = (methodName) => {
+    const original = ctx[methodName]?.bind(ctx);
+    if (!original || ctx.state?.mainReplyKeyboardPatched?.[methodName]) return;
+    if (!ctx.state.mainReplyKeyboardPatched) ctx.state.mainReplyKeyboardPatched = {};
+    ctx.state.mainReplyKeyboardPatched[methodName] = true;
+
+    ctx[methodName] = async (...args) => {
+      const lang = langFromCtx(ctx);
+      const extra = typeof args[1] === 'object' && args[1] !== null ? args[1] : {};
+      const usesInline = hasInlineReplyMarkup(extra);
+      const result = usesInline
+        ? await original(...args)
+        : methodName === 'reply'
+          ? await original(args[0], withMainReplyKeyboard(extra, lang))
+          : await original(args[0], withMainReplyKeyboard(extra, lang));
+      if (usesInline) {
+        await ensureMainReplyKeyboard(ctx.telegram, chatId, lang);
+      }
+      return result;
+    };
+  };
+
+  wrapReplyMethod('reply');
+  wrapReplyMethod('replyWithPhoto');
+  wrapReplyMethod('replyWithDocument');
+  wrapReplyMethod('replyWithVideo');
 }
 
