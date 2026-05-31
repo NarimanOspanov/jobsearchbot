@@ -15,6 +15,19 @@ export const DEFAULT_BOT_LANGUAGE = 'en';
 /** Bump when BOT_MENU_COMMANDS change (run `/refreshmenus` or `npm run menus:refresh`). */
 export const BOT_MENU_VERSION = 5;
 
+/** Bump when main reply keyboard labels/layout change. */
+export const MAIN_REPLY_KEYBOARD_VERSION = 1;
+
+const MAIN_MENU_KEYBOARD_KEYS = {
+  jobsearch: 'keyboard_job_search',
+  cvscore: 'keyboard_cv_enhance',
+  news: 'keyboard_news',
+  profile: 'keyboard_settings',
+};
+
+/** @type {Map<number, number>} */
+const mainReplyKeyboardSyncedVersionByChatId = new Map();
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -114,5 +127,58 @@ export async function refreshBotMenus(telegram, options = {}) {
   }
 
   return { global: true, cleared };
+}
+
+/** @param {string | null | undefined} lang */
+export function buildMainReplyKeyboard(lang) {
+  const locale = normalizeUserLanguage(lang);
+  return {
+    keyboard: [
+      [
+        { text: t(locale, MAIN_MENU_KEYBOARD_KEYS.jobsearch) },
+        { text: t(locale, MAIN_MENU_KEYBOARD_KEYS.cvscore) },
+      ],
+      [
+        { text: t(locale, MAIN_MENU_KEYBOARD_KEYS.news) },
+        { text: t(locale, MAIN_MENU_KEYBOARD_KEYS.profile) },
+      ],
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+  };
+}
+
+/** @param {string | null | undefined} text @returns {'jobsearch' | 'cvscore' | 'news' | 'profile' | null} */
+export function resolveMainMenuKeyboardAction(text) {
+  const normalized = String(text || '').trim();
+  if (!normalized) return null;
+  for (const [action, key] of Object.entries(MAIN_MENU_KEYBOARD_KEYS)) {
+    if (textMatchesAnyLang(normalized, key)) return /** @type {'jobsearch' | 'cvscore' | 'news' | 'profile'} */ (action);
+  }
+  return null;
+}
+
+/**
+ * Show the persistent main reply keyboard once per MAIN_REPLY_KEYBOARD_VERSION.
+ * @param {import('telegraf').Telegram} telegram
+ * @param {number} chatId
+ * @param {string | null | undefined} lang
+ * @param {{ force?: boolean }} [options]
+ */
+export async function ensureMainReplyKeyboard(telegram, chatId, lang, options = {}) {
+  if (!telegram || !Number.isSafeInteger(chatId)) return;
+  const force = options.force === true;
+  if (!force && mainReplyKeyboardSyncedVersionByChatId.get(chatId) === MAIN_REPLY_KEYBOARD_VERSION) return;
+  try {
+    const message = await telegram.sendMessage(chatId, '\u2060', {
+      reply_markup: buildMainReplyKeyboard(lang),
+    });
+    if (message?.message_id) {
+      await telegram.deleteMessage(chatId, message.message_id).catch(() => {});
+    }
+    mainReplyKeyboardSyncedVersionByChatId.set(chatId, MAIN_REPLY_KEYBOARD_VERSION);
+  } catch (err) {
+    console.warn('ensureMainReplyKeyboard failed:', { chatId, error: err?.message || err });
+  }
 }
 

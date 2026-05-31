@@ -83,10 +83,12 @@ import {
   tr,
   t,
   langFromCtx,
-  textMatchesAnyLang,
   refreshBotMenus,
   registerBotMenuCommands,
   ensureUserBotMenuCurrent,
+  buildMainReplyKeyboard,
+  resolveMainMenuKeyboardAction,
+  ensureMainReplyKeyboard,
 } from './i18n/botI18n.js';
 import {
   hireAgentStateByChatId,
@@ -95,7 +97,6 @@ import {
   getPositionApplyAttribution,
   resolvePositionApplyAttribution,
   clearPositionApplyAttributionStores,
-  legacyKeyboardClearedByChatId,
   cvScoreResultByUserId,
   runtimeBot,
   screeningCronHealthState,
@@ -222,9 +223,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           reply_markup: keyboard,
         }
       );
+      await ensureMainReplyKeyboard(ctx.telegram, ctx.chat?.id ?? ctx.from?.id, lang);
       return;
     }
     await ctx.reply(intro, { reply_markup: keyboard });
+    await ensureMainReplyKeyboard(ctx.telegram, ctx.chat?.id ?? ctx.from?.id, lang);
   };
 
   const buildStartRequiredChannelsKeyboard = (channels, lang) => {
@@ -594,27 +597,33 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.reply(tr(ctx, 'position_apply_prompt'));
   };
 
-  const tryRemoveLegacyKeyboard = async (ctx) => {
-    const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
-    if (chat?.type !== 'private') return;
-    const chatId = chat?.id ?? ctx.from?.id;
-    if (!chatId || legacyKeyboardClearedByChatId.has(chatId)) return;
-    try {
-      const cleanupMessage = await ctx.telegram.sendMessage(chatId, '\u2060', {
-        reply_markup: { remove_keyboard: true },
-      });
-      if (cleanupMessage?.message_id) {
-        await ctx.telegram.deleteMessage(chatId, cleanupMessage.message_id).catch(() => { });
-      }
-      legacyKeyboardClearedByChatId.add(chatId);
-    } catch (err) {
-      console.error('Failed to remove legacy keyboard:', err?.message || err);
-    }
+  const tryRefreshMainReplyKeyboard = async (ctx) => {
+    if (ctx.chat?.type !== 'private') return;
+    const chatId = ctx.chat?.id ?? ctx.from?.id;
+    if (!Number.isSafeInteger(chatId)) return;
+    await ensureMainReplyKeyboard(ctx.telegram, chatId, langFromCtx(ctx));
   };
 
+  const MAIN_MENU_BUSY_STEPS = new Set([
+    'awaiting_cv',
+    'awaiting_cv_roast',
+    'awaiting_cv_tailor',
+    'awaiting_job_desc',
+    'awaiting_cv_for_position',
+    'awaiting_confirm',
+    'applying',
+  ]);
+
   bot.use(async (ctx, next) => {
-    await tryRemoveLegacyKeyboard(ctx);
-    return next();
+    await next();
+    if (ctx.chat?.type !== 'private') return;
+    const isCommand = typeof ctx.message?.text === 'string' && ctx.message.text.trim().startsWith('/');
+    const isCallback = Boolean(ctx.callbackQuery);
+    const isMenuButton =
+      typeof ctx.message?.text === 'string' && resolveMainMenuKeyboardAction(ctx.message.text) != null;
+    if (isCommand || isCallback || isMenuButton) {
+      await tryRefreshMainReplyKeyboard(ctx);
+    }
   });
 
   bot.use(async (ctx, next) => {
@@ -643,6 +652,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     if (ctx.chat?.type === 'private' && Number.isSafeInteger(ctx.chat?.id)) {
       ensureUserBotMenuCurrent(ctx.telegram, ctx.chat.id).catch(() => {});
+      ensureMainReplyKeyboard(ctx.telegram, ctx.chat.id, langFromCtx(ctx)).catch(() => {});
     }
     return next();
   });
@@ -762,6 +772,72 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     await ctx.reply(tr(ctx, 'jobsearch_https_error'));
+  };
+
+  const sendCvscoreIntro = async (ctx) => {
+    const lang = langFromCtx(ctx);
+    await ctx.replyWithPhoto(
+      { source: new URL('../here_cv.png', import.meta.url).pathname },
+      {
+        caption: tr(ctx, 'cvscore_intro'),
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: t(lang, 'btn_cv_improve_simple'), callback_data: 'cvscore_improve' }],
+            [{ text: t(lang, 'btn_cv_improve_job'), callback_data: 'cvscore_tailor' }],
+          ],
+        },
+      },
+    );
+  };
+
+  const sendNewsScreen = async (ctx) => {
+    const lang = langFromCtx(ctx);
+    await ctx.reply(tr(ctx, 'news_text'), {
+      reply_markup: {
+        inline_keyboard: [[{ text: t(lang, 'btn_news_read'), url: DIGITAL_NOMADS_CHANNEL_URL }]],
+      },
+    });
+  };
+
+  const sendProfileScreen = async (ctx) => {
+    const lang = langFromCtx(ctx);
+    if (canUseProfileWebApp) {
+      await ctx.reply(tr(ctx, 'profile_open'), {
+        reply_markup: {
+          inline_keyboard: [[{ text: t(lang, 'btn_profile_settings'), web_app: { url: profileUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply(tr(ctx, 'profile_https_error'));
+  };
+
+  const dispatchMainMenuKeyboardAction = async (ctx, action) => {
+    if (ctx.chat?.id) await withTypingTelegram(ctx.telegram, ctx.chat.id, 700);
+    switch (action) {
+      case 'jobsearch':
+        await openJobSearchFromBot(ctx);
+        return;
+      case 'cvscore': {
+        if (ctx.chat?.type !== 'private') {
+          await ctx.reply(tr(ctx, 'cvscore_private_only'));
+          return;
+        }
+        const canProceed = await enforceStartRequiredChannelsGate(ctx);
+        if (!canProceed) return;
+        await sendCvscoreIntro(ctx);
+        return;
+      }
+      case 'news':
+        await sendNewsScreen(ctx);
+        return;
+      case 'profile':
+        await sendProfileScreen(ctx);
+        return;
+      default:
+        return;
+    }
   };
 
   bot.command('jobsearch', async (ctx) => {
@@ -902,7 +978,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   }
 
   const runCvAnalysis = async (ctx, chatId, resumeText) => {
-    await ctx.reply(tr(ctx, 'cv_analyzing'), { reply_markup: { remove_keyboard: true } });
+    await ctx.reply(tr(ctx, 'cv_analyzing'), { reply_markup: buildMainReplyKeyboard(langFromCtx(ctx)) });
     const lang = langFromCtx(ctx);
     const telegramLang = ctx.from?.language_code || lang;
     let review;
@@ -971,20 +1047,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     const canProceed = await enforceStartRequiredChannelsGate(ctx);
     if (!canProceed) return;
-    const lang = langFromCtx(ctx);
-    await ctx.replyWithPhoto(
-      { source: new URL('../here_cv.png', import.meta.url).pathname },
-      {
-        caption: tr(ctx, 'cvscore_intro'),
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: t(lang, 'btn_cv_improve_simple'), callback_data: 'cvscore_improve' }],
-            [{ text: t(lang, 'btn_cv_improve_job'), callback_data: 'cvscore_tailor' }],
-          ],
-        },
-      },
-    );
+    await sendCvscoreIntro(ctx);
   });
 
   bot.action('cvscore_improve', async (ctx) => {
@@ -1051,7 +1114,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         return;
       }
       hireAgentStateByChatId.set(chatId, { step: 'awaiting_job_desc', resumeText });
-      await ctx.reply(tr(ctx, 'awaiting_job_desc'), { reply_markup: { remove_keyboard: true } });
+      await ctx.reply(tr(ctx, 'awaiting_job_desc'), {
+        reply_markup: buildMainReplyKeyboard(langFromCtx(ctx)),
+      });
     } catch (err) {
       console.error('cvscore_use_saved failed:', err);
       hireAgentStateByChatId.set(chatId, { step: originalStep });
@@ -1232,7 +1297,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
               await ctx.reply(tr(ctx, 'job_desc_too_short'));
             }
             hireAgentStateByChatId.set(chatId, { step: 'awaiting_job_desc', resumeText });
-            await ctx.reply(tr(ctx, 'awaiting_job_desc'), { reply_markup: { remove_keyboard: true } });
+            await ctx.reply(tr(ctx, 'awaiting_job_desc'), {
+        reply_markup: buildMainReplyKeyboard(langFromCtx(ctx)),
+      });
           }
         }
       } else if (isPositionCvFlow) {
@@ -1318,16 +1385,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   });
 
   bot.command('profile', async (ctx) => {
-    const lang = langFromCtx(ctx);
-    if (canUseProfileWebApp) {
-      await ctx.reply(tr(ctx, 'profile_open'), {
-        reply_markup: {
-          inline_keyboard: [[{ text: t(lang, 'btn_profile_settings'), web_app: { url: profileUrl } }]],
-        },
-      });
-      return;
-    }
-    await ctx.reply(tr(ctx, 'profile_https_error'));
+    await sendProfileScreen(ctx);
   });
 
   bot.command('about', async (ctx) => {
@@ -1350,12 +1408,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   });
 
   bot.command('news', async (ctx) => {
-    const lang = langFromCtx(ctx);
-    await ctx.reply(tr(ctx, 'news_text'), {
-      reply_markup: {
-        inline_keyboard: [[{ text: t(lang, 'btn_news_read'), url: DIGITAL_NOMADS_CHANNEL_URL }]],
-      },
-    });
+    await sendNewsScreen(ctx);
   });
 
   bot.command('referrals', async (ctx) => {
@@ -1793,6 +1846,12 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const st = hireAgentStateByChatId.get(ctx.chat.id);
     const chatId = ctx.chat.id;
     const text = ctx.message.text;
+
+    const menuAction = resolveMainMenuKeyboardAction(text);
+    if (menuAction && !MAIN_MENU_BUSY_STEPS.has(st?.step)) {
+      await dispatchMainMenuKeyboardAction(ctx, menuAction);
+      return;
+    }
 
     if (st?.step === 'awaiting_cv' || st?.step === 'awaiting_cv_roast' || st?.step === 'awaiting_cv_tailor') {
       await ctx.reply(tr(ctx, 'awaiting_cv_text'));

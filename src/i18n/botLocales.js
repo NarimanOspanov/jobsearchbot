@@ -85,6 +85,10 @@ export const BOT_LOCALES = {
     jobsearch_intro:
       'Вакансии с 100% удалёнкой (Global Remote) — тщательно отобранные с LinkedIn, Indeed и Telegram. Вакансии из разных сфер: IT и не-IT.',
     btn_jobsearch: 'Открыть поиск вакансий',
+    keyboard_job_search: 'Поиск работы',
+    keyboard_cv_enhance: 'Улучшение CV',
+    keyboard_news: 'Новости',
+    keyboard_settings: 'Настройки',
     jobsearch_https_error:
       'Страница поиска вакансий требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).',
 
@@ -297,6 +301,10 @@ export const BOT_LOCALES = {
     jobsearch_intro:
       '100% remote jobs (Global Remote) — carefully selected from LinkedIn, Indeed, and Telegram. Jobs across different fields: IT and non-IT.',
     btn_jobsearch: 'Open job search',
+    keyboard_job_search: 'Job search',
+    keyboard_cv_enhance: 'CV enhance',
+    keyboard_news: 'News',
+    keyboard_settings: 'Settings',
     jobsearch_https_error:
       'Job search page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).',
 

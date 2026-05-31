@@ -102,8 +102,6 @@ export function clearPositionApplyAttributionStores(chatId) {
 }
 
 /** @type {Set<number>} */
-export const legacyKeyboardClearedByChatId = new Set();
-
 /** @type {Map<string, object>} */
 export const cvScoreResultByUserId = new Map();
 
