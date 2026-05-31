@@ -30,6 +30,31 @@ export function toSkillIdsOrNullOrUndefined(value, normalizeSkillIds) {
   return normalizeSkillIds(value);
 }
 
+const WORK_AUTH_COUNTRY_VALUES = new Set(['kazakhstan', 'Russian', 'uzbekistan', 'kyrgyzstan']);
+
+export function normalizeWorkAuthCountries(value) {
+  const rawItems = Array.isArray(value) ? value : String(value || '').split(',');
+  const unique = [];
+  const seen = new Set();
+  for (const item of rawItems) {
+    const token = String(item || '').trim();
+    if (!token || seen.has(token)) continue;
+    if (!WORK_AUTH_COUNTRY_VALUES.has(token)) continue;
+    seen.add(token);
+    unique.push(token);
+  }
+  return unique;
+}
+
+export function toWorkAuthCountriesOrNullOrUndefined(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'string' || Array.isArray(value)) {
+    const normalized = normalizeWorkAuthCountries(value);
+    return normalized.length > 0 ? normalized.join(',') : null;
+  }
+  return undefined;
+}
+
 export function toScoreOrNullOrUndefined(value) {
   if (value == null || value === '') return null;
   const n = Number.parseFloat(String(value));

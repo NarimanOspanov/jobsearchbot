@@ -149,6 +149,10 @@ export default function defineUser(sequelize) {
           this.setDataValue('skills', normalized.length > 0 ? JSON.stringify(normalized) : null);
         },
       },
+      WorkAuthorizationCountries: {
+        type: DataTypes.STRING(512),
+        allowNull: true,
+      },
     },
     {
       tableName: 'Users',

@@ -55,6 +55,65 @@
       .toggle.on { background: var(--accent); }
       .toggle.on::after { transform: translateX(20px); }
       .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+      .field { display: grid; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+      .field:last-of-type { border-bottom: none; }
+      .field-label { font-weight: 600; }
+      .field-hint { font-size: 13px; color: var(--muted); line-height: 1.4; margin: 0; }
+      .skills-picker { position: relative; width: 100%; }
+      .skills-picker-btn {
+        width: 100%;
+        text-align: left;
+        background: #10182d;
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 10px 12px;
+        cursor: pointer;
+      }
+      .skills-picker-menu {
+        display: none;
+        position: absolute;
+        z-index: 20;
+        left: 0;
+        right: 0;
+        margin-top: 6px;
+        max-height: 240px;
+        overflow: auto;
+        background: #10182d;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+      }
+      .skills-picker-menu.open { display: block; }
+      .skills-group { margin-bottom: 10px; }
+      .skills-group:last-child { margin-bottom: 0; }
+      .skills-group-title {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0 0 6px;
+        font-weight: 600;
+      }
+      .skill-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 4px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .save-btn {
+        margin-top: 12px;
+        width: 100%;
+        border: none;
+        border-radius: 8px;
+        padding: 11px 14px;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .ok { color: #22c55e; font-size: 13px; margin-top: 8px; }
     </style>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
@@ -98,9 +157,36 @@
         <p id="pushNotificationsMsg" class="bad hidden" role="alert"></p>
       </section>
 
+      <section class="card">
+        <h2 id="jobSearchSectionTitle">Job search</h2>
+
+        <div class="field">
+          <span id="skillsLabel" class="field-label">Skills</span>
+          <p id="skillsHint" class="field-hint">Roles used to personalize job recommendations</p>
+          <div class="skills-picker">
+            <button id="skillPickerBtn" type="button" class="skills-picker-btn">All roles</button>
+            <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <span id="workAuthLabel" class="field-label">Work authorization countries</span>
+          <p id="workAuthHint" class="field-hint">Saved as comma-separated English values (e.g. kazakhstan,Russian)</p>
+          <div class="skills-picker">
+            <button id="countryPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
+            <div id="countryPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+          </div>
+        </div>
+
+        <button id="saveJobPrefsBtn" type="button" class="save-btn">Save</button>
+        <p id="jobPrefsMsg" class="bad hidden" role="alert"></p>
+      </section>
+
       <section id="jobSearchSettings" class="card hidden" aria-hidden="true"></section>
     </div>
 
+    <script src="/app/tma-i18n.js"></script>
+    <script src="/app/seeker-jobs-i18n.js"></script>
     <script>
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
@@ -118,6 +204,17 @@
           noUsername: '(без username)',
           loadError: 'Не удалось загрузить профиль',
           saveError: 'Не удалось сохранить настройку',
+          jobSearchSection: 'Поиск работы',
+          skillsLabel: 'Навыки',
+          skillsHint: 'Роли для персонализации подбора вакансий',
+          allRoles: 'Все роли',
+          rolesSelected: 'Выбрано: {count}',
+          workAuthLabel: 'Страны с разрешением на работу',
+          workAuthHint: 'Сохраняются через запятую на английском (например kazakhstan,Russian)',
+          workAuthAny: 'Не указано',
+          workAuthSelected: 'Выбрано: {count}',
+          saveJobPrefs: 'Сохранить',
+          savedJobPrefs: 'Сохранено',
         },
         en: {
           pageTitle: 'Profile',
@@ -131,15 +228,47 @@
           noUsername: '(no username)',
           loadError: 'Failed to load profile',
           saveError: 'Failed to save setting',
+          jobSearchSection: 'Job search',
+          skillsLabel: 'Skills',
+          skillsHint: 'Roles used to personalize job recommendations',
+          allRoles: 'All roles',
+          rolesSelected: '{count} selected',
+          workAuthLabel: 'Work authorization countries',
+          workAuthHint: 'Saved as comma-separated English values (e.g. kazakhstan,Russian)',
+          workAuthAny: 'Not specified',
+          workAuthSelected: '{count} selected',
+          saveJobPrefs: 'Save',
+          savedJobPrefs: 'Saved',
         },
       };
 
       let pushNotificationsEnabled = true;
       let isSavingPush = false;
+      let isSavingJobPrefs = false;
+      let isSkillPickerOpen = false;
+      let isCountryPickerOpen = false;
+      let skillsCatalog = [];
+      let uiLang = 'en';
 
       function telegramLang() {
         const code = String(tg?.initDataUnsafe?.user?.language_code || '').toLowerCase();
         return code === 'ru' || code.startsWith('ru-') ? 'ru' : 'en';
+      }
+
+      function fmt(template, params = {}) {
+        return String(template).replace(/\{(\w+)\}/g, (_, key) => String(params[key] ?? ''));
+      }
+
+      function esc(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function attrEsc(value) {
+        return esc(value).replace(/'/g, '&#39;');
       }
 
       function strings(lang) {
@@ -157,9 +286,151 @@
         document.getElementById('pushNotificationsDesc').textContent = s.pushNotificationsDesc;
         document.getElementById('telegramLabel').textContent = s.telegram;
         document.getElementById('chatIdLabel').textContent = s.chatId;
+        document.getElementById('jobSearchSectionTitle').textContent = s.jobSearchSection;
+        document.getElementById('skillsLabel').textContent = s.skillsLabel;
+        document.getElementById('skillsHint').textContent = s.skillsHint;
+        document.getElementById('workAuthLabel').textContent = s.workAuthLabel;
+        document.getElementById('workAuthHint').textContent = s.workAuthHint;
+        document.getElementById('saveJobPrefsBtn').textContent = s.saveJobPrefs;
+        renderSkillPickerSummary();
+        renderCountryPickerSummary();
         const profileUser = document.getElementById('profileUser');
         if (profileUser.dataset.noUsername === '1') {
           profileUser.textContent = s.noUsername;
+        }
+      }
+
+      function setJobPrefsMsg(text, isOk = false) {
+        const el = document.getElementById('jobPrefsMsg');
+        if (!text) {
+          el.textContent = '';
+          el.className = 'bad hidden';
+          return;
+        }
+        el.textContent = text;
+        el.className = isOk ? 'ok' : 'bad';
+        el.classList.remove('hidden');
+      }
+
+      function getSelectedSkillIds() {
+        const checked = document.querySelectorAll('#skillPickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => Number.parseInt(String(opt.value || ''), 10))
+          .filter((id) => Number.isSafeInteger(id) && id > 0);
+      }
+
+      function applySelectedSkillIds(ids) {
+        const selected = new Set((Array.isArray(ids) ? ids : []).map((id) => String(id)));
+        document.querySelectorAll('#skillPickerMenu input[type="checkbox"]').forEach((opt) => {
+          opt.checked = selected.has(String(opt.value));
+        });
+        renderSkillPickerSummary();
+      }
+
+      function renderSkillPickerSummary() {
+        const btn = document.getElementById('skillPickerBtn');
+        const ids = getSelectedSkillIds();
+        const s = strings(uiLang);
+        btn.textContent = ids.length ? fmt(s.rolesSelected, { count: ids.length }) : s.allRoles;
+      }
+
+      function renderSkillPickerOptions() {
+        const menu = document.getElementById('skillPickerMenu');
+        const grouped = new Map();
+        for (const item of skillsCatalog) {
+          const roleName = String(item.roleName || item.RoleName || '').trim() || (uiLang === 'ru' ? 'Другое' : 'Other');
+          const skillName = String(item.name || item.Name || item.id || '').trim() || String(item.id);
+          if (!grouped.has(roleName)) grouped.set(roleName, []);
+          grouped.get(roleName).push({ id: item.id, name: skillName });
+        }
+        menu.innerHTML = [...grouped.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([roleName, items]) => {
+            const optionsHtml = items
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(
+                (row) =>
+                  `<label class="skill-check"><input type="checkbox" value="${attrEsc(row.id)}" />${esc(row.name)}</label>`
+              )
+              .join('');
+            return `<div class="skills-group"><div class="skills-group-title">${esc(roleName)}</div>${optionsHtml}</div>`;
+          })
+          .join('');
+      }
+
+      function getSelectedCountriesCsv() {
+        return SeekerJobsI18n.getWorkAuthCountriesCsv(document.getElementById('countryPickerMenu'));
+      }
+
+      function applySelectedCountriesCsv(csv) {
+        SeekerJobsI18n.applyWorkAuthCountriesCsv(document.getElementById('countryPickerMenu'), csv);
+        renderCountryPickerSummary();
+      }
+
+      function renderCountryPickerOptions(selectedCsv = '') {
+        SeekerJobsI18n.renderWorkAuthCountryMenu(
+          document.getElementById('countryPickerMenu'),
+          uiLang,
+          selectedCsv,
+          esc,
+          attrEsc
+        );
+        renderCountryPickerSummary();
+      }
+
+      function renderCountryPickerSummary() {
+        const btn = document.getElementById('countryPickerBtn');
+        const csv = getSelectedCountriesCsv();
+        const count = csv ? csv.split(',').filter(Boolean).length : 0;
+        btn.textContent = SeekerJobsI18n.workAuthPickerSummary(uiLang, count);
+      }
+
+      function openSkillPicker() {
+        isSkillPickerOpen = true;
+        document.getElementById('skillPickerMenu').classList.add('open');
+      }
+
+      function closeSkillPicker() {
+        isSkillPickerOpen = false;
+        document.getElementById('skillPickerMenu').classList.remove('open');
+      }
+
+      function openCountryPicker() {
+        isCountryPickerOpen = true;
+        document.getElementById('countryPickerMenu').classList.add('open');
+      }
+
+      function closeCountryPicker() {
+        isCountryPickerOpen = false;
+        document.getElementById('countryPickerMenu').classList.remove('open');
+      }
+
+      async function loadSkillsCatalog() {
+        const payload = await api('/api/admin/skills');
+        skillsCatalog = payload.skills || payload || [];
+        renderSkillPickerOptions();
+      }
+
+      async function saveJobPreferences() {
+        isSavingJobPrefs = true;
+        document.getElementById('saveJobPrefsBtn').disabled = true;
+        setJobPrefsMsg('');
+        try {
+          const result = await api('/api/app/profile/settings', {
+            method: 'PATCH',
+            body: JSON.stringify({
+              skills: getSelectedSkillIds(),
+              workAuthorizationCountries: getSelectedCountriesCsv(),
+            }),
+          });
+          applySelectedSkillIds(result?.skills || []);
+          applySelectedCountriesCsv(result?.workAuthorizationCountries || '');
+          setJobPrefsMsg(strings(uiLang).savedJobPrefs, true);
+        } catch (err) {
+          setJobPrefsMsg(`${strings(uiLang).saveError}: ${err.message}`);
+        } finally {
+          isSavingJobPrefs = false;
+          document.getElementById('saveJobPrefsBtn').disabled = false;
         }
       }
 
@@ -216,7 +487,8 @@
       }
 
       function applyProfile(profile) {
-        const lang = telegramLang();
+        uiLang = telegramLang();
+        const lang = uiLang;
         const s = strings(lang);
         const profileUser = document.getElementById('profileUser');
         if (profile.telegramUserName) {
@@ -228,6 +500,8 @@
         }
         document.getElementById('profileChatId').textContent = profile.telegramChatId;
         pushNotificationsEnabled = profile?.settings?.pushNotificationsEnabled !== false;
+        applySelectedSkillIds(profile?.skills || []);
+        renderCountryPickerOptions(profile?.workAuthorizationCountries || '');
         renderPushToggle();
         applyLocale(lang);
       }
@@ -243,7 +517,35 @@
         }
       });
 
+      document.getElementById('saveJobPrefsBtn').addEventListener('click', () => {
+        if (isSavingJobPrefs) return;
+        saveJobPreferences();
+      });
+      document.getElementById('skillPickerBtn').addEventListener('click', () => {
+        if (isSkillPickerOpen) closeSkillPicker();
+        else openSkillPicker();
+      });
+      document.getElementById('countryPickerBtn').addEventListener('click', () => {
+        if (isCountryPickerOpen) closeCountryPicker();
+        else openCountryPicker();
+      });
+      document.addEventListener('click', (event) => {
+        const picker = event.target.closest('.skills-picker');
+        if (!picker) {
+          if (isSkillPickerOpen) closeSkillPicker();
+          if (isCountryPickerOpen) closeCountryPicker();
+        }
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          if (isSkillPickerOpen) closeSkillPicker();
+          if (isCountryPickerOpen) closeCountryPicker();
+        }
+      });
+
       async function loadProfile() {
+        uiLang = telegramLang();
+        await loadSkillsCatalog();
         const profile = await api('/api/app/profile');
         applyProfile(profile);
       }

@@ -14,6 +14,7 @@ import {
   toSearchModeOrUndefined,
   toIntOrNullOrUndefined,
   toSkillIdsOrNullOrUndefined,
+  toWorkAuthCountriesOrNullOrUndefined,
 } from '../../utils/validators.js';
 import { resolveBotLanguage } from '../../utils/userLanguage.js';
 import { isCareerAgentUser } from '../../services/agentAccessService.js';
@@ -46,6 +47,7 @@ export function createProfileRouter() {
         isCareerAgent,
         resumeUrl: user.ResumeURL,
         skills: user.skills,
+        workAuthorizationCountries: user.WorkAuthorizationCountries || '',
         monetization,
         settings: {
           hhEnabled: !!user.HhEnabled,
@@ -148,17 +150,22 @@ export function createProfileRouter() {
         PushNotificationsEnabled: toBoolOrUndefined(req.body.pushNotificationsEnabled),
       };
       const skillIds = toSkillIdsOrNullOrUndefined(req.body.skills, normalizeSkillIds);
+      const workAuthorizationCountries = toWorkAuthCountriesOrNullOrUndefined(req.body.workAuthorizationCountries);
 
       const updates = Object.fromEntries(
         Object.entries(patch).filter(([, v]) => typeof v === 'boolean' || typeof v === 'string' || v === null || typeof v === 'number')
       );
       if (skillIds !== undefined) updates.skills = skillIds;
+      if (workAuthorizationCountries !== undefined) {
+        updates.WorkAuthorizationCountries = workAuthorizationCountries;
+      }
       if (Object.keys(updates).length > 0) await user.update(updates);
 
       res.json({
         ok: true,
         language: resolveBotLanguage(req.miniAppUser?.language_code),
         skills: user.skills,
+        workAuthorizationCountries: user.WorkAuthorizationCountries || '',
         settings: {
           hhEnabled: !!user.HhEnabled,
           linkedInEnabled: !!user.LinkedInEnabled,
