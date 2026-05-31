@@ -16,8 +16,13 @@
       }
       * { box-sizing: border-box; }
       body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
-      .wrap { width: 100%; max-width: 100%; margin: 0 auto; padding: 14px; display: grid; gap: 12px; box-sizing: border-box; }
+      .wrap { width: 100%; max-width: 100%; margin: 0 auto; padding: 6px 10px 10px; display: grid; gap: 6px; box-sizing: border-box; }
+      #globalMsg:empty { display: none; }
+      @media (min-width: 769px) {
+        .wrap { padding: 14px; gap: 12px; }
+      }
       .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+      .card.layout-col { padding: 10px 12px 12px; }
       h1, h2, h3 { margin: 0 0 10px; }
       .muted { color: var(--muted); }
       .bad { color: #ef4444; }
@@ -31,6 +36,10 @@
       }
       button { cursor: pointer; background: var(--accent); border-color: var(--accent); }
       .layout { display: grid; gap: 12px; grid-template-columns: 1fr; align-items: stretch; }
+      @media (max-width: 768px) {
+        .layout { gap: 6px; }
+        .date-range-row:first-of-type { margin-top: 4px; }
+      }
       .layout .card.layout-col {
         min-height: 0;
         display: flex;
@@ -485,8 +494,8 @@
       }
       .search-filters-panel {
         border-bottom: 1px solid var(--border);
-        margin-bottom: 8px;
-        padding-bottom: 4px;
+        margin-bottom: 6px;
+        padding-bottom: 2px;
       }
       .search-filters-toggle {
         width: 100%;
@@ -538,6 +547,9 @@
         border-color: rgba(79, 124, 255, 0.45);
         color: var(--text);
       }
+      .search-filters-panel.is-expanded .search-filters-summary {
+        display: none;
+      }
       .search-filters-body.is-collapsed {
         display: none;
       }
@@ -564,15 +576,15 @@
 
       <div class="layout">
         <section class="card layout-col">
-          <div id="searchFiltersPanel" class="search-filters-panel">
-            <button id="searchFiltersToggle" type="button" class="search-filters-toggle" aria-expanded="false" aria-controls="searchFiltersBody">
+          <div id="searchFiltersPanel" class="search-filters-panel is-expanded">
+            <button id="searchFiltersToggle" type="button" class="search-filters-toggle" aria-expanded="true" aria-controls="searchFiltersBody">
               <span class="search-filters-toggle-main">
                 <span id="searchFiltersTitle" class="search-filters-title">Поиск вакансий на 100% удаленку</span>
                 <span id="searchFiltersSummary" class="search-filters-summary">Нажмите, чтобы настроить фильтры</span>
               </span>
               <span class="search-filters-chevron" aria-hidden="true">▼</span>
             </button>
-            <div id="searchFiltersBody" class="search-filters-body is-collapsed">
+            <div id="searchFiltersBody" class="search-filters-body">
           <div class="row date-range-row">
             <span class="date-range">
               <label>С <input id="fromDate" type="date" /></label>

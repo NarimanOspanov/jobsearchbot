@@ -570,7 +570,7 @@
     if (!panel || !toggle || !body) return null;
 
     const mq = window.matchMedia('(min-width: 769px)');
-    const defaultExpanded = () => mq.matches;
+    const defaultExpanded = () => true;
 
     const applyExpanded = (expanded) => {
       body.classList.toggle('is-collapsed', !expanded);
