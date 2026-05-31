@@ -139,6 +139,72 @@
       .resume-file-picker-name { margin-top: 6px; font-size: 12px; }
       .resume-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
       .resume-actions button { flex: 1; min-width: 120px; }
+      .apply-priority-row { gap: 8px; align-items: center; }
+      .apply-priority-stale-hint { font-size: 12px; color: #fbbf24; }
+      .apply-priority-stale { opacity: 0.55; }
+      #jobsBody tr.apply-priority-skip { background: rgba(239, 68, 68, 0.06); }
+      #jobsBody tr.apply-priority-skip:hover { background: rgba(239, 68, 68, 0.1); }
+      #jobsBody tr.apply-priority-top { background: rgba(34, 197, 94, 0.07); }
+      #jobsBody tr.apply-priority-top:hover { background: rgba(34, 197, 94, 0.12); }
+      .apply-rank-badge {
+        display: inline-block;
+        min-width: 28px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #1e293b;
+        border: 1px solid var(--border);
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+      }
+      .apply-rank-badge.rank-top {
+        background: rgba(34, 197, 94, 0.18);
+        border-color: rgba(34, 197, 94, 0.45);
+        color: #86efac;
+      }
+      .fit-chip {
+        display: inline-block;
+        min-width: 32px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+      }
+      .fit-chip.fit-high { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+      .fit-chip.fit-mid { background: rgba(251, 191, 36, 0.18); color: #fcd34d; }
+      .fit-chip.fit-low { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+      .priority-cell { font-size: 12px; font-weight: 600; white-space: nowrap; }
+      .priority-cell.priority-apply_first { color: #86efac; }
+      .priority-cell.priority-good { color: #93c5fd; }
+      .priority-cell.priority-low { color: #fcd34d; }
+      .priority-cell.priority-skip { color: #fca5a5; }
+      .why-cell .why-link {
+        font-size: 12px;
+        padding: 2px 6px;
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: left;
+      }
+      .apply-priority-banner {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: rgba(79, 124, 255, 0.08);
+      }
+      .apply-priority-banner.skip-banner {
+        border-color: rgba(239, 68, 68, 0.35);
+        background: rgba(239, 68, 68, 0.08);
+      }
+      .apply-priority-banner .k {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
       .screenshot-proof-block { margin-bottom: 12px; }
       .screenshot-proof-block.applied-highlight {
         padding: 10px;
@@ -449,9 +515,12 @@
               <button id="clearFiltersBtn" type="button" class="ghost-btn">Reset filters</button>
             </div>
           </div>
-          <div class="row date-range-row">
+          <div class="row date-range-row apply-priority-row">
             <button id="syncBtn">Search</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
+            <button id="analyzeApplyPriorityBtn" type="button" class="ghost-btn" disabled>Analyze apply priority</button>
+            <span id="analyzeApplyPriorityLoader" class="loader" aria-hidden="true"></span>
+            <span id="applyPriorityStaleHint" class="apply-priority-stale-hint" style="display:none">Comment or resume changed — re-analyze</span>
             <span class="pager">
               <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Previous page">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
@@ -628,6 +697,18 @@
       let isUploadingClientResume = false;
       let useRemotePositionsApi = false;
       let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
+      let applyPriorityRankings = {};
+      let applyPriorityCacheMeta = null;
+      let applyPriorityStale = false;
+      let isAnalyzingApplyPriority = false;
+
+      const APPLY_PRIORITY_LS_PREFIX = 'agentApplyPriority:v1:';
+      const PRIORITY_LABELS = {
+        apply_first: 'Apply first',
+        good: 'Good fit',
+        low: 'Low priority',
+        skip: 'Skip',
+      };
 
       const COUNTRY_AUTH_OPTIONS = [
         { value: 'kazakhstan', label: 'Kazakhstan' },
@@ -799,6 +880,14 @@
         const appA = appByScreenlyId(a.id);
         const appB = appByScreenlyId(b.id);
         const dir = jobsSort.dir === 'asc' ? 1 : -1;
+        if (jobsSort.key === 'apply_priority') {
+          const rankA = getJobApplyRanking(a.id)?.applyRank ?? 999999;
+          const rankB = getJobApplyRanking(b.id)?.applyRank ?? 999999;
+          if (rankA !== rankB) return rankA - rankB;
+          const scoreA = getJobApplyRanking(a.id)?.score ?? -1;
+          const scoreB = getJobApplyRanking(b.id)?.score ?? -1;
+          return scoreB - scoreA;
+        }
         let va = '';
         let vb = '';
         switch (jobsSort.key) {
@@ -832,13 +921,194 @@
         return 0;
       }
       function setJobsSort(key) {
-        if (jobsSort.key === key) {
+        if (jobsSort.key === key && key !== 'apply_priority') {
           jobsSort.dir = jobsSort.dir === 'asc' ? 'desc' : 'asc';
         } else {
           jobsSort.key = key;
-          jobsSort.dir = (key === 'posted' || key === 'id') ? 'desc' : 'asc';
+          jobsSort.dir = key === 'apply_priority' ? 'asc' : (key === 'posted' || key === 'id') ? 'desc' : 'asc';
         }
         renderJobs();
+      }
+      function applyPriorityStorageKey(seekerId) {
+        return `${APPLY_PRIORITY_LS_PREFIX}${seekerId}`;
+      }
+      function hashJobIds(jobs) {
+        return (Array.isArray(jobs) ? jobs : [])
+          .map((j) => Number(j.id))
+          .filter((id) => Number.isFinite(id))
+          .sort((a, b) => a - b)
+          .join(',');
+      }
+      function buildApplyPriorityContextKey(user, jobs) {
+        const searchMode = String(user?.searchMode || 'not_urgent');
+        const comment = String(user?.comment || '');
+        const resumeUrl = String(user?.resumeUrl || '');
+        const jobIdsHash = hashJobIds(jobs);
+        return `${searchMode}|${comment}|${resumeUrl}|${jobIdsHash}`;
+      }
+      function loadApplyPriorityCache(seekerId) {
+        try {
+          const raw = localStorage.getItem(applyPriorityStorageKey(seekerId));
+          if (!raw) return null;
+          return JSON.parse(raw);
+        } catch {
+          return null;
+        }
+      }
+      function saveApplyPriorityCache(seekerId, data) {
+        localStorage.setItem(applyPriorityStorageKey(seekerId), JSON.stringify(data));
+      }
+      function hasApplyPriorityData() {
+        return Object.keys(applyPriorityRankings).length > 0;
+      }
+      function getJobApplyRanking(jobId) {
+        const id = Number(jobId);
+        return applyPriorityRankings[id] || applyPriorityRankings[String(jobId)] || null;
+      }
+      function fitScoreClass(score) {
+        const n = Number(score);
+        if (n >= 75) return 'fit-high';
+        if (n >= 50) return 'fit-mid';
+        return 'fit-low';
+      }
+      function refreshApplyPriorityFromStorage() {
+        const seekerId = q().seekerId;
+        if (!seekerId) {
+          applyPriorityRankings = {};
+          applyPriorityCacheMeta = null;
+          applyPriorityStale = false;
+          updateApplyPriorityUi();
+          return;
+        }
+        const user = getSelectedUser();
+        const cached = loadApplyPriorityCache(seekerId);
+        if (!cached?.rankings) {
+          applyPriorityRankings = {};
+          applyPriorityCacheMeta = null;
+          applyPriorityStale = false;
+          updateApplyPriorityUi();
+          return;
+        }
+        applyPriorityRankings = cached.rankings || {};
+        applyPriorityCacheMeta = {
+          contextKey: cached.contextKey || '',
+          updatedAt: cached.updatedAt || '',
+        };
+        const currentKey = buildApplyPriorityContextKey(user, positions);
+        applyPriorityStale = applyPriorityCacheMeta.contextKey !== currentKey;
+        updateApplyPriorityUi();
+      }
+      function invalidateApplyPriorityCache({ clearRankings = false } = {}) {
+        applyPriorityStale = true;
+        if (clearRankings) {
+          applyPriorityRankings = {};
+          applyPriorityCacheMeta = null;
+          const seekerId = q().seekerId;
+          if (seekerId) localStorage.removeItem(applyPriorityStorageKey(seekerId));
+        }
+        updateApplyPriorityUi();
+        renderJobs();
+      }
+      function updateApplyPriorityUi() {
+        const btn = document.getElementById('analyzeApplyPriorityBtn');
+        const loader = document.getElementById('analyzeApplyPriorityLoader');
+        const staleHint = document.getElementById('applyPriorityStaleHint');
+        const user = getSelectedUser();
+        const canAnalyze = Boolean(user?.resumeUrl && q().seekerId && positions.length && !isSyncing);
+        if (btn) btn.disabled = !canAnalyze || isAnalyzingApplyPriority;
+        if (loader) loader.className = isAnalyzingApplyPriority ? 'loader on' : 'loader';
+        if (staleHint) {
+          const showStale = applyPriorityStale && hasApplyPriorityData();
+          staleHint.style.display = showStale ? '' : 'none';
+        }
+      }
+      async function analyzeApplyPriority() {
+        if (isAnalyzingApplyPriority) return;
+        const seekerId = q().seekerId;
+        const user = getSelectedUser();
+        if (!seekerId || !user) throw new Error('Select a client first.');
+        if (!user.resumeUrl) throw new Error('Upload client resume before analyzing priority');
+        if (!positions.length) throw new Error('Load jobs first.');
+
+        isAnalyzingApplyPriority = true;
+        updateApplyPriorityUi();
+        try {
+          const payload = await api(
+            `${API_BASE}/api/app/agent/clients/${encodeURIComponent(seekerId)}/apply-priority${agentQueryPrefix()}`,
+            { method: 'POST', body: JSON.stringify({ jobs: positions }) }
+          );
+          const rankingsMap = {};
+          for (const row of payload?.rankings || []) {
+            const jobId = Number(row?.jobId);
+            if (!Number.isFinite(jobId)) continue;
+            rankingsMap[jobId] = {
+              score: Number(row.score) || 0,
+              applyRank: Number(row.applyRank) || 0,
+              priority: String(row.priority || 'good'),
+              justification: String(row.justification || ''),
+              skipReason: row.skipReason ? String(row.skipReason) : null,
+            };
+          }
+          const contextKey = buildApplyPriorityContextKey(user, positions);
+          const cachePayload = {
+            contextKey,
+            updatedAt: new Date().toISOString(),
+            rankings: rankingsMap,
+          };
+          saveApplyPriorityCache(seekerId, cachePayload);
+          applyPriorityRankings = rankingsMap;
+          applyPriorityCacheMeta = { contextKey, updatedAt: cachePayload.updatedAt };
+          applyPriorityStale = false;
+          jobsSort = { key: 'apply_priority', dir: 'asc' };
+          renderJobs();
+          setMsg('dashMsg', `Analyzed apply priority for ${Object.keys(rankingsMap).length} jobs.`);
+        } finally {
+          isAnalyzingApplyPriority = false;
+          updateApplyPriorityUi();
+        }
+      }
+      function renderApplyPriorityBannerHtml(jobId) {
+        const r = getJobApplyRanking(jobId);
+        if (!r) return '';
+        const priorityLabel = PRIORITY_LABELS[r.priority] || r.priority;
+        const staleNote = applyPriorityStale ? ' (stale — re-analyze)' : '';
+        const skipCls = r.priority === 'skip' ? ' skip-banner' : '';
+        let html =
+          `<div class="apply-priority-banner${skipCls}">` +
+          `<div class="k">Apply priority${esc(staleNote)}</div>` +
+          `<div><strong>#${esc(r.applyRank)}</strong> · ${esc(priorityLabel)} · Fit ${esc(r.score)}</div>` +
+          `<div style="margin-top:6px">${esc(r.justification || '')}</div>`;
+        if (r.skipReason) {
+          html += `<div style="margin-top:6px;color:#fca5a5"><strong>Skip reason:</strong> ${esc(r.skipReason)}</div>`;
+        }
+        html += '</div>';
+        return html;
+      }
+      function renderApplyPriorityCells(p) {
+        if (!hasApplyPriorityData()) return '';
+        const r = getJobApplyRanking(p.id);
+        const staleCls = applyPriorityStale ? ' apply-priority-stale' : '';
+        if (!r) {
+          return '<td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td>';
+        }
+        const rankCls = r.applyRank <= 3 && r.priority !== 'skip' ? ' rank-top' : '';
+        const priorityLabel = PRIORITY_LABELS[r.priority] || r.priority;
+        const justification = String(r.justification || '');
+        const whyShort = justification.length > 80 ? `${justification.slice(0, 80)}…` : justification;
+        return (
+          `<td class="apply-rank-cell${staleCls}"><span class="apply-rank-badge${rankCls}">${esc(r.applyRank)}</span></td>` +
+          `<td class="${staleCls}"><span class="fit-chip ${fitScoreClass(r.score)}">${esc(r.score)}</span></td>` +
+          `<td class="priority-cell priority-${esc(r.priority)}${staleCls}">${esc(priorityLabel)}</td>` +
+          `<td class="why-cell${staleCls}"><button type="button" class="why-link ghost-btn" data-why-id="${esc(p.id)}">${esc(whyShort || '—')}</button></td>`
+        );
+      }
+      function applyPriorityRowClass(p, app) {
+        const r = getJobApplyRanking(p.id);
+        if (!r) return '';
+        if (r.priority === 'skip') return 'apply-priority-skip';
+        const status = String(app?.Status || 'new').toLowerCase();
+        if (status !== 'applied' && r.applyRank <= 3 && r.priority !== 'skip') return 'apply-priority-top';
+        return '';
       }
       function onLoading(id, on) {
         const el = document.getElementById(id);
@@ -847,12 +1117,13 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
         updateHighlyRelevantFilterState();
         renderClientResumeUi();
+        updateApplyPriorityUi();
       }
       function hasSelectedSkills() {
         return Boolean(getSelectedSkillIdsCsv().trim());
@@ -1197,6 +1468,7 @@
           const idx = users.findIndex((row) => String(row.id) === String(seekerId));
           if (idx >= 0) users[idx] = { ...users[idx], resumeUrl };
           if (fileInput) fileInput.value = '';
+          invalidateApplyPriorityCache();
           renderClientResumeUi(getSelectedUser());
           setClientResumeMsg('Resume updated', true);
           setTimeout(() => setClientResumeMsg(''), 2000);
@@ -1244,6 +1516,7 @@
           const idx = users.findIndex((u) => String(u.id) === String(seekerId));
           if (idx >= 0) users[idx] = { ...users[idx], comment: saved };
           if (textarea) textarea.value = String(saved || '');
+          invalidateApplyPriorityCache();
           setMsg('clientCommentMsg', 'Saved.');
         } finally {
           if (btn) btn.disabled = false;
@@ -1491,6 +1764,7 @@
             totalRows: Number(data.totalRows || data.count || positions.length),
           };
           await loadApplicationsByUser(seekerId);
+          refreshApplyPriorityFromStorage();
           renderJobs();
           updatePagerUi();
           setMsg('dashMsg', `Loaded ${pageInfo.count} jobs (page ${pageInfo.page}).`);
@@ -1507,7 +1781,13 @@
       function renderJobs() {
         const body = document.getElementById('jobsBody');
         const headRow = document.querySelector('table thead tr');
+        const showPriority = hasApplyPriorityData();
+        const priorityHeaders = showPriority
+          ? `<th><button type="button" data-sort="apply_priority">Apply #${sortArrow('apply_priority')}</button></th>` +
+            `<th>Fit</th><th>Priority</th><th>Why</th>`
+          : '';
         headRow.innerHTML = `
+          ${priorityHeaders}
           <th><button type="button" data-sort="id">Id${sortArrow('id')}</button></th>
           <th><button type="button" data-sort="title">Title${sortArrow('title')}</button></th>
           <th><button type="button" data-sort="company">Company${sortArrow('company')}</button></th>
@@ -1521,14 +1801,18 @@
           btn.addEventListener('click', () => setJobsSort(btn.getAttribute('data-sort')));
         });
 
+        const colCount = showPriority ? 12 : 8;
         if (!positions.length) {
-          body.innerHTML = '<tr><td colspan="8" class="muted">No jobs loaded.</td></tr>';
+          body.innerHTML = `<tr><td colspan="${colCount}" class="muted">No jobs loaded.</td></tr>`;
+          updateApplyPriorityUi();
           return;
         }
         const sorted = [...positions].sort(compareJobs);
         body.innerHTML = sorted.map((p) => {
           const app = appByScreenlyId(p.id);
-          return `<tr data-open="${p.id}">
+          const rowCls = applyPriorityRowClass(p, app);
+          return `<tr data-open="${p.id}" class="${rowCls}">
+            ${renderApplyPriorityCells(p)}
             <td>${esc(p.id)}</td>
             <td>${esc(p.title)}</td>
             <td>${esc(p.company)}</td>
@@ -1546,6 +1830,18 @@
             openJobById(id);
           });
         });
+        body.querySelectorAll('.why-link').forEach((btn) => {
+          btn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const id = Number(btn.getAttribute('data-why-id'));
+            const r = getJobApplyRanking(id);
+            if (!r) return;
+            let text = String(r.justification || '').trim();
+            if (r.skipReason) text += `\n\nSkip reason: ${r.skipReason}`;
+            showInsight('Apply priority insight', text);
+          });
+        });
+        updateApplyPriorityUi();
       }
 
       async function ensureApplication(seekerId, job) {
@@ -1596,6 +1892,7 @@
         const applyTypeDisplay = String(getApplyTypeDisplay(job) || '').trim();
         const applyCtaSuffix = applyTypeDisplay && applyTypeDisplay !== '—' ? ` (${esc(applyTypeDisplay)})` : '';
         document.getElementById('jobInfo').innerHTML =
+          renderApplyPriorityBannerHtml(job.id) +
           `<div class="job-detail">` +
           `<div><strong>${esc(job.title)}</strong></div>` +
           `<div class="sub">${esc(job.company)} · ${esc(job.location)}</div>` +
@@ -1800,6 +2097,9 @@
 
       async function onUserSelected(userId) {
         if (!userId) return;
+        applyPriorityRankings = {};
+        applyPriorityCacheMeta = null;
+        applyPriorityStale = false;
         hydrateStateToInputs();
         const user = users.find((u) => String(u.id) === String(userId)) || null;
         setQ({ seekerId: userId, jobId: '' });
@@ -1925,6 +2225,9 @@
       }
 
       document.getElementById('syncBtn').addEventListener('click', () => syncJobs().catch((e) => setMsg('dashMsg', e.message, true)));
+      document.getElementById('analyzeApplyPriorityBtn').addEventListener('click', () => {
+        analyzeApplyPriority().catch((e) => setMsg('dashMsg', e.message, true));
+      });
       document.getElementById('prevPageBtn').addEventListener('click', () => {
         const cur = q();
         const nextPage = Math.max(1, (Number.parseInt(String(cur.page || '1'), 10) || 1) - 1);

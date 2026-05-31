@@ -113,6 +113,7 @@ export function mapUserToAgentClientPayload(u) {
     comment: u.Comment ?? null,
     skills: Array.isArray(u.skills) ? u.skills : [],
     workAuthorizationCountries: u.WorkAuthorizationCountries || '',
+    searchMode: u.SearchMode || 'not_urgent',
     ...projection,
   };
 }

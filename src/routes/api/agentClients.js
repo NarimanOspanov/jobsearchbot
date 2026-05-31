@@ -8,6 +8,7 @@ import {
   assertCanAccessClient,
   mapUserToAgentClientPayload,
 } from '../../services/agentAccessService.js';
+import { rankJobsForAgentApply } from '../../services/agentApplyPriorityService.js';
 
 function displayNameFromUser(u, projection) {
   const fromResume = [
@@ -356,6 +357,32 @@ export function createAgentClientsRouter() {
       }
     }
   );
+
+  router.post('/api/app/agent/clients/:clientUserId/apply-priority', agentMiniAppAuth, async (req, res) => {
+    try {
+      const clientUserId = Number.parseInt(String(req.params.clientUserId), 10);
+      if (!Number.isSafeInteger(clientUserId) || clientUserId <= 0) {
+        return res.status(400).json({ error: 'Invalid client user id' });
+      }
+      if (!(await enforceAgentClientAccess(req, res, clientUserId))) return;
+
+      const client = await models.Users.findByPk(clientUserId);
+      if (!client) return res.status(404).json({ error: 'Client not found' });
+
+      const jobs = Array.isArray(req.body?.jobs) ? req.body.jobs : [];
+      if (!jobs.length) return res.status(400).json({ error: 'jobs array is required' });
+
+      const result = await rankJobsForAgentApply({ clientUser: client, jobs });
+      return res.json({ ok: true, ...result });
+    } catch (err) {
+      const message = String(err?.message || err);
+      if (message.includes('Upload client resume') || message.includes('Resume text is empty')) {
+        return res.status(400).json({ error: message });
+      }
+      console.error('POST /api/app/agent/clients/:clientUserId/apply-priority:', err);
+      return res.status(500).json({ error: 'Failed to analyze apply priority' });
+    }
+  });
 
   router.delete('/api/app/admin/agent-clients/:id', adminMiniAppAuth, async (req, res) => {
     try {

@@ -380,3 +380,125 @@ ${text}`;
   const parsed = JSON.parse(jsonText);
   return normalizeWorkAuthCountries(parsed);
 }
+
+const APPLY_PRIORITY_VALUES = new Set(['apply_first', 'good', 'low', 'skip']);
+
+function clampApplyScore(value) {
+  const n = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, n));
+}
+
+function normalizeApplyPriorityRow(raw, allowedJobIds) {
+  const jobId = Number.parseInt(String(raw?.jobId ?? raw?.id ?? ''), 10);
+  if (!Number.isSafeInteger(jobId) || !allowedJobIds.has(jobId)) return null;
+  const priorityRaw = String(raw?.priority || 'good').trim().toLowerCase();
+  const priority = APPLY_PRIORITY_VALUES.has(priorityRaw) ? priorityRaw : 'good';
+  const score = priority === 'skip' ? 0 : clampApplyScore(raw?.score);
+  const justification = String(raw?.justification || raw?.reason || '').trim().slice(0, 500);
+  const skipReason =
+    priority === 'skip' ? String(raw?.skipReason || raw?.skip_reason || justification || 'Skip per agent notes').trim().slice(0, 300) : null;
+  return {
+    jobId,
+    score,
+    priority,
+    justification: justification || (priority === 'skip' ? skipReason || 'Skip' : 'No justification provided'),
+    skipReason,
+  };
+}
+
+/**
+ * Rank a batch of jobs (<=20) for agent apply priority.
+ * @param {{ resumeText: string, searchMode: string, agentComment: string, jobs: Array<{ id: number, title: string, company: string, requirementsText: string }> }}
+ */
+export async function rankJobsForAgentApplyBatchWithAI({
+  resumeText,
+  searchMode = 'not_urgent',
+  agentComment = '',
+  jobs = [],
+}) {
+  if (!genAI) throw new Error('GEMINI_API_KEY is not configured');
+  const resume = String(resumeText || '').trim().slice(0, 12000);
+  if (!resume) throw new Error('Resume text is empty');
+  if (!Array.isArray(jobs) || jobs.length === 0) return [];
+
+  const mode = String(searchMode || 'not_urgent').trim() === 'urgent' ? 'urgent' : 'not_urgent';
+  const comment = String(agentComment || '').trim().slice(0, 4000);
+  const jobBlocks = jobs
+    .map((job) => {
+      const id = Number(job.id);
+      const title = String(job.title || '').trim();
+      const company = String(job.company || '').trim();
+      const req = String(job.requirementsText || '').trim().slice(0, 2000);
+      return `Job id: ${id}\nTitle: ${title}\nCompany: ${company}\nDescription:\n${req || '(no description)'}`;
+    })
+    .join('\n\n---\n\n');
+
+  const modeHint =
+    mode === 'urgent'
+      ? 'Search mode is URGENT: favor roles with strong resume fit that can be applied quickly; prioritize practical near-term wins.'
+      : 'Search mode is NOT URGENT: favor the best long-term career fit even if the role is more selective.';
+
+  const prompt = `You are a career agent assistant ranking remote job opportunities for a specific candidate.
+
+Candidate resume (facts only — do not invent credentials):
+${resume}
+
+Agent notes about this candidate (may include companies to skip, employers to avoid, roles to prioritize):
+${comment || '(none)'}
+
+${modeHint}
+
+Jobs to evaluate:
+${jobBlocks}
+
+Return strict JSON only as an array with one object per job id listed above:
+[
+  {
+    "jobId": number,
+    "score": number,
+    "priority": "apply_first" | "good" | "low" | "skip",
+    "justification": "string",
+    "skipReason": "string|null"
+  }
+]
+
+Rules:
+- score: integer 0..100 resume-to-job fit based ONLY on resume facts vs job requirements
+- priority apply_first: top-tier fit and should be applied soon; good: solid fit; low: weak fit; skip: do not apply (conflicts with agent notes, current employer in notes, or very poor fit)
+- If agent notes say to skip a company or role, mark matching jobs priority skip with score 0
+- justification: 1-2 short sentences for the agent (plain language)
+- skipReason: required when priority is skip, else null
+- Include every job id exactly once
+- Do not invent resume facts`;
+
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const raw = response.text?.trim();
+  if (!raw) throw new Error('AI response is empty');
+
+  const jsonText = extractFirstJsonArray(raw);
+  const parsed = JSON.parse(jsonText);
+  if (!Array.isArray(parsed)) throw new Error('AI ranking response must be an array');
+
+  const allowedJobIds = new Set(jobs.map((j) => Number(j.id)).filter((id) => Number.isSafeInteger(id)));
+  const byId = new Map();
+  for (const row of parsed) {
+    const normalized = normalizeApplyPriorityRow(row, allowedJobIds);
+    if (normalized) byId.set(normalized.jobId, normalized);
+  }
+
+  return jobs.map((job) => {
+    const existing = byId.get(Number(job.id));
+    if (existing) return existing;
+    return {
+      jobId: Number(job.id),
+      score: 50,
+      priority: 'good',
+      justification: 'AI did not return a ranking for this job.',
+      skipReason: null,
+    };
+  });
+}
