@@ -1,0 +1,109 @@
+/** Fixed bottom tab bar for job search / profile (mobile). */
+(function (global) {
+  const NAV_STRINGS = {
+    ru: { jobSearch: 'Поиск работы', settings: 'Настройки', mainNav: 'Главное меню' },
+    en: { jobSearch: 'Job search', settings: 'Settings', mainNav: 'Main menu' },
+  };
+
+  const CSS = `
+    @media (max-width: 768px) {
+      body.has-tma-bottom-nav {
+        padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+      }
+      .tma-bottom-nav {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1400;
+        min-height: 56px;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+        background: rgba(13, 18, 34, 0.96);
+        border-top: 1px solid #273357;
+        backdrop-filter: blur(10px);
+      }
+    }
+    @media (min-width: 769px) {
+      .tma-bottom-nav { display: none; }
+    }
+    .tma-bottom-nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 44px;
+      padding: 4px 6px;
+      border-radius: 10px;
+      color: #9eb0d1;
+      text-decoration: none;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.2;
+      transition: color 0.15s, background 0.15s;
+    }
+    .tma-bottom-nav-item svg {
+      width: 22px;
+      height: 22px;
+      fill: currentColor;
+    }
+    .tma-bottom-nav-item.is-active {
+      color: #eaf0ff;
+      background: rgba(79, 124, 255, 0.14);
+    }
+    .tma-bottom-nav-item:not(.is-active):active {
+      background: rgba(255, 255, 255, 0.04);
+    }
+  `;
+
+  const ICON_JOBS =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2h4a2 2 0 0 1 2 2v2h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4V4a2 2 0 0 1 2-2zm4 4V4h-4v2h4z"/></svg>';
+  const ICON_SETTINGS =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94a7.49 7.49 0 0 0 .05-.94 7.49 7.49 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.28 7.28 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7.28 7.28 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.03.31-.05.63-.05.94s.02.63.05.94L2.83 14.52a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.39 1.04.71 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.59-.23 1.13-.55 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>';
+
+  function normalizeLang(lang) {
+    if (global.TmaI18n?.normalizeLang) return global.TmaI18n.normalizeLang(lang);
+    return String(lang || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+  }
+
+  /**
+   * @param {{ active?: 'jobs' | 'profile', lang?: string }} [options]
+   */
+  function mount(options = {}) {
+    const active = options.active === 'profile' ? 'profile' : 'jobs';
+    const lang = normalizeLang(options.lang);
+    const s = NAV_STRINGS[lang] || NAV_STRINGS.en;
+
+    if (!document.getElementById('tmaBottomNavStyles')) {
+      const style = document.createElement('style');
+      style.id = 'tmaBottomNavStyles';
+      style.textContent = CSS;
+      document.head.appendChild(style);
+    }
+
+    document.body.classList.add('has-tma-bottom-nav');
+
+    let nav = document.getElementById('tmaBottomNav');
+    if (!nav) {
+      nav = document.createElement('nav');
+      nav.id = 'tmaBottomNav';
+      nav.className = 'tma-bottom-nav';
+      document.body.appendChild(nav);
+    }
+    nav.setAttribute('aria-label', s.mainNav);
+    nav.innerHTML = `
+      <a href="/app/seeker-jobs" class="tma-bottom-nav-item${active === 'jobs' ? ' is-active' : ''}">
+        ${ICON_JOBS}
+        <span>${s.jobSearch}</span>
+      </a>
+      <a href="/app/profile" class="tma-bottom-nav-item${active === 'profile' ? ' is-active' : ''}">
+        ${ICON_SETTINGS}
+        <span>${s.settings}</span>
+      </a>
+    `;
+  }
+
+  global.TmaBottomNav = { mount };
+})(window);

@@ -5,6 +5,9 @@
       pageTitle: 'Поиск вакансий',
       searchHeading: 'Поиск вакансий на 100% удалёнку',
       searchHeadingBase: 'Поиск вакансий',
+      filtersSummaryEmpty: 'Нажмите, чтобы настроить фильтры',
+      filtersExpandLabel: 'Развернуть фильтры',
+      filtersCollapseLabel: 'Свернуть фильтры',
       searchTitleFor: 'для {labels}',
       searchBtnDeeplink: 'Искать',
       searchBtnWithSkill: 'Искать {skill}',
@@ -133,6 +136,9 @@
       pageTitle: 'Job search',
       searchHeading: '100% remote job search',
       searchHeadingBase: 'Job search',
+      filtersSummaryEmpty: 'Tap to adjust filters',
+      filtersExpandLabel: 'Expand filters',
+      filtersCollapseLabel: 'Collapse filters',
       searchTitleFor: 'for {labels}',
       searchBtnDeeplink: 'Search',
       searchBtnWithSkill: 'Search {skill}',
@@ -277,11 +283,27 @@
     };
 
     const titleSkill = document.getElementById('searchTitleSkill');
-    const h2 = document.querySelector('.layout-col > h2');
-    if (h2 && titleSkill) {
-      h2.innerHTML = `${sj(L, 'searchHeadingBase')} <span id="searchTitleSkill" class="search-title-skill"></span>`;
-    } else if (h2) {
-      h2.textContent = sj(L, 'searchHeading');
+    const filtersTitle = document.getElementById('searchFiltersTitle');
+    if (filtersTitle && titleSkill) {
+      filtersTitle.innerHTML = `${sj(L, 'searchHeadingBase')} <span id="searchTitleSkill" class="search-title-skill"></span>`;
+    } else if (filtersTitle) {
+      filtersTitle.textContent = sj(L, 'searchHeading');
+    } else {
+      const h2 = document.querySelector('.layout-col > h2');
+      if (h2 && titleSkill) {
+        h2.innerHTML = `${sj(L, 'searchHeadingBase')} <span id="searchTitleSkill" class="search-title-skill"></span>`;
+      } else if (h2) {
+        h2.textContent = sj(L, 'searchHeading');
+      }
+    }
+
+    const filtersToggle = document.getElementById('searchFiltersToggle');
+    if (filtersToggle) {
+      const expanded = filtersToggle.getAttribute('aria-expanded') === 'true';
+      filtersToggle.setAttribute(
+        'aria-label',
+        sj(L, expanded ? 'filtersCollapseLabel' : 'filtersExpandLabel')
+      );
     }
 
     function setDateInputLabel(inputId, key) {
@@ -492,6 +514,121 @@
     return sj(L, 'workAuthSelected', { count });
   }
 
+  const SEARCH_FILTERS_EXPANDED_KEY = 'seekerJobsFiltersExpanded';
+
+  function formatFilterDate(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const parts = raw.split('-');
+    if (parts.length !== 3) return raw;
+    const year = Number.parseInt(parts[0], 10);
+    const month = Number.parseInt(parts[1], 10);
+    const day = Number.parseInt(parts[2], 10);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return raw;
+    try {
+      return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(
+        new Date(year, month - 1, day)
+      );
+    } catch {
+      return raw;
+    }
+  }
+
+  function updateSearchFiltersSummary(lang) {
+    const summaryEl = document.getElementById('searchFiltersSummary');
+    if (!summaryEl) return;
+    const L = global.TmaI18n.normalizeLang(lang);
+    const from = document.getElementById('fromDate')?.value || '';
+    const to = document.getElementById('toDate')?.value || '';
+    const skillBtn = document.getElementById('skillPickerBtn');
+    const countryBtn = document.getElementById('countryPickerBtn');
+    const parts = [];
+    if (from && to) {
+      parts.push(`${formatFilterDate(from)} – ${formatFilterDate(to)}`);
+    } else if (from || to) {
+      parts.push(formatFilterDate(from || to));
+    }
+    if (skillBtn) {
+      const skillText = String(skillBtn.textContent || '').trim();
+      if (skillText && skillText !== sj(L, 'allRoles')) parts.push(skillText);
+    }
+    if (countryBtn) {
+      const countryText = String(countryBtn.textContent || '').trim();
+      if (countryText && countryText !== sj(L, 'workAuthAny')) parts.push(countryText);
+    }
+    summaryEl.textContent = parts.length ? parts.join(' · ') : sj(L, 'filtersSummaryEmpty');
+  }
+
+  /**
+   * @param {string} lang
+   * @returns {{ updateSummary: () => void, setExpanded: (expanded: boolean, persist?: boolean) => void } | null}
+   */
+  function initSearchFiltersPanel(lang) {
+    const panel = document.getElementById('searchFiltersPanel');
+    const toggle = document.getElementById('searchFiltersToggle');
+    const body = document.getElementById('searchFiltersBody');
+    if (!panel || !toggle || !body) return null;
+
+    const mq = window.matchMedia('(min-width: 769px)');
+    const defaultExpanded = () => mq.matches;
+
+    const applyExpanded = (expanded) => {
+      body.classList.toggle('is-collapsed', !expanded);
+      toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      panel.classList.toggle('is-expanded', expanded);
+      const chevron = toggle.querySelector('.search-filters-chevron');
+      if (chevron) chevron.classList.toggle('is-up', expanded);
+      toggle.setAttribute(
+        'aria-label',
+        sj(lang, expanded ? 'filtersCollapseLabel' : 'filtersExpandLabel')
+      );
+    };
+
+    const setExpanded = (expanded, persist = false) => {
+      applyExpanded(expanded);
+      if (persist) {
+        try {
+          localStorage.setItem(SEARCH_FILTERS_EXPANDED_KEY, expanded ? '1' : '0');
+        } catch {
+          /* ignore */
+        }
+      }
+      updateSearchFiltersSummary(lang);
+    };
+
+    const readExpanded = () => {
+      try {
+        const stored = localStorage.getItem(SEARCH_FILTERS_EXPANDED_KEY);
+        if (stored === '1') return true;
+        if (stored === '0') return false;
+      } catch {
+        /* ignore */
+      }
+      return defaultExpanded();
+    };
+
+    toggle.addEventListener('click', () => {
+      setExpanded(toggle.getAttribute('aria-expanded') !== 'true', true);
+    });
+
+    mq.addEventListener('change', () => {
+      try {
+        if (localStorage.getItem(SEARCH_FILTERS_EXPANDED_KEY) == null) {
+          setExpanded(defaultExpanded(), false);
+        }
+      } catch {
+        setExpanded(defaultExpanded(), false);
+      }
+    });
+
+    setExpanded(readExpanded(), false);
+
+    return {
+      updateSummary: () => updateSearchFiltersSummary(lang),
+      setExpanded,
+    };
+  }
+
   global.SeekerJobsI18n = {
     STRINGS,
     sj,
@@ -504,5 +641,7 @@
     getWorkAuthCountriesCsv,
     applyWorkAuthCountriesCsv,
     workAuthPickerSummary,
+    updateSearchFiltersSummary,
+    initSearchFiltersPanel,
   };
 })(window);

@@ -270,6 +270,7 @@
 
     <script src="/app/tma-i18n.js"></script>
     <script src="/app/seeker-jobs-i18n.js"></script>
+    <script src="/app/tma-bottom-nav.js"></script>
     <script>
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
@@ -791,6 +792,7 @@
         isApplyingProfile = false;
         renderPushToggle();
         applyLocale(lang);
+        TmaBottomNav.mount({ active: 'profile', lang });
       }
 
       document.getElementById('viewResumeBtn').addEventListener('click', () => {
