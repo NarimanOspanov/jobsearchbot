@@ -932,6 +932,7 @@
       let monetizationStatus = null;
       let botUsername = '';
       let bootDeepLinkSkillIdsCsv = '';
+      let profileWorkAuthCountriesCsv = '';
       const CHANNEL_ALTERNATIVE_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
       let APPLY_TYPE_OPTIONS = SeekerJobsI18n.getApplyTypeOptions(uiLang);
       let APPLY_TYPE_LABELS = SeekerJobsI18n.getApplyTypeLabels(uiLang);
@@ -1656,6 +1657,7 @@
           seekerId = Number(profile?.id || 0) || null;
           isBotAdminUser = Boolean(profile?.isBotAdmin);
           currentResumeUrl = String(profile?.resumeUrl || '').trim();
+          profileWorkAuthCountriesCsv = String(profile?.workAuthorizationCountries || '').trim();
           updateSourceFilterVisibility();
         };
         for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -2241,6 +2243,15 @@
         toInput.value = finalTo;
       }
 
+      function applyProfileWorkAuthCountriesFromQuery() {
+        const urlCountry = String(q().country || '').trim();
+        const initialCountry = urlCountry || profileWorkAuthCountriesCsv;
+        applySelectedCountriesCsv(initialCountry);
+        if (!urlCountry && profileWorkAuthCountriesCsv) {
+          setQ({ country: profileWorkAuthCountriesCsv, page: '1' });
+        }
+      }
+
       async function boot() {
         hydrateStateToInputs();
         renderSourcePickerOptions();
@@ -2259,6 +2270,7 @@
           throw new Error(`${sj('errInitData')}${hint}`);
         }
         await Promise.all([loadProfile(), loadSkills()]);
+        applyProfileWorkAuthCountriesFromQuery();
         const s = q();
         bootDeepLinkSkillIdsCsv = String(s.skillIds || '').trim();
         if (isBotAdminUser) document.getElementById('sourceSel').value = s.source || '';

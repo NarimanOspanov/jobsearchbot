@@ -112,6 +112,7 @@ export function mapUserToAgentClientPayload(u) {
     resumeUrl: u.ResumeURL || null,
     comment: u.Comment ?? null,
     skills: Array.isArray(u.skills) ? u.skills : [],
+    workAuthorizationCountries: u.WorkAuthorizationCountries || '',
     ...projection,
   };
 }

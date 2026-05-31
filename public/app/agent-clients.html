@@ -1607,6 +1607,22 @@
           .join(',');
       }
 
+      function userWorkAuthCountriesCsv(user) {
+        return String(user?.workAuthorizationCountries || '').trim();
+      }
+
+      function applyUserWorkAuthToFilters(user, { force = false } = {}) {
+        const countryCsv = userWorkAuthCountriesCsv(user);
+        const currentCountry = String(q().country || '').trim();
+        if (!force && currentCountry) {
+          renderCountryPickerSummary();
+          return false;
+        }
+        applySelectedCountriesCsv(countryCsv);
+        setQ({ country: countryCsv, page: '1' });
+        return Boolean(countryCsv);
+      }
+
       function applyUserSkillsToFilters(user, { force = false } = {}) {
         const skillCsv = userSkillIdsCsv(user);
         const currentSkillIds = String(q().skillIds || '').trim();
@@ -1633,6 +1649,7 @@
         const user = users.find((u) => String(u.id) === String(userId)) || null;
         setQ({ seekerId: userId, jobId: '' });
         applyUserSkillsToFilters(user, { force: true });
+        applyUserWorkAuthToFilters(user, { force: true });
         renderUsers();
         renderSelectedUserInfo();
         try {
@@ -1731,14 +1748,19 @@
         const s = q();
         applySelectedApplyTypesCsv(s.applyTypes || '');
         applySelectedCountriesCsv(s.country || '');
+        const bootUser = s.seekerId
+          ? users.find((u) => String(u.id) === String(s.seekerId)) || null
+          : null;
         if (s.skillIds) {
           applySelectedSkillIdsCsv(s.skillIds);
           syncHighlyRelevantCheckboxFromQuery();
-        } else if (s.seekerId) {
-          const bootUser = users.find((u) => String(u.id) === String(s.seekerId));
+        } else if (bootUser) {
           applyUserSkillsToFilters(bootUser, { force: true });
         } else {
           renderSkillPickerSummary();
+        }
+        if (bootUser) {
+          applyUserWorkAuthToFilters(bootUser, { force: !String(s.country || '').trim() });
         }
         if (s.source) document.getElementById('sourceSel').value = s.source;
         document.getElementById('pageSizeSel').value = String(Math.min(200, Math.max(1, Number.parseInt(String(s.pageSize || '100'), 10) || 100)));

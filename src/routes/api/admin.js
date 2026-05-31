@@ -442,6 +442,7 @@ export function createAdminRouter() {
           isBlocked: !!u.IsBlocked,
           resumeUrl: u.ResumeURL || null,
           skills: Array.isArray(u.skills) ? u.skills : [],
+          workAuthorizationCountries: u.WorkAuthorizationCountries || '',
           ...projection,
         };
       }));
@@ -470,6 +471,7 @@ export function createAdminRouter() {
         promocode: u.Promocode,
         resumeUrl: u.ResumeURL || null,
         skills: Array.isArray(u.skills) ? u.skills : [],
+        workAuthorizationCountries: u.WorkAuthorizationCountries || '',
         settings: {
           hhEnabled: !!u.HhEnabled,
           linkedInEnabled: !!u.LinkedInEnabled,
