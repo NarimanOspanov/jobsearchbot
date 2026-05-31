@@ -1,4 +1,4 @@
-/** Fixed bottom tab bar for job search / profile (mobile). */
+/** Fixed bottom tab bar for job search / profile pages. */
 (function (global) {
   const NAV_STRINGS = {
     ru: { jobSearch: 'Поиск работы', settings: 'Настройки', mainNav: 'Главное меню' },
@@ -6,26 +6,32 @@
   };
 
   const CSS = `
-    @media (max-width: 768px) {
-      body.has-tma-bottom-nav {
-        padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px));
-      }
-      .tma-bottom-nav {
-        display: flex;
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 1400;
-        min-height: 56px;
-        padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
-        background: rgba(13, 18, 34, 0.96);
-        border-top: 1px solid #273357;
-        backdrop-filter: blur(10px);
-      }
+    body.has-tma-bottom-nav {
+      padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+    }
+    .tma-bottom-nav {
+      display: flex;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1400;
+      min-height: 56px;
+      padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+      background: rgba(13, 18, 34, 0.96);
+      border-top: 1px solid #273357;
+      backdrop-filter: blur(10px);
     }
     @media (min-width: 769px) {
-      .tma-bottom-nav { display: none; }
+      .tma-bottom-nav {
+        max-width: 760px;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        border-left: 1px solid #273357;
+        border-right: 1px solid #273357;
+        border-radius: 12px 12px 0 0;
+      }
     }
     .tma-bottom-nav-item {
       flex: 1;
