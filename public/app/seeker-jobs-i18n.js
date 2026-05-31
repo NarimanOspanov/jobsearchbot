@@ -18,12 +18,12 @@
       highlyRelevant: 'Топ-совпадения',
       highlyRelevantHintTitle: 'Что значит Топ-совпадения?',
       searchIn: 'Искать в',
-      workAuthLabel: 'Разрешение на работу в',
+      workAuthLabel: 'Могу официально работать в',
       workAuthAny: 'Любая страна',
       workAuthSelected: 'Выбрано: {count}',
-      workAuthHintTitle: 'Что значит «Разрешение на работу в»?',
+      workAuthHintTitle: 'Что делает этот фильтр?',
       workAuthP1:
-        'Показывает удалённые вакансии, подходящие соискателям с правом работать в выбранных странах.',
+        'Выберите страны, где у вас есть право работать — покажем подходящие удалённые вакансии.',
       workAuthP2:
         'Вакансии с явным совпадением по стране показываются первыми, затем остальные по id (новые выше).',
       countryKazakhstan: 'Казахстан',
@@ -146,12 +146,12 @@
       highlyRelevant: 'Top matches',
       highlyRelevantHintTitle: 'What does Top matches mean?',
       searchIn: 'Search in',
-      workAuthLabel: 'I have work authorization in',
+      workAuthLabel: 'I can officially work in',
       workAuthAny: 'Any country',
       workAuthSelected: '{count} selected',
-      workAuthHintTitle: 'What does work authorization mean?',
+      workAuthHintTitle: 'What does this filter do?',
       workAuthP1:
-        'Shows remote vacancies suitable for job seekers who can legally work in the selected countries.',
+        'Pick countries where you can legally work — we will show matching remote jobs.',
       workAuthP2:
         'Jobs with an explicit country match are listed first, then others by id (newest first).',
       countryKazakhstan: 'Kazakhstan',
@@ -309,7 +309,7 @@
       workAuthHintBtn.title = sj(L, 'workAuthHintTitle');
       workAuthHintBtn.setAttribute('aria-label', sj(L, 'workAuthHintTitle'));
     }
-    setText('workAuthHintTitle', 'workAuthHintTitle');
+    setText('workAuthHintTitle', 'workAuthLabel');
     const workAuthP = document.querySelectorAll('#workAuthHintModal .job-summary');
     if (workAuthP[0]) workAuthP[0].textContent = sj(L, 'workAuthP1');
     if (workAuthP[1]) workAuthP[1].textContent = sj(L, 'workAuthP2');
