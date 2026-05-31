@@ -59,6 +59,15 @@
       .field:last-of-type { border-bottom: none; }
       .field-label { font-weight: 600; }
       .field-hint { font-size: 13px; color: var(--muted); line-height: 1.4; margin: 0; }
+      select {
+        width: 100%;
+        background: #10182d;
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font: inherit;
+      }
       .skills-picker { position: relative; width: 100%; }
       .skills-picker-btn {
         width: 100%;
@@ -217,6 +226,14 @@
         <h2 id="jobSearchSectionTitle">Job search</h2>
 
         <div class="field">
+          <span id="searchModeLabel" class="field-label">Search mode</span>
+          <select id="searchModeSel" aria-labelledby="searchModeLabel">
+            <option value="not_urgent">Not urgent</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+
+        <div class="field">
           <span id="skillsLabel" class="field-label">Skills</span>
           <p id="skillsHint" class="field-hint">Roles used to personalize job recommendations</p>
           <div class="skills-picker">
@@ -272,7 +289,6 @@
           saveError: 'Не удалось сохранить настройку',
           resumeSection: 'Резюме',
           resumeNone: 'Резюме ещё не загружено.',
-          resumeUploaded: 'Резюме загружено: {date}',
           viewResume: 'Открыть резюме',
           pickFile: 'Нажмите, чтобы выбрать файл',
           fileSelected: 'Выбран файл',
@@ -283,6 +299,9 @@
           errFileType: 'Поддерживаются PDF, JPG, PNG, WEBP',
           errUploadResume: 'Не удалось загрузить резюме',
           jobSearchSection: 'Поиск работы',
+          searchModeLabel: 'Режим поиска',
+          searchModeNotUrgent: 'Не срочный',
+          searchModeUrgent: 'Срочный',
           skillsLabel: 'Навыки',
           skillsHint: 'Роли для персонализации подбора вакансий',
           allRoles: 'Все роли',
@@ -306,7 +325,6 @@
           saveError: 'Failed to save setting',
           resumeSection: 'Resume',
           resumeNone: 'No resume uploaded yet.',
-          resumeUploaded: 'Resume uploaded: {date}',
           viewResume: 'View resume',
           pickFile: 'Tap to choose a file',
           fileSelected: 'File selected',
@@ -317,6 +335,9 @@
           errFileType: 'Use PDF, JPG, PNG, or WEBP',
           errUploadResume: 'Failed to upload resume',
           jobSearchSection: 'Job search',
+          searchModeLabel: 'Search mode',
+          searchModeNotUrgent: 'Not urgent',
+          searchModeUrgent: 'Urgent',
           skillsLabel: 'Skills',
           skillsHint: 'Roles used to personalize job recommendations',
           allRoles: 'All roles',
@@ -380,6 +401,8 @@
         document.getElementById('telegramLabel').textContent = s.telegram;
         document.getElementById('chatIdLabel').textContent = s.chatId;
         document.getElementById('jobSearchSectionTitle').textContent = s.jobSearchSection;
+        document.getElementById('searchModeLabel').textContent = s.searchModeLabel;
+        renderSearchModeOptions();
         document.getElementById('skillsLabel').textContent = s.skillsLabel;
         document.getElementById('skillsHint').textContent = s.skillsHint;
         document.getElementById('workAuthLabel').textContent = s.workAuthLabel;
@@ -477,6 +500,30 @@
         btn.textContent = SeekerJobsI18n.workAuthPickerSummary(uiLang, count);
       }
 
+      function getSearchMode() {
+        const sel = document.getElementById('searchModeSel');
+        const value = String(sel?.value || '').trim();
+        return value === 'urgent' ? 'urgent' : 'not_urgent';
+      }
+
+      function applySearchMode(mode) {
+        const sel = document.getElementById('searchModeSel');
+        if (!sel) return;
+        sel.value = String(mode || '').trim() === 'urgent' ? 'urgent' : 'not_urgent';
+      }
+
+      function renderSearchModeOptions() {
+        const sel = document.getElementById('searchModeSel');
+        if (!sel) return;
+        const s = strings(uiLang);
+        const current = getSearchMode();
+        sel.innerHTML = `
+          <option value="not_urgent">${esc(s.searchModeNotUrgent)}</option>
+          <option value="urgent">${esc(s.searchModeUrgent)}</option>
+        `;
+        sel.value = current;
+      }
+
       function openSkillPicker() {
         isSkillPickerOpen = true;
         document.getElementById('skillPickerMenu').classList.add('open');
@@ -506,6 +553,7 @@
       function setJobPrefsControlsDisabled(disabled) {
         document.getElementById('skillPickerBtn').disabled = disabled;
         document.getElementById('countryPickerBtn').disabled = disabled;
+        document.getElementById('searchModeSel').disabled = disabled;
         document.querySelectorAll('#skillPickerMenu input, #countryPickerMenu input').forEach((el) => {
           el.disabled = disabled;
         });
@@ -530,11 +578,13 @@
             body: JSON.stringify({
               skills: getSelectedSkillIds(),
               workAuthorizationCountries: getSelectedCountriesCsv(),
+              searchMode: getSearchMode(),
             }),
           });
           isApplyingProfile = true;
           applySelectedSkillIds(result?.skills || []);
           applySelectedCountriesCsv(result?.workAuthorizationCountries || '');
+          applySearchMode(result?.settings?.searchMode || 'not_urgent');
           isApplyingProfile = false;
           setJobPrefsMsg(strings(uiLang).savedJobPrefs, true);
           setTimeout(() => setJobPrefsMsg(''), 2000);
@@ -576,10 +626,12 @@
         const status = document.getElementById('resumeStatus');
         const viewBtn = document.getElementById('viewResumeBtn');
         if (currentResumeUrl) {
-          status.textContent = s.resumeUploaded;
+          status.textContent = '';
+          status.classList.add('hidden');
           viewBtn.disabled = false;
         } else {
           status.textContent = s.resumeNone;
+          status.classList.remove('hidden');
           viewBtn.disabled = true;
         }
         refreshResumeFileUi();
@@ -735,6 +787,7 @@
         isApplyingProfile = true;
         applySelectedSkillIds(profile?.skills || []);
         renderCountryPickerOptions(profile?.workAuthorizationCountries || '');
+        applySearchMode(profile?.settings?.searchMode || 'not_urgent');
         isApplyingProfile = false;
         renderPushToggle();
         applyLocale(lang);
@@ -763,6 +816,9 @@
         }
       });
 
+      document.getElementById('searchModeSel').addEventListener('change', () => {
+        scheduleJobPreferencesSave();
+      });
       document.getElementById('skillPickerBtn').addEventListener('click', () => {
         if (isSkillPickerOpen) closeSkillPicker();
         else openSkillPicker();
