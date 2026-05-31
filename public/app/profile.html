@@ -101,18 +101,6 @@
         font-size: 14px;
         cursor: pointer;
       }
-      .save-btn {
-        margin-top: 12px;
-        width: 100%;
-        border: none;
-        border-radius: 8px;
-        padding: 11px 14px;
-        background: var(--accent);
-        color: #fff;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       .ok { color: #22c55e; font-size: 13px; margin-top: 8px; }
     </style>
   <!-- Yandex.Metrika counter -->
@@ -171,14 +159,12 @@
 
         <div class="field">
           <span id="workAuthLabel" class="field-label">Work authorization countries</span>
-          <p id="workAuthHint" class="field-hint">Saved as comma-separated English values (e.g. kazakhstan,Russian)</p>
           <div class="skills-picker">
             <button id="countryPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
             <div id="countryPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
           </div>
         </div>
 
-        <button id="saveJobPrefsBtn" type="button" class="save-btn">Save</button>
         <p id="jobPrefsMsg" class="bad hidden" role="alert"></p>
       </section>
 
@@ -210,10 +196,8 @@
           allRoles: 'Все роли',
           rolesSelected: 'Выбрано: {count}',
           workAuthLabel: 'Страны с разрешением на работу',
-          workAuthHint: 'Сохраняются через запятую на английском (например kazakhstan,Russian)',
           workAuthAny: 'Не указано',
           workAuthSelected: 'Выбрано: {count}',
-          saveJobPrefs: 'Сохранить',
           savedJobPrefs: 'Сохранено',
         },
         en: {
@@ -234,10 +218,8 @@
           allRoles: 'All roles',
           rolesSelected: '{count} selected',
           workAuthLabel: 'Work authorization countries',
-          workAuthHint: 'Saved as comma-separated English values (e.g. kazakhstan,Russian)',
           workAuthAny: 'Not specified',
           workAuthSelected: '{count} selected',
-          saveJobPrefs: 'Save',
           savedJobPrefs: 'Saved',
         },
       };
@@ -245,6 +227,8 @@
       let pushNotificationsEnabled = true;
       let isSavingPush = false;
       let isSavingJobPrefs = false;
+      let isApplyingProfile = false;
+      let jobPrefsSaveTimer = null;
       let isSkillPickerOpen = false;
       let isCountryPickerOpen = false;
       let skillsCatalog = [];
@@ -290,8 +274,6 @@
         document.getElementById('skillsLabel').textContent = s.skillsLabel;
         document.getElementById('skillsHint').textContent = s.skillsHint;
         document.getElementById('workAuthLabel').textContent = s.workAuthLabel;
-        document.getElementById('workAuthHint').textContent = s.workAuthHint;
-        document.getElementById('saveJobPrefsBtn').textContent = s.saveJobPrefs;
         renderSkillPickerSummary();
         renderCountryPickerSummary();
         const profileUser = document.getElementById('profileUser');
@@ -411,9 +393,26 @@
         renderSkillPickerOptions();
       }
 
+      function setJobPrefsControlsDisabled(disabled) {
+        document.getElementById('skillPickerBtn').disabled = disabled;
+        document.getElementById('countryPickerBtn').disabled = disabled;
+        document.querySelectorAll('#skillPickerMenu input, #countryPickerMenu input').forEach((el) => {
+          el.disabled = disabled;
+        });
+      }
+
+      function scheduleJobPreferencesSave() {
+        if (isApplyingProfile) return;
+        clearTimeout(jobPrefsSaveTimer);
+        jobPrefsSaveTimer = setTimeout(() => {
+          saveJobPreferences().catch(() => {});
+        }, 350);
+      }
+
       async function saveJobPreferences() {
+        if (isSavingJobPrefs) return;
         isSavingJobPrefs = true;
-        document.getElementById('saveJobPrefsBtn').disabled = true;
+        setJobPrefsControlsDisabled(true);
         setJobPrefsMsg('');
         try {
           const result = await api('/api/app/profile/settings', {
@@ -423,14 +422,17 @@
               workAuthorizationCountries: getSelectedCountriesCsv(),
             }),
           });
+          isApplyingProfile = true;
           applySelectedSkillIds(result?.skills || []);
           applySelectedCountriesCsv(result?.workAuthorizationCountries || '');
+          isApplyingProfile = false;
           setJobPrefsMsg(strings(uiLang).savedJobPrefs, true);
+          setTimeout(() => setJobPrefsMsg(''), 2000);
         } catch (err) {
           setJobPrefsMsg(`${strings(uiLang).saveError}: ${err.message}`);
         } finally {
           isSavingJobPrefs = false;
-          document.getElementById('saveJobPrefsBtn').disabled = false;
+          setJobPrefsControlsDisabled(false);
         }
       }
 
@@ -500,8 +502,10 @@
         }
         document.getElementById('profileChatId').textContent = profile.telegramChatId;
         pushNotificationsEnabled = profile?.settings?.pushNotificationsEnabled !== false;
+        isApplyingProfile = true;
         applySelectedSkillIds(profile?.skills || []);
         renderCountryPickerOptions(profile?.workAuthorizationCountries || '');
+        isApplyingProfile = false;
         renderPushToggle();
         applyLocale(lang);
       }
@@ -517,17 +521,21 @@
         }
       });
 
-      document.getElementById('saveJobPrefsBtn').addEventListener('click', () => {
-        if (isSavingJobPrefs) return;
-        saveJobPreferences();
-      });
       document.getElementById('skillPickerBtn').addEventListener('click', () => {
         if (isSkillPickerOpen) closeSkillPicker();
         else openSkillPicker();
       });
+      document.getElementById('skillPickerMenu').addEventListener('change', () => {
+        renderSkillPickerSummary();
+        scheduleJobPreferencesSave();
+      });
       document.getElementById('countryPickerBtn').addEventListener('click', () => {
         if (isCountryPickerOpen) closeCountryPicker();
         else openCountryPicker();
+      });
+      document.getElementById('countryPickerMenu').addEventListener('change', () => {
+        renderCountryPickerSummary();
+        scheduleJobPreferencesSave();
       });
       document.addEventListener('click', (event) => {
         const picker = event.target.closest('.skills-picker');
