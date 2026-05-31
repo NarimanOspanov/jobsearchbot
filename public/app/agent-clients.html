@@ -18,7 +18,7 @@
       }
       * { box-sizing: border-box; }
       body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
-      .wrap { width: 100%; max-width: 100%; margin: 0 auto; padding: 14px; display: grid; gap: 12px; box-sizing: border-box; }
+      .wrap { width: 100%; max-width: 100%; margin: 0 auto; padding: 8px 14px 14px; display: grid; gap: 10px; box-sizing: border-box; }
       .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
       h1, h2, h3 { margin: 0 0 10px; }
       .muted { color: var(--muted); }
@@ -45,12 +45,12 @@
       }
       @media (min-width: 1024px) {
         .layout {
-          grid-template-columns: minmax(240px, 28%) minmax(0, 72%);
-          min-height: calc(100vh - 100px);
+          grid-template-columns: minmax(200px, 22%) minmax(0, 78%);
+          min-height: calc(100vh - 56px);
         }
         .layout .card.layout-col {
           min-height: 0;
-          max-height: calc(100vh - 100px);
+          max-height: calc(100vh - 56px);
           display: flex;
           flex-direction: column;
           overflow: hidden;
@@ -326,7 +326,6 @@
   </head>
   <body>
     <div class="wrap">
-      <h1>Agent clients</h1>
       <p id="globalMsg" class="muted"></p>
       <div id="agentPickerRow" class="row date-range-row" style="display:none">
         <label>View as agent
