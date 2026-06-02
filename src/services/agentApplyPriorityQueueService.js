@@ -24,30 +24,29 @@ let queueState = {
 
 function ensureRedisConnection() {
   if (!config.redisUrl) return null;
-  let parsed;
-  try {
-    parsed = new URL(config.redisUrl);
-  } catch {
-    return new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
-  }
 
-  const isTls = parsed.protocol === 'rediss:';
-  const host = parsed.hostname;
-  const port = Number.parseInt(parsed.port || (isTls ? '6380' : '6379'), 10);
-  const password = decodeURIComponent(parsed.password || '');
-  const username = decodeURIComponent(parsed.username || '');
+  // Azure Managed Redis (Enterprise clustering policy) exposes ONE TLS endpoint.
+  // Use a normal Redis client unless you explicitly opt into OSS cluster mode.
+  const useClusterMode = config.redisClusterMode === true;
 
-  // Azure Managed Redis (Enterprise) commonly requires cluster mode.
-  const clusterHostsHint = ['redis.azure.net', 'redisenterprise.cache.azure.net', 'redis.cache.windows.net'];
-  const shouldUseCluster =
-    clusterHostsHint.some((hint) => host.includes(hint)) ||
-    String(process.env.REDIS_CLUSTER_MODE || '').toLowerCase() === 'true';
-
-  if (shouldUseCluster) {
+  if (useClusterMode) {
+    let parsed;
+    try {
+      parsed = new URL(config.redisUrl);
+    } catch {
+      throw new Error('REDIS_CLUSTER_MODE is enabled but REDIS_URL is invalid');
+    }
+    const isTls = parsed.protocol === 'rediss:';
+    const host = parsed.hostname;
+    const port = Number.parseInt(parsed.port || (isTls ? '6380' : '6379'), 10);
+    const password = decodeURIComponent(parsed.password || '');
+    const username = decodeURIComponent(parsed.username || '');
+    console.info('Redis queue client: cluster mode', { host, port, tls: isTls });
     return new IORedis.Cluster(
       [{ host, port }],
       {
-        slotsRefreshTimeout: 5000,
+        slotsRefreshTimeout: 10000,
+        enableReadyCheck: true,
         redisOptions: {
           maxRetriesPerRequest: null,
           ...(password ? { password } : {}),
@@ -58,7 +57,11 @@ function ensureRedisConnection() {
     );
   }
 
-  return new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
+  console.info('Redis queue client: single-endpoint mode (Enterprise / standard Redis)');
+  return new IORedis(config.redisUrl, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: true,
+  });
 }
 
 function sanitizeJobPayload(raw) {
@@ -140,6 +143,7 @@ export function initAgentApplyPriorityQueue() {
   queueState = {
     enabled: true,
     reason: null,
+    mode: useClusterMode ? 'cluster' : 'single',
     queue,
     worker,
     boardAdapter: serverAdapter,
@@ -197,6 +201,7 @@ export async function getAgentApplyPriorityQueueSnapshot() {
   return {
     enabled: true,
     reason: null,
+    mode: queueState.mode || 'single',
     counts,
   };
 }
