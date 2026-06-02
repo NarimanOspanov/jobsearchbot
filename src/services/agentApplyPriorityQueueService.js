@@ -1,7 +1,7 @@
 import IORedis from 'ioredis';
 import { Queue, Worker } from 'bullmq';
 import { createBullBoard } from '@bull-board/api';
-import { BullMQAdapter } from '@bull-board/api/bullMQAdapter.js';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { config } from '../config.js';
 import { models } from '../db.js';
