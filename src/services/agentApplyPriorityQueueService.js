@@ -25,12 +25,6 @@ let queueState = {
 function createRedisConnection(label) {
   if (!config.redisUrl) return null;
 
-  if (config.redisClusterMode) {
-    console.warn(
-      'REDIS_CLUSTER_MODE is set but ignored. Azure Managed Redis (Enterprise) needs a single-endpoint client, not ioredis.Cluster.'
-    );
-  }
-
   let parsed;
   try {
     parsed = new URL(config.redisUrl);
@@ -44,6 +38,30 @@ function createRedisConnection(label) {
   const port = Number.parseInt(parsed.port || (isTls ? '6380' : '6379'), 10);
   const password = decodeURIComponent(parsed.password || '');
   const username = decodeURIComponent(parsed.username || '');
+
+  if (config.redisClusterMode) {
+    console.info(`Redis queue client (${label}): cluster`, {
+      host,
+      port,
+      tls: isTls,
+      client: 'IORedis.Cluster',
+    });
+
+    return new IORedis.Cluster(
+      [{ host, port }],
+      {
+        enableReadyCheck: true,
+        slotsRefreshTimeout: 15000,
+        redisOptions: {
+          ...(password ? { password } : {}),
+          ...(username ? { username } : {}),
+          maxRetriesPerRequest: null,
+          enableReadyCheck: true,
+          ...(isTls ? { tls: { servername: host } } : {}),
+        },
+      }
+    );
+  }
 
   console.info(`Redis queue client (${label}): single-endpoint`, {
     host,
@@ -149,7 +167,7 @@ export function initAgentApplyPriorityQueue() {
   queueState = {
     enabled: true,
     reason: null,
-    mode: 'single',
+    mode: config.redisClusterMode ? 'cluster' : 'single',
     queue,
     worker,
     boardAdapter: serverAdapter,
