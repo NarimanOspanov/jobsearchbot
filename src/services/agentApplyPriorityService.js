@@ -3,6 +3,8 @@ import { buildJobRequirementsText, getSeekerResumeTextForTailoring } from './tai
 
 const CHUNK_SIZE = 20;
 const MAX_JOBS = 200;
+const CHUNK_CONCURRENCY = 3;
+const CHUNK_RETRY_COUNT = 1;
 
 function normalizeIncomingJobs(jobs) {
   if (!Array.isArray(jobs)) return [];
@@ -38,6 +40,67 @@ function chunkArray(items, size) {
   return chunks;
 }
 
+async function runChunkWithRetry({ chunk, resumeText, searchMode, agentComment, chunkIndex }) {
+  let attempt = 0;
+  let lastError = null;
+  while (attempt <= CHUNK_RETRY_COUNT) {
+    const startedAt = Date.now();
+    try {
+      const rows = await rankJobsForAgentApplyBatchWithAI({
+        resumeText,
+        searchMode,
+        agentComment,
+        jobs: chunk,
+      });
+      return {
+        rows,
+        meta: {
+          chunkIndex,
+          size: chunk.length,
+          attempts: attempt + 1,
+          durationMs: Date.now() - startedAt,
+          ok: true,
+          error: null,
+        },
+      };
+    } catch (err) {
+      lastError = err;
+      if (attempt >= CHUNK_RETRY_COUNT) break;
+    }
+    attempt += 1;
+  }
+  const message = String(lastError?.message || lastError || 'Unknown chunk error');
+  throw new Error(`Apply priority chunk ${chunkIndex + 1} failed: ${message}`);
+}
+
+async function processChunksInPool({ chunks, resumeText, searchMode, agentComment }) {
+  const mergedRows = [];
+  const chunkTimings = [];
+  let nextIndex = 0;
+
+  async function worker() {
+    while (true) {
+      const current = nextIndex;
+      nextIndex += 1;
+      if (current >= chunks.length) return;
+      const chunk = chunks[current];
+      const { rows, meta } = await runChunkWithRetry({
+        chunk,
+        resumeText,
+        searchMode,
+        agentComment,
+        chunkIndex: current,
+      });
+      mergedRows.push(...rows);
+      chunkTimings.push(meta);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunks.length) }, () => worker());
+  await Promise.all(workers);
+  return { mergedRows, chunkTimings };
+}
+
 function assignGlobalApplyRanks(rows) {
   const skip = [];
   const apply = [];
@@ -67,6 +130,7 @@ function assignGlobalApplyRanks(rows) {
  * @param {{ clientUser: object, jobs: unknown[] }}
  */
 export async function rankJobsForAgentApply({ clientUser, jobs }) {
+  const startedAt = Date.now();
   const normalizedJobs = normalizeIncomingJobs(jobs);
   if (!normalizedJobs.length) {
     throw new Error('At least one job is required');
@@ -81,24 +145,30 @@ export async function rankJobsForAgentApply({ clientUser, jobs }) {
   const agentComment = String(clientUser?.Comment || '').trim();
 
   const chunks = chunkArray(normalizedJobs, CHUNK_SIZE);
-  const merged = [];
-  for (const chunk of chunks) {
-    const batch = await rankJobsForAgentApplyBatchWithAI({
-      resumeText,
-      searchMode,
-      agentComment,
-      jobs: chunk,
-    });
-    merged.push(...batch);
-  }
+  const { mergedRows, chunkTimings } = await processChunksInPool({
+    chunks,
+    resumeText,
+    searchMode,
+    agentComment,
+  });
 
-  const rankings = assignGlobalApplyRanks(merged);
+  const rankings = assignGlobalApplyRanks(mergedRows);
+  const chunkDurations = chunkTimings.map((row) => Number(row.durationMs) || 0).filter((n) => n >= 0);
+  const sumChunkDurations = chunkDurations.reduce((sum, n) => sum + n, 0);
+  const maxChunkDurationMs = chunkDurations.length ? Math.max(...chunkDurations) : 0;
+  const avgChunkDurationMs = chunkDurations.length ? Math.round(sumChunkDurations / chunkDurations.length) : 0;
   return {
     context: {
       searchMode,
       commentLength: agentComment.length,
       resumeTextLength: String(resumeText).length,
       jobCount: normalizedJobs.length,
+      chunkCount: chunks.length,
+      chunkSize: CHUNK_SIZE,
+      chunkConcurrency: Math.min(CHUNK_CONCURRENCY, chunks.length),
+      avgChunkDurationMs,
+      maxChunkDurationMs,
+      totalDurationMs: Date.now() - startedAt,
     },
     rankings,
   };

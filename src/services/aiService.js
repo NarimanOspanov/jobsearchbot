@@ -382,6 +382,13 @@ ${text}`;
 }
 
 const APPLY_PRIORITY_VALUES = new Set(['apply_first', 'good', 'low', 'skip']);
+const APPLY_PRIORITY_RESUME_MAX = 9000;
+const APPLY_PRIORITY_COMMENT_MAX = 2500;
+const APPLY_PRIORITY_JOB_TEXT_MAX = 1200;
+
+function compactText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
 
 function clampApplyScore(value) {
   const n = Number.parseInt(String(value ?? ''), 10);
@@ -418,18 +425,18 @@ export async function rankJobsForAgentApplyBatchWithAI({
   jobs = [],
 }) {
   if (!genAI) throw new Error('GEMINI_API_KEY is not configured');
-  const resume = String(resumeText || '').trim().slice(0, 12000);
+  const resume = compactText(resumeText).slice(0, APPLY_PRIORITY_RESUME_MAX);
   if (!resume) throw new Error('Resume text is empty');
   if (!Array.isArray(jobs) || jobs.length === 0) return [];
 
   const mode = String(searchMode || 'not_urgent').trim() === 'urgent' ? 'urgent' : 'not_urgent';
-  const comment = String(agentComment || '').trim().slice(0, 4000);
+  const comment = compactText(agentComment).slice(0, APPLY_PRIORITY_COMMENT_MAX);
   const jobBlocks = jobs
     .map((job) => {
       const id = Number(job.id);
       const title = String(job.title || '').trim();
       const company = String(job.company || '').trim();
-      const req = String(job.requirementsText || '').trim().slice(0, 2000);
+      const req = compactText(job.requirementsText).slice(0, APPLY_PRIORITY_JOB_TEXT_MAX);
       return `Job id: ${id}\nTitle: ${title}\nCompany: ${company}\nDescription:\n${req || '(no description)'}`;
     })
     .join('\n\n---\n\n');

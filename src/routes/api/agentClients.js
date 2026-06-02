@@ -359,6 +359,7 @@ export function createAgentClientsRouter() {
   );
 
   router.post('/api/app/agent/clients/:clientUserId/apply-priority', agentMiniAppAuth, async (req, res) => {
+    const requestStartedAt = Date.now();
     try {
       const clientUserId = Number.parseInt(String(req.params.clientUserId), 10);
       if (!Number.isSafeInteger(clientUserId) || clientUserId <= 0) {
@@ -373,6 +374,15 @@ export function createAgentClientsRouter() {
       if (!jobs.length) return res.status(400).json({ error: 'jobs array is required' });
 
       const result = await rankJobsForAgentApply({ clientUser: client, jobs });
+      console.info('apply-priority completed', {
+        clientUserId,
+        actorUserId: req.actorUser?.Id ?? null,
+        jobs: result?.context?.jobCount ?? jobs.length,
+        chunks: result?.context?.chunkCount ?? null,
+        totalDurationMs: Date.now() - requestStartedAt,
+        avgChunkDurationMs: result?.context?.avgChunkDurationMs ?? null,
+        maxChunkDurationMs: result?.context?.maxChunkDurationMs ?? null,
+      });
       return res.json({ ok: true, ...result });
     } catch (err) {
       const message = String(err?.message || err);

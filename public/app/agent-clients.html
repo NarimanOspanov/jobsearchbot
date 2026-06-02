@@ -1032,6 +1032,7 @@
 
         isAnalyzingApplyPriority = true;
         updateApplyPriorityUi();
+        setMsg('dashMsg', 'Analyzing apply priority... please wait.');
         try {
           const payload = await api(
             `${API_BASE}/api/app/agent/clients/${encodeURIComponent(seekerId)}/apply-priority${agentQueryPrefix()}`,
@@ -1061,7 +1062,14 @@
           applyPriorityStale = false;
           jobsSort = { key: 'apply_priority', dir: 'asc' };
           renderJobs();
-          setMsg('dashMsg', `Analyzed apply priority for ${Object.keys(rankingsMap).length} jobs.`);
+          const analyzedCount = Object.keys(rankingsMap).length;
+          const totalMs = Number(payload?.context?.totalDurationMs) || 0;
+          const chunkCount = Number(payload?.context?.chunkCount) || 0;
+          const avgChunkMs = Number(payload?.context?.avgChunkDurationMs) || 0;
+          const totalSec = totalMs > 0 ? `${(totalMs / 1000).toFixed(1)}s` : 'n/a';
+          const chunkInfo = chunkCount > 0 ? `, ${chunkCount} chunk(s)` : '';
+          const chunkAvgInfo = avgChunkMs > 0 ? `, avg chunk ${(avgChunkMs / 1000).toFixed(1)}s` : '';
+          setMsg('dashMsg', `Analyzed ${analyzedCount} jobs in ${totalSec}${chunkInfo}${chunkAvgInfo}.`);
         } finally {
           isAnalyzingApplyPriority = false;
           updateApplyPriorityUi();
