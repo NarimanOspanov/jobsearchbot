@@ -393,7 +393,10 @@ export function createAgentClientsRouter() {
       });
     } catch (err) {
       console.error('POST /api/app/agent/clients/apply-priority/enqueue-all:', err);
-      return res.status(500).json({ error: 'Failed to enqueue apply-priority jobs' });
+      return res.status(500).json({
+        error: 'Failed to enqueue apply-priority jobs',
+        message: err?.message || String(err),
+      });
     }
   });
 

@@ -28,14 +28,14 @@ function sanitizeJobPayload(raw) {
   return (Array.isArray(raw) ? raw : [])
     .map((job) => ({
       id: Number.parseInt(String(job?.id ?? ''), 10),
-      title: String(job?.title || '').trim(),
-      company: String(job?.company || '').trim(),
+      title: String(job?.title || '').trim().slice(0, 255),
+      company: String(job?.company || '').trim().slice(0, 255),
       source: String(job?.source || '').trim() || null,
       applyUrl: String(job?.applyUrl || '').trim() || null,
-      location: String(job?.location || '').trim() || null,
-      shortSummary: String(job?.shortSummary || '').trim() || null,
-      description: String(job?.description || '').trim() || null,
-      skills: Array.isArray(job?.skills) ? job.skills : [],
+      location: String(job?.location || '').trim().slice(0, 255) || null,
+      shortSummary: String(job?.shortSummary || '').trim().slice(0, 1200) || null,
+      description: String(job?.description || '').trim().slice(0, 6000) || null,
+      skills: Array.isArray(job?.skills) ? job.skills.slice(0, 40) : [],
     }))
     .filter((job) => Number.isSafeInteger(job.id) && job.id > 0)
     .slice(0, 200);
