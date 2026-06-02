@@ -938,12 +938,19 @@
           .sort((a, b) => a - b)
           .join(',');
       }
-      function buildApplyPriorityContextKey(user, jobs) {
+      function buildClientApplyPriorityContextKey(user) {
         const searchMode = String(user?.searchMode || 'not_urgent');
         const comment = String(user?.comment || '');
         const resumeUrl = String(user?.resumeUrl || '');
-        const jobIdsHash = hashJobIds(jobs);
-        return `${searchMode}|${comment}|${resumeUrl}|${jobIdsHash}`;
+        return `${searchMode}|${comment}|${resumeUrl}`;
+      }
+      function buildApplyPriorityContextKey(user, jobs) {
+        return `${buildClientApplyPriorityContextKey(user)}|${hashJobIds(jobs)}`;
+      }
+      function clientContextKeyFromStored(storedContextKey) {
+        const parts = String(storedContextKey || '').split('|');
+        if (parts.length < 3) return '';
+        return parts.slice(0, 3).join('|');
       }
       function parseApplyPriorityJson(raw) {
         if (!raw) return null;
@@ -991,11 +998,16 @@
           contextKey: contextKeys.size === 1 ? [...contextKeys][0] : '',
           updatedAt: latestAnalyzedAt,
         };
-        const currentKey = buildApplyPriorityContextKey(getSelectedUser(), positions);
+        const currentClientKey = buildClientApplyPriorityContextKey(getSelectedUser());
+        const storedClientKeys = new Set(
+          Object.values(nextRankings)
+            .map((row) => clientContextKeyFromStored(row.contextKey))
+            .filter(Boolean)
+        );
         applyPriorityStale =
           !Object.keys(nextRankings).length
             ? false
-            : !applyPriorityCacheMeta.contextKey || applyPriorityCacheMeta.contextKey !== currentKey;
+            : storedClientKeys.size > 0 && (!currentClientKey || !storedClientKeys.has(currentClientKey));
         updateApplyPriorityUi();
       }
       function hasApplyPriorityData() {
@@ -1086,7 +1098,7 @@
               skipReason: row.skipReason ? String(row.skipReason) : null,
             };
           }
-          await loadApplicationsByUser(seekerId);
+          await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
           applyPriorityStale = false;
           jobsSort = { key: 'apply_priority', dir: 'asc' };
           renderJobs();
@@ -1745,8 +1757,24 @@
         });
       }
 
-      async function loadApplicationsByUser(userId) {
-        applications = await api(`${API_BASE}/api/app/applications/by-user?userId=${encodeURIComponent(userId)}&limit=100&offset=0${agentQuerySuffix()}`);
+      function currentScreenlyJobIds() {
+        return (Array.isArray(positions) ? positions : [])
+          .map((p) => Number.parseInt(String(p?.id ?? ''), 10))
+          .filter((id) => Number.isSafeInteger(id) && id > 0);
+      }
+
+      async function loadApplicationsByUser(userId, { screenlyJobIds } = {}) {
+        const ids = (Array.isArray(screenlyJobIds) ? screenlyJobIds : [])
+          .map((id) => Number.parseInt(String(id), 10))
+          .filter((id) => Number.isSafeInteger(id) && id > 0);
+        let url =
+          `${API_BASE}/api/app/applications/by-user?userId=${encodeURIComponent(userId)}&offset=0${agentQuerySuffix()}`;
+        if (ids.length) {
+          url += `&screenlyJobIds=${encodeURIComponent(ids.join(','))}&limit=${encodeURIComponent(String(Math.min(500, ids.length)))}`;
+        } else {
+          url += '&limit=100';
+        }
+        applications = await api(url);
         refreshApplyPriorityFromApplications();
       }
 
@@ -1800,7 +1828,7 @@
             count: Number(data.count || positions.length),
             totalRows: Number(data.totalRows || data.count || positions.length),
           };
-          await loadApplicationsByUser(seekerId);
+          await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
           renderJobs();
           updatePagerUi();
           setMsg('dashMsg', `Loaded ${pageInfo.count} jobs (page ${pageInfo.page}).`);
@@ -1900,7 +1928,7 @@
             },
           }),
         });
-        await loadApplicationsByUser(seekerId);
+        await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
         return appByScreenlyId(job.id) || app;
       }
 
@@ -2071,7 +2099,7 @@
           if (artifacts.tailoredCvUrl || artifacts.coverLetter) {
             generatedMaterials = null;
           }
-          await loadApplicationsByUser(seekerId);
+          await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
           renderJobs();
           renderArtifacts();
           renderScreenshotArtifact();
@@ -2202,7 +2230,7 @@
             }),
           });
           selectedApplication = updated;
-          await loadApplicationsByUser(seekerId);
+          await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
           renderArtifacts();
           setMsg('jobMsg', 'Tailored CV + cover letter generated and saved.');
         } finally {

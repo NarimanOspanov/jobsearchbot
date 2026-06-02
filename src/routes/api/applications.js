@@ -77,10 +77,29 @@ export function createApplicationsRouter() {
         return res.status(400).json({ error: 'userId is required and must be a positive integer' });
       }
       if (!(await enforceAgentClientAccess(req, res, userId))) return;
-      const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '20'), 10) || 20));
+
+      const screenlyJobIds = String(req.query.screenlyJobIds || '')
+        .split(',')
+        .map((part) => Number.parseInt(String(part).trim(), 10))
+        .filter((id) => Number.isSafeInteger(id) && id > 0);
+      const uniqueScreenlyJobIds = [...new Set(screenlyJobIds)];
+
+      const where = { UserId: userId };
+      if (uniqueScreenlyJobIds.length) {
+        where.ScreenlyJobId = { [Sequelize.Op.in]: uniqueScreenlyJobIds };
+      }
+
+      const defaultLimit = uniqueScreenlyJobIds.length
+        ? Math.min(500, Math.max(uniqueScreenlyJobIds.length, 1))
+        : 100;
+      const limit = Math.min(
+        500,
+        Math.max(1, parseInt(String(req.query.limit || String(defaultLimit)), 10) || defaultLimit)
+      );
       const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
+
       const rows = await models.Applications.findAll({
-        where: { UserId: userId },
+        where,
         order: [['AppliedAt', 'DESC'], ['Id', 'DESC']],
         limit,
         offset,
