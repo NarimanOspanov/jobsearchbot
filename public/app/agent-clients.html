@@ -607,7 +607,7 @@
               <textarea id="coverPreview" readonly style="margin-bottom:0"></textarea>
             </div>
             <div id="statusRow" style="margin-bottom:12px">
-              <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600">Mark as</label>
+              <label id="statusLabel" style="display:block;margin-bottom:6px;font-size:13px;color:var(--muted);font-weight:600">Mark as</label>
               <select id="statusSel" style="width:100%">
                 <option value="new">new</option>
                 <option value="applied">applied</option>
@@ -704,6 +704,7 @@
       let applyPriorityStale = false;
       let isAnalyzingApplyPriority = false;
       let isQueueingApplyPriorityAllClients = false;
+      let skipStatusAutoSave = false;
 
       const PRIORITY_LABELS = {
         apply_first: 'Apply first',
@@ -1230,6 +1231,34 @@
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
+        const genBtn = document.getElementById('genBtn');
+        if (genBtn && on) genBtn.textContent = 'Generating tailored CV + cover letter...';
+        else if (genBtn) genBtn.textContent = hasTailoredMaterials() ? 'Regenerate Tailored CV + Cover Letter' : 'Generate Tailored CV + Cover Letter';
+      }
+      function hasTailoredMaterials() {
+        const tailoredUrl = String(
+          generatedMaterials?.tailoredCvUrl || selectedApplication?.TailoredCVURL || ''
+        ).trim();
+        const coverText = String(
+          generatedMaterials?.coverLetter ?? selectedApplication?.CoverLetter ?? ''
+        ).trim();
+        return Boolean(tailoredUrl || coverText);
+      }
+      function updateStatusLabelUi() {
+        const label = document.getElementById('statusLabel');
+        const status = document.getElementById('statusSel')?.value || 'new';
+        if (!label) return;
+        label.textContent = status === 'applied' ? 'Status' : 'Mark as';
+      }
+      function setApplicationStatus(status, { save = false, forceSave = false } = {}) {
+        const statusSel = document.getElementById('statusSel');
+        if (!statusSel) return;
+        skipStatusAutoSave = true;
+        statusSel.value = status;
+        skipStatusAutoSave = false;
+        updateStatusLabelUi();
+        renderScreenshotArtifact();
+        if (save) return saveStatus({ force: forceSave });
       }
       function setUserInfoVisibility(hidden) {
         isUserInfoHidden = !!hidden;
@@ -1968,11 +1997,13 @@
           `</div>`;
         document.getElementById('statusSel').value = selectedApplication?.Status || 'new';
         document.getElementById('notesText').value = selectedApplication?.Notes || '';
+        updateStatusLabelUi();
         setMsg('jobMsg', '');
         renderArtifacts();
         renderScreenshotArtifact();
         bindJobDetailInteractions(job);
         openJobModal();
+        void maybeAutoGenerateMaterials().catch((e) => setMsg('jobMsg', e.message, true));
       }
 
       function renderArtifacts() {
@@ -2072,18 +2103,21 @@
           if (!screenshotArtifactUrl) throw new Error('Screenshot upload returned no URL');
           selectedApplication = { ...app, ...selectedApplication, ScreenshotArtifactURL: screenshotArtifactUrl };
           renderScreenshotArtifact();
-          setMsg('jobMsg', 'Screenshot saved.');
+          setMsg('jobMsg', 'Screenshot saved. Marking as applied...');
+          await setApplicationStatus('applied', { save: true, forceSave: true });
+          setMsg('jobMsg', 'Screenshot saved. Status set to applied.');
         } finally {
           setJobBusy(false);
         }
       }
 
-      async function saveStatus() {
-        if (isJobBusy) return;
+      async function saveStatus({ force = false } = {}) {
+        if (!force && isJobBusy) return;
         const seekerId = q().seekerId;
         if (!selectedJob) throw new Error('Open a job first.');
         if (!seekerId) throw new Error('Select seeker first.');
-        setJobBusy(true);
+        const manageBusy = !isJobBusy;
+        if (manageBusy) setJobBusy(true);
         try {
           const app = await ensureApplication(seekerId, selectedJob);
           const artifacts = getApplicationArtifactsForSave();
@@ -2105,7 +2139,7 @@
           renderScreenshotArtifact();
           setMsg('jobMsg', 'Status saved.');
         } finally {
-          setJobBusy(false);
+          if (manageBusy) setJobBusy(false);
         }
       }
 
@@ -2184,7 +2218,16 @@
         openCvModal(`Resume: #${u.id}`, u.resumeUrl);
       }
 
-      async function generateMaterials() {
+      async function maybeAutoGenerateMaterials() {
+        if (!selectedJob || isJobBusy) return;
+        if (hasTailoredMaterials()) return;
+        const user = getSelectedUser();
+        if (!user?.resumeUrl) return;
+        setMsg('jobMsg', 'Generating tailored CV + cover letter...');
+        await generateMaterials({ auto: true });
+      }
+
+      async function generateMaterials({ auto = false } = {}) {
         if (isJobBusy) return;
         const seekerId = q().seekerId;
         if (!selectedJob) throw new Error('Open a job first.');
@@ -2232,7 +2275,12 @@
           selectedApplication = updated;
           await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
           renderArtifacts();
-          setMsg('jobMsg', 'Tailored CV + cover letter generated and saved.');
+          setMsg(
+            'jobMsg',
+            auto
+              ? 'Tailored CV + cover letter generated automatically.'
+              : 'Tailored CV + cover letter generated and saved.'
+          );
         } finally {
           setJobBusy(false);
         }
@@ -2414,6 +2462,8 @@
         loadClients().catch((e) => setMsg('globalMsg', e.message, true));
       });
       document.getElementById('statusSel').addEventListener('change', () => {
+        if (skipStatusAutoSave) return;
+        updateStatusLabelUi();
         renderScreenshotArtifact();
         saveStatus().catch((e) => setMsg('jobMsg', e.message, true));
       });
