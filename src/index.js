@@ -2022,7 +2022,9 @@ async function main() {
   registerHandlers(bot, appBaseUrl, { hireAgentSimulationVisible });
   const applyPriorityQueueState = initAgentApplyPriorityQueue();
   if (applyPriorityQueueState.enabled) {
-    console.log('Agent apply-priority queue enabled (BullMQ + Bull Board).');
+    console.log(
+      `Agent apply-priority queue enabled (BullMQ + Bull Board, redis mode=${applyPriorityQueueState.mode || 'single'}).`
+    );
   } else {
     console.warn('Agent apply-priority queue disabled:', applyPriorityQueueState.reason);
   }

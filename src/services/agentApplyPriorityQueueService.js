@@ -22,46 +22,51 @@ let queueState = {
   boardAdapter: null,
 };
 
-function ensureRedisConnection() {
+function createRedisConnection(label) {
   if (!config.redisUrl) return null;
 
-  // Azure Managed Redis (Enterprise clustering policy) exposes ONE TLS endpoint.
-  // Use a normal Redis client unless you explicitly opt into OSS cluster mode.
-  const useClusterMode = config.redisClusterMode === true;
-
-  if (useClusterMode) {
-    let parsed;
-    try {
-      parsed = new URL(config.redisUrl);
-    } catch {
-      throw new Error('REDIS_CLUSTER_MODE is enabled but REDIS_URL is invalid');
-    }
-    const isTls = parsed.protocol === 'rediss:';
-    const host = parsed.hostname;
-    const port = Number.parseInt(parsed.port || (isTls ? '6380' : '6379'), 10);
-    const password = decodeURIComponent(parsed.password || '');
-    const username = decodeURIComponent(parsed.username || '');
-    console.info('Redis queue client: cluster mode', { host, port, tls: isTls });
-    return new IORedis.Cluster(
-      [{ host, port }],
-      {
-        slotsRefreshTimeout: 10000,
-        enableReadyCheck: true,
-        redisOptions: {
-          maxRetriesPerRequest: null,
-          ...(password ? { password } : {}),
-          ...(username ? { username } : {}),
-          ...(isTls ? { tls: {} } : {}),
-        },
-      }
+  if (config.redisClusterMode) {
+    console.warn(
+      'REDIS_CLUSTER_MODE is set but ignored. Azure Managed Redis (Enterprise) needs a single-endpoint client, not ioredis.Cluster.'
     );
   }
 
-  console.info('Redis queue client: single-endpoint mode (Enterprise / standard Redis)');
-  return new IORedis(config.redisUrl, {
+  let parsed;
+  try {
+    parsed = new URL(config.redisUrl);
+  } catch {
+    console.info(`Redis queue client (${label}): URL parse failed, using string URL`);
+    return new IORedis(config.redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: true });
+  }
+
+  const isTls = parsed.protocol === 'rediss:';
+  const host = parsed.hostname;
+  const port = Number.parseInt(parsed.port || (isTls ? '6380' : '6379'), 10);
+  const password = decodeURIComponent(parsed.password || '');
+  const username = decodeURIComponent(parsed.username || '');
+
+  console.info(`Redis queue client (${label}): single-endpoint`, {
+    host,
+    port,
+    tls: isTls,
+    client: 'IORedis',
+  });
+
+  const client = new IORedis({
+    host,
+    port,
+    ...(password ? { password } : {}),
+    ...(username ? { username } : {}),
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
+    ...(isTls ? { tls: { servername: host } } : {}),
   });
+
+  client.on('error', (err) => {
+    console.error(`Redis queue client (${label}) error:`, err?.message || err);
+  });
+
+  return client;
 }
 
 function sanitizeJobPayload(raw) {
@@ -83,11 +88,12 @@ function sanitizeJobPayload(raw) {
 
 export function initAgentApplyPriorityQueue() {
   if (queueState.queue || queueState.worker || queueState.enabled) return queueState;
-  const connection = ensureRedisConnection();
-  if (!connection) return queueState;
+  const queueConnection = createRedisConnection('queue');
+  const workerConnection = createRedisConnection('worker');
+  if (!queueConnection || !workerConnection) return queueState;
 
   const queue = new Queue(QUEUE_NAME, {
-    connection,
+    connection: queueConnection,
     prefix: QUEUE_PREFIX,
     defaultJobOptions: {
       removeOnComplete: 200,
@@ -122,7 +128,7 @@ export function initAgentApplyPriorityQueue() {
         persisted,
       };
     },
-    { connection, concurrency: 3, prefix: QUEUE_PREFIX }
+    { connection: workerConnection, concurrency: 3, prefix: QUEUE_PREFIX }
   );
 
   worker.on('failed', (job, err) => {
@@ -143,7 +149,7 @@ export function initAgentApplyPriorityQueue() {
   queueState = {
     enabled: true,
     reason: null,
-    mode: useClusterMode ? 'cluster' : 'single',
+    mode: 'single',
     queue,
     worker,
     boardAdapter: serverAdapter,
