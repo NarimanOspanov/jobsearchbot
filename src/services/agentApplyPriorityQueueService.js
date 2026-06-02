@@ -10,6 +10,9 @@ import { persistApplyPriorityForPageJobs } from './agentApplyPriorityPersistence
 
 const QUEUE_NAME = 'agent-apply-priority';
 const JOB_NAME = 'analyze-client-priority';
+// Redis Cluster requirement: all BullMQ keys for a queue must hash to the same slot.
+// Hash-tagged prefix enforces same slot and avoids CROSSSLOT evalsha errors.
+const QUEUE_PREFIX = '{agent-apply-priority}';
 
 let queueState = {
   enabled: false,
@@ -48,6 +51,7 @@ export function initAgentApplyPriorityQueue() {
 
   const queue = new Queue(QUEUE_NAME, {
     connection,
+    prefix: QUEUE_PREFIX,
     defaultJobOptions: {
       removeOnComplete: 200,
       removeOnFail: 500,
@@ -81,7 +85,7 @@ export function initAgentApplyPriorityQueue() {
         persisted,
       };
     },
-    { connection, concurrency: 3 }
+    { connection, concurrency: 3, prefix: QUEUE_PREFIX }
   );
 
   worker.on('failed', (job, err) => {
