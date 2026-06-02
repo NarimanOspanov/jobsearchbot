@@ -100,6 +100,7 @@ import {
   clearPositionApplyAttributionStores,
   cvScoreResultByUserId,
   runtimeBot,
+  applyPriorityCronHealthState,
   screeningCronHealthState,
 } from './bot/state.js';
 
@@ -118,6 +119,7 @@ import { createAgentClientsRouter } from './routes/api/agentClients.js';
 import { createAgentApplyPriorityJobsRouter } from './routes/api/agentApplyPriorityJobs.js';
 import { createApplyLinkRouter } from './routes/api/applyLink.js';
 import { createNotificationsRouter } from './routes/api/notifications.js';
+import { enqueueApplyPriorityForDefaultClientSearches } from './services/agentApplyPriorityCronService.js';
 import { initAgentApplyPriorityQueue } from './services/agentApplyPriorityQueueService.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -2091,6 +2093,56 @@ async function main() {
     );
   } else {
     console.log('Position apply screening cron scheduled (every 1 min, first run in ~30 s)');
+  }
+
+  if (applyPriorityQueueState.enabled && config.applyPriorityCronEnabled) {
+    let applyPriorityCronRunning = false;
+    const runApplyPriorityCron = async () => {
+      if (applyPriorityCronRunning) return;
+      applyPriorityCronRunning = true;
+      applyPriorityCronHealthState.running = true;
+      applyPriorityCronHealthState.lastStartedAt = new Date().toISOString();
+      try {
+        const result = await enqueueApplyPriorityForDefaultClientSearches({
+          requestedBy: 'cron-hourly',
+        });
+        applyPriorityCronHealthState.lastResult = result;
+        applyPriorityCronHealthState.lastError = null;
+        if (Number(result?.enqueued || 0) > 0) {
+          console.log('Agent apply-priority cron:', {
+            enqueued: result.enqueued,
+            totalFetchedJobs: result.totalFetchedJobs,
+            totalSkippedAlreadyRanked: result.totalSkippedAlreadyRanked,
+            totalAssignedWithResume: result.totalAssignedWithResume,
+          });
+        }
+      } catch (err) {
+        applyPriorityCronHealthState.lastError = err?.message || String(err);
+        console.error('Agent apply-priority cron error:', err?.message || err);
+      } finally {
+        applyPriorityCronRunning = false;
+        applyPriorityCronHealthState.running = false;
+        applyPriorityCronHealthState.runCount += 1;
+        applyPriorityCronHealthState.lastFinishedAt = new Date().toISOString();
+      }
+    };
+
+    applyPriorityCronHealthState.enabled = true;
+    applyPriorityCronHealthState.intervalMs = config.applyPriorityCronIntervalMs;
+    const startupDelayMs = applyPriorityCronHealthState.startupDelayMs;
+    setTimeout(() => {
+      runApplyPriorityCron().catch((err) => {
+        console.error('Agent apply-priority cron startup run error:', err?.message || err);
+      });
+    }, startupDelayMs);
+    setInterval(runApplyPriorityCron, config.applyPriorityCronIntervalMs);
+    console.log(
+      `Agent apply-priority cron scheduled (every ${Math.round(config.applyPriorityCronIntervalMs / 60_000)} min, first run in ~${Math.round(startupDelayMs / 1000)} s)`
+    );
+  } else if (!applyPriorityQueueState.enabled) {
+    console.log('Agent apply-priority cron disabled (REDIS_URL not configured).');
+  } else {
+    console.log('Agent apply-priority cron disabled (APPLY_PRIORITY_CRON_ENABLED=false).');
   }
 }
 

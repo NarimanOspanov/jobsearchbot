@@ -125,3 +125,15 @@ export const screeningCronHealthState = {
   lastResult: null,
   lastError: null,
 };
+
+export const applyPriorityCronHealthState = {
+  enabled: false,
+  intervalMs: 60 * 60 * 1000,
+  startupDelayMs: 2 * 60 * 1000,
+  running: false,
+  runCount: 0,
+  lastStartedAt: null,
+  lastFinishedAt: null,
+  lastResult: null,
+  lastError: null,
+};

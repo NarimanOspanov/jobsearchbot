@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { applyPriorityCronHealthState } from '../../bot/state.js';
 import { models } from '../../db.js';
 import { applyPriorityCronSecretAuth } from '../../middleware/applyPriorityCronSecretAuth.js';
 import {
@@ -21,7 +22,7 @@ export function createAgentApplyPriorityJobsRouter() {
   router.get('/api/cron/agent-apply-priority/status', applyPriorityCronSecretAuth, async (_req, res) => {
     try {
       const snapshot = await getAgentApplyPriorityQueueSnapshot();
-      return res.json({ ok: true, ...snapshot });
+      return res.json({ ok: true, cronHealth: applyPriorityCronHealthState, ...snapshot });
     } catch (err) {
       console.error('GET /api/cron/agent-apply-priority/status:', err);
       return res.status(500).json({ error: 'Failed to load apply-priority queue status' });
