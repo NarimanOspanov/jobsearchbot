@@ -24,6 +24,40 @@ let queueState = {
 
 function ensureRedisConnection() {
   if (!config.redisUrl) return null;
+  let parsed;
+  try {
+    parsed = new URL(config.redisUrl);
+  } catch {
+    return new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
+  }
+
+  const isTls = parsed.protocol === 'rediss:';
+  const host = parsed.hostname;
+  const port = Number.parseInt(parsed.port || (isTls ? '6380' : '6379'), 10);
+  const password = decodeURIComponent(parsed.password || '');
+  const username = decodeURIComponent(parsed.username || '');
+
+  // Azure Managed Redis (Enterprise) commonly requires cluster mode.
+  const clusterHostsHint = ['redis.azure.net', 'redisenterprise.cache.azure.net', 'redis.cache.windows.net'];
+  const shouldUseCluster =
+    clusterHostsHint.some((hint) => host.includes(hint)) ||
+    String(process.env.REDIS_CLUSTER_MODE || '').toLowerCase() === 'true';
+
+  if (shouldUseCluster) {
+    return new IORedis.Cluster(
+      [{ host, port }],
+      {
+        slotsRefreshTimeout: 5000,
+        redisOptions: {
+          maxRetriesPerRequest: null,
+          ...(password ? { password } : {}),
+          ...(username ? { username } : {}),
+          ...(isTls ? { tls: {} } : {}),
+        },
+      }
+    );
+  }
+
   return new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
 }
 
