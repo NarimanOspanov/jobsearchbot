@@ -2163,8 +2163,20 @@
             tailoredCvUrl: tailored.tailoredCvUrl,
             coverLetter: cover.coverLetter,
           };
+          // Persist generated artifacts immediately so they are not lost
+          // if the agent closes modal/page before changing status.
+          const app = await ensureApplication(seekerId, selectedJob);
+          const updated = await api(`${API_BASE}/api/app/applications/${app.Id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              tailoredCvUrl: generatedMaterials.tailoredCvUrl || null,
+              coverLetter: generatedMaterials.coverLetter || null,
+            }),
+          });
+          selectedApplication = updated;
+          await loadApplicationsByUser(seekerId);
           renderArtifacts();
-          setMsg('jobMsg', 'Tailored CV + cover letter generated.');
+          setMsg('jobMsg', 'Tailored CV + cover letter generated and saved.');
         } finally {
           setJobBusy(false);
         }
