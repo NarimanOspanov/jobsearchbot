@@ -115,8 +115,10 @@ import { createPositionsRouter } from './routes/api/positions.js';
 import { createAdminRouter } from './routes/api/admin.js';
 import { createCronRouter } from './routes/api/cron.js';
 import { createAgentClientsRouter } from './routes/api/agentClients.js';
+import { createAgentApplyPriorityJobsRouter } from './routes/api/agentApplyPriorityJobs.js';
 import { createApplyLinkRouter } from './routes/api/applyLink.js';
 import { createNotificationsRouter } from './routes/api/notifications.js';
+import { initAgentApplyPriorityQueue } from './services/agentApplyPriorityQueueService.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1985,6 +1987,7 @@ async function main() {
   app.use(createPositionsRouter());
   app.use(createAdminRouter());
   app.use(createCronRouter());
+  app.use(createAgentApplyPriorityJobsRouter());
   app.use(createAgentClientsRouter());
   app.use(createApplyLinkRouter());
   app.use(createNotificationsRouter());
@@ -2017,6 +2020,12 @@ async function main() {
   const appBaseUrl = (process.env.ADMIN_APP_URL || config.webhookUrl || '').replace(/\/$/, '');
   const hireAgentSimulationVisible = await ensureHireAgentSimulationVisibleConfig();
   registerHandlers(bot, appBaseUrl, { hireAgentSimulationVisible });
+  const applyPriorityQueueState = initAgentApplyPriorityQueue();
+  if (applyPriorityQueueState.enabled) {
+    console.log('Agent apply-priority queue enabled (BullMQ + Bull Board).');
+  } else {
+    console.warn('Agent apply-priority queue disabled:', applyPriorityQueueState.reason);
+  }
 
   await logRejectionNotificationFilterStartup().catch((err) => {
     console.warn('Position apply screening startup filter check failed:', err?.message || err);

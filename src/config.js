@@ -55,6 +55,10 @@ export const config = {
   rejectionNotificationChatIds: parseCommaSeparatedIdSet(getEnv('REJECTION_NOTIFICATION_IDS')),
   /** Shared secret for POST/GET /api/cron/position-apply-screening/* (manual or external scheduler). */
   screeningCronSecret: getEnv('SCREENING_CRON_SECRET'),
+  /** Redis URL for BullMQ queues (e.g. redis://localhost:6379). */
+  redisUrl: getEnv('REDIS_URL'),
+  /** Shared secret for apply-priority queue cron/board endpoints. */
+  applyPriorityCronSecret: getEnv('APPLY_PRIORITY_CRON_SECRET') || getEnv('SCREENING_CRON_SECRET'),
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',

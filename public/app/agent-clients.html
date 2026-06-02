@@ -520,6 +520,8 @@
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
             <button id="analyzeApplyPriorityBtn" type="button" class="ghost-btn" disabled>Analyze apply priority</button>
             <span id="analyzeApplyPriorityLoader" class="loader" aria-hidden="true"></span>
+            <button id="queueAnalyzeAllClientsBtn" type="button" class="ghost-btn" disabled>Analyze all clients (background)</button>
+            <span id="queueAnalyzeAllClientsLoader" class="loader" aria-hidden="true"></span>
             <span id="applyPriorityStaleHint" class="apply-priority-stale-hint" style="display:none">Comment or resume changed — re-analyze</span>
             <span class="pager">
               <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Previous page">
@@ -701,6 +703,7 @@
       let applyPriorityCacheMeta = null;
       let applyPriorityStale = false;
       let isAnalyzingApplyPriority = false;
+      let isQueueingApplyPriorityAllClients = false;
 
       const PRIORITY_LABELS = {
         apply_first: 'Apply first',
@@ -1020,14 +1023,39 @@
       function updateApplyPriorityUi() {
         const btn = document.getElementById('analyzeApplyPriorityBtn');
         const loader = document.getElementById('analyzeApplyPriorityLoader');
+        const queueBtn = document.getElementById('queueAnalyzeAllClientsBtn');
+        const queueLoader = document.getElementById('queueAnalyzeAllClientsLoader');
         const staleHint = document.getElementById('applyPriorityStaleHint');
         const user = getSelectedUser();
         const canAnalyze = Boolean(user?.resumeUrl && q().seekerId && positions.length && !isSyncing);
         if (btn) btn.disabled = !canAnalyze || isAnalyzingApplyPriority;
         if (loader) loader.className = isAnalyzingApplyPriority ? 'loader on' : 'loader';
+        const canQueueAll = Boolean(positions.length && !isSyncing && (isBotAdminUser || isCareerAgentUser));
+        if (queueBtn) queueBtn.disabled = !canQueueAll || isQueueingApplyPriorityAllClients;
+        if (queueLoader) queueLoader.className = isQueueingApplyPriorityAllClients ? 'loader on' : 'loader';
         if (staleHint) {
           const showStale = applyPriorityStale && hasApplyPriorityData();
           staleHint.style.display = showStale ? '' : 'none';
+        }
+      }
+
+      async function queueAnalyzeApplyPriorityAllClients() {
+        if (isQueueingApplyPriorityAllClients) return;
+        if (!positions.length) throw new Error('Load jobs first.');
+        isQueueingApplyPriorityAllClients = true;
+        updateApplyPriorityUi();
+        try {
+          const payload = await api(
+            `${API_BASE}/api/app/agent/clients/apply-priority/enqueue-all${agentQueryPrefix()}`,
+            { method: 'POST', body: JSON.stringify({ jobs: positions }) }
+          );
+          setMsg(
+            'dashMsg',
+            `Queued background analysis for ${Number(payload?.enqueued || 0)} client(s) out of ${Number(payload?.totalAssignedWithResume || 0)} assigned with resume.`
+          );
+        } finally {
+          isQueueingApplyPriorityAllClients = false;
+          updateApplyPriorityUi();
         }
       }
       async function analyzeApplyPriority() {
@@ -1125,7 +1153,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -2247,6 +2275,9 @@
       document.getElementById('syncBtn').addEventListener('click', () => syncJobs().catch((e) => setMsg('dashMsg', e.message, true)));
       document.getElementById('analyzeApplyPriorityBtn').addEventListener('click', () => {
         analyzeApplyPriority().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('queueAnalyzeAllClientsBtn').addEventListener('click', () => {
+        queueAnalyzeApplyPriorityAllClients().catch((e) => setMsg('dashMsg', e.message, true));
       });
       document.getElementById('prevPageBtn').addEventListener('click', () => {
         const cur = q();
