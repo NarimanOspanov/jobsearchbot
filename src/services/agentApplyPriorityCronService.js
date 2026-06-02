@@ -84,7 +84,8 @@ async function enqueueClientDefaultPages({
 }) {
   const skillIds = normalizeSkillIdsCsv(client?.skills);
   const country = parseCountryCsv(client?.WorkAuthorizationCountries);
-  const showOnlyHighlyRelevant = Boolean(skillIds);
+  // Queue/cron uses broader job set than UI "client click" (which enables top matches).
+  const showOnlyHighlyRelevant = false;
   let totalFetched = 0;
   let totalQueued = 0;
   let skippedAlreadyRanked = 0;
