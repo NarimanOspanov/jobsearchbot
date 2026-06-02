@@ -89,6 +89,92 @@ function resolveEffectiveAgentUserId(req) {
   return req.actorUser.Id;
 }
 
+function buildApplyPriorityContextKey(client, jobs) {
+  const searchMode = String(client?.SearchMode || 'not_urgent').trim();
+  const comment = String(client?.Comment || '').trim();
+  const resumeUrl = String(client?.ResumeURL || '').trim();
+  const jobIds = (Array.isArray(jobs) ? jobs : [])
+    .map((job) => Number.parseInt(String(job?.id ?? ''), 10))
+    .filter((id) => Number.isSafeInteger(id))
+    .sort((a, b) => a - b)
+    .join(',');
+  return `${searchMode}|${comment}|${resumeUrl}|${jobIds}`;
+}
+
+async function persistApplyPriorityForPageJobs({ clientUserId, client, jobs, rankings, context }) {
+  const normalizedJobs = (Array.isArray(jobs) ? jobs : [])
+    .map((job) => ({
+      id: Number.parseInt(String(job?.id ?? ''), 10),
+      title: String(job?.title || '').trim(),
+      company: String(job?.company || '').trim(),
+      source: String(job?.source || '').trim() || null,
+      applyUrl: String(job?.applyUrl || '').trim() || null,
+      location: String(job?.location || '').trim() || null,
+      shortSummary: String(job?.shortSummary || '').trim() || null,
+    }))
+    .filter((job) => Number.isSafeInteger(job.id));
+  if (!normalizedJobs.length) return { createdCount: 0, updatedCount: 0, total: 0 };
+
+  const rankingByJobId = new Map(
+    (Array.isArray(rankings) ? rankings : []).map((row) => [Number.parseInt(String(row?.jobId ?? ''), 10), row])
+  );
+  const jobIds = normalizedJobs.map((job) => job.id);
+  const existingRows = await models.Applications.findAll({
+    where: {
+      UserId: clientUserId,
+      ScreenlyJobId: { [Sequelize.Op.in]: jobIds },
+    },
+  });
+  const existingByJobId = new Map(existingRows.map((row) => [Number(row.ScreenlyJobId), row]));
+  const contextKey = buildApplyPriorityContextKey(client, normalizedJobs);
+  const analyzedAt = new Date().toISOString();
+
+  let createdCount = 0;
+  let updatedCount = 0;
+  for (const job of normalizedJobs) {
+    const ranking = rankingByJobId.get(job.id);
+    if (!ranking) continue;
+    const applyPriorityJson = JSON.stringify({
+      score: Number(ranking.score) || 0,
+      applyRank: Number(ranking.applyRank) || 0,
+      priority: String(ranking.priority || 'good'),
+      justification: String(ranking.justification || ''),
+      skipReason: ranking.skipReason ? String(ranking.skipReason) : null,
+      analyzedAt,
+      contextKey,
+      context: context || null,
+    });
+
+    const row = existingByJobId.get(job.id);
+    if (row) {
+      await row.update({ ApplyPriorityJson: applyPriorityJson });
+      updatedCount += 1;
+      continue;
+    }
+
+    await models.Applications.create({
+      UserId: clientUserId,
+      VacancyTitle: (job.title || `Screenly #${job.id}`).slice(0, 255),
+      CompanyName: job.company ? job.company.slice(0, 255) : null,
+      Source: job.source ? job.source.slice(0, 50) : null,
+      ScreenlyJobId: job.id,
+      Status: 'new',
+      AppliedAt: new Date(),
+      MetaJson: JSON.stringify({
+        positionId: job.id,
+        applyUrl: job.applyUrl,
+        location: job.location,
+        shortSummary: job.shortSummary,
+        createdBy: 'agent-apply-priority',
+      }),
+      ApplyPriorityJson: applyPriorityJson,
+    });
+    createdCount += 1;
+  }
+
+  return { createdCount, updatedCount, total: createdCount + updatedCount };
+}
+
 export function createAgentClientsRouter() {
   const router = Router();
 
@@ -374,6 +460,13 @@ export function createAgentClientsRouter() {
       if (!jobs.length) return res.status(400).json({ error: 'jobs array is required' });
 
       const result = await rankJobsForAgentApply({ clientUser: client, jobs });
+      const persisted = await persistApplyPriorityForPageJobs({
+        clientUserId,
+        client,
+        jobs,
+        rankings: result.rankings,
+        context: result.context,
+      });
       console.info('apply-priority completed', {
         clientUserId,
         actorUserId: req.actorUser?.Id ?? null,
@@ -382,8 +475,11 @@ export function createAgentClientsRouter() {
         totalDurationMs: Date.now() - requestStartedAt,
         avgChunkDurationMs: result?.context?.avgChunkDurationMs ?? null,
         maxChunkDurationMs: result?.context?.maxChunkDurationMs ?? null,
+        persistedCount: persisted.total,
+        createdCount: persisted.createdCount,
+        updatedCount: persisted.updatedCount,
       });
-      return res.json({ ok: true, ...result });
+      return res.json({ ok: true, ...result, persisted });
     } catch (err) {
       const message = String(err?.message || err);
       if (message.includes('Upload client resume') || message.includes('Resume text is empty')) {

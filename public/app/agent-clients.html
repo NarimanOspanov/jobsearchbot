@@ -702,7 +702,6 @@
       let applyPriorityStale = false;
       let isAnalyzingApplyPriority = false;
 
-      const APPLY_PRIORITY_LS_PREFIX = 'agentApplyPriority:v1:';
       const PRIORITY_LABELS = {
         apply_first: 'Apply first',
         good: 'Good fit',
@@ -929,9 +928,6 @@
         }
         renderJobs();
       }
-      function applyPriorityStorageKey(seekerId) {
-        return `${APPLY_PRIORITY_LS_PREFIX}${seekerId}`;
-      }
       function hashJobIds(jobs) {
         return (Array.isArray(jobs) ? jobs : [])
           .map((j) => Number(j.id))
@@ -946,17 +942,58 @@
         const jobIdsHash = hashJobIds(jobs);
         return `${searchMode}|${comment}|${resumeUrl}|${jobIdsHash}`;
       }
-      function loadApplyPriorityCache(seekerId) {
+      function parseApplyPriorityJson(raw) {
+        if (!raw) return null;
         try {
-          const raw = localStorage.getItem(applyPriorityStorageKey(seekerId));
-          if (!raw) return null;
-          return JSON.parse(raw);
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          const applyRank = Number(parsed?.applyRank) || 0;
+          if (!applyRank) return null;
+          return {
+            score: Number(parsed?.score) || 0,
+            applyRank,
+            priority: String(parsed?.priority || 'good'),
+            justification: String(parsed?.justification || ''),
+            skipReason: parsed?.skipReason ? String(parsed.skipReason) : null,
+            contextKey: String(parsed?.contextKey || ''),
+            analyzedAt: String(parsed?.analyzedAt || ''),
+          };
         } catch {
           return null;
         }
       }
-      function saveApplyPriorityCache(seekerId, data) {
-        localStorage.setItem(applyPriorityStorageKey(seekerId), JSON.stringify(data));
+      function refreshApplyPriorityFromApplications() {
+        const seekerId = q().seekerId;
+        if (!seekerId) {
+          applyPriorityRankings = {};
+          applyPriorityCacheMeta = null;
+          applyPriorityStale = false;
+          updateApplyPriorityUi();
+          return;
+        }
+        const nextRankings = {};
+        const contextKeys = new Set();
+        const analyzedAtValues = [];
+        for (const app of applications || []) {
+          const jobId = Number(app?.ScreenlyJobId);
+          if (!Number.isFinite(jobId)) continue;
+          const ranking = parseApplyPriorityJson(app?.ApplyPriorityJson);
+          if (!ranking) continue;
+          nextRankings[jobId] = ranking;
+          if (ranking.contextKey) contextKeys.add(ranking.contextKey);
+          if (ranking.analyzedAt) analyzedAtValues.push(ranking.analyzedAt);
+        }
+        applyPriorityRankings = nextRankings;
+        const latestAnalyzedAt = analyzedAtValues.sort().at(-1) || '';
+        applyPriorityCacheMeta = {
+          contextKey: contextKeys.size === 1 ? [...contextKeys][0] : '',
+          updatedAt: latestAnalyzedAt,
+        };
+        const currentKey = buildApplyPriorityContextKey(getSelectedUser(), positions);
+        applyPriorityStale =
+          !Object.keys(nextRankings).length
+            ? false
+            : !applyPriorityCacheMeta.contextKey || applyPriorityCacheMeta.contextKey !== currentKey;
+        updateApplyPriorityUi();
       }
       function hasApplyPriorityData() {
         return Object.keys(applyPriorityRankings).length > 0;
@@ -971,40 +1008,11 @@
         if (n >= 50) return 'fit-mid';
         return 'fit-low';
       }
-      function refreshApplyPriorityFromStorage() {
-        const seekerId = q().seekerId;
-        if (!seekerId) {
-          applyPriorityRankings = {};
-          applyPriorityCacheMeta = null;
-          applyPriorityStale = false;
-          updateApplyPriorityUi();
-          return;
-        }
-        const user = getSelectedUser();
-        const cached = loadApplyPriorityCache(seekerId);
-        if (!cached?.rankings) {
-          applyPriorityRankings = {};
-          applyPriorityCacheMeta = null;
-          applyPriorityStale = false;
-          updateApplyPriorityUi();
-          return;
-        }
-        applyPriorityRankings = cached.rankings || {};
-        applyPriorityCacheMeta = {
-          contextKey: cached.contextKey || '',
-          updatedAt: cached.updatedAt || '',
-        };
-        const currentKey = buildApplyPriorityContextKey(user, positions);
-        applyPriorityStale = applyPriorityCacheMeta.contextKey !== currentKey;
-        updateApplyPriorityUi();
-      }
       function invalidateApplyPriorityCache({ clearRankings = false } = {}) {
         applyPriorityStale = true;
         if (clearRankings) {
           applyPriorityRankings = {};
           applyPriorityCacheMeta = null;
-          const seekerId = q().seekerId;
-          if (seekerId) localStorage.removeItem(applyPriorityStorageKey(seekerId));
         }
         updateApplyPriorityUi();
         renderJobs();
@@ -1050,15 +1058,7 @@
               skipReason: row.skipReason ? String(row.skipReason) : null,
             };
           }
-          const contextKey = buildApplyPriorityContextKey(user, positions);
-          const cachePayload = {
-            contextKey,
-            updatedAt: new Date().toISOString(),
-            rankings: rankingsMap,
-          };
-          saveApplyPriorityCache(seekerId, cachePayload);
-          applyPriorityRankings = rankingsMap;
-          applyPriorityCacheMeta = { contextKey, updatedAt: cachePayload.updatedAt };
+          await loadApplicationsByUser(seekerId);
           applyPriorityStale = false;
           jobsSort = { key: 'apply_priority', dir: 'asc' };
           renderJobs();
@@ -1719,6 +1719,7 @@
 
       async function loadApplicationsByUser(userId) {
         applications = await api(`${API_BASE}/api/app/applications/by-user?userId=${encodeURIComponent(userId)}&limit=100&offset=0${agentQuerySuffix()}`);
+        refreshApplyPriorityFromApplications();
       }
 
       async function syncJobs() {
@@ -1772,7 +1773,6 @@
             totalRows: Number(data.totalRows || data.count || positions.length),
           };
           await loadApplicationsByUser(seekerId);
-          refreshApplyPriorityFromStorage();
           renderJobs();
           updatePagerUi();
           setMsg('dashMsg', `Loaded ${pageInfo.count} jobs (page ${pageInfo.page}).`);

@@ -187,6 +187,16 @@ export function createApplicationsRouter() {
         updates.ScreenshotArtifactURL =
           toStringOrUndefined(req.body.screenshotArtifactUrl, 2048) ?? null;
       }
+      if (req.body.applyPriorityJson !== undefined) {
+        if (req.body.applyPriorityJson == null || req.body.applyPriorityJson === '') {
+          updates.ApplyPriorityJson = null;
+        } else if (typeof req.body.applyPriorityJson === 'string') {
+          // Accept pre-serialized payloads sent by legacy clients.
+          updates.ApplyPriorityJson = req.body.applyPriorityJson;
+        } else {
+          updates.ApplyPriorityJson = JSON.stringify(req.body.applyPriorityJson);
+        }
+      }
 
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: 'No valid fields to update' });

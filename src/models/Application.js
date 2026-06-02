@@ -62,6 +62,10 @@ export default function defineApplication(sequelize) {
         type: DataTypes.STRING(2048),
         allowNull: true,
       },
+      ApplyPriorityJson: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
     },
     {
       tableName: 'Applications',
