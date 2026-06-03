@@ -501,6 +501,13 @@
               </div>
               <button type="button" id="workAuthHintBtn" class="hint-btn" title="What is Work auth?" aria-label="What is Work auth?">?</button>
             </div>
+            <div class="row date-range-row">
+              <label>Priority</label>
+              <div class="skills-picker">
+                <button id="priorityPickerBtn" type="button" class="skills-picker-btn">All priorities</button>
+                <div id="priorityPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+              </div>
+            </div>
             <div id="sourceFilterRow" class="row date-range-row" style="display:none" hidden>
               <label>Source
                 <select id="sourceSel">
@@ -696,6 +703,7 @@
       let isSkillPickerOpen = false;
       let isSourcePickerOpen = false;
       let isCountryPickerOpen = false;
+      let isPriorityPickerOpen = false;
       let isUploadingClientResume = false;
       let useRemotePositionsApi = false;
       let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
@@ -712,6 +720,12 @@
         low: 'Low priority',
         skip: 'Skip',
       };
+
+      const PRIORITY_FILTER_OPTIONS = [
+        { value: 'apply_first', label: PRIORITY_LABELS.apply_first },
+        { value: 'good', label: PRIORITY_LABELS.good },
+        { value: 'low', label: PRIORITY_LABELS.low },
+      ];
 
       const COUNTRY_AUTH_OPTIONS = [
         { value: 'kazakhstan', label: 'Kazakhstan' },
@@ -759,6 +773,7 @@
           source: p.get('source') || '',
           showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || '',
           country: p.get('country') || '',
+          priorities: p.get('priorities') || '',
           jobId: p.get('jobId') || '',
           agentUserId: p.get('agentUserId') || '',
           page: p.get('page') || '1',
@@ -979,6 +994,7 @@
           applyPriorityCacheMeta = null;
           applyPriorityStale = false;
           updateApplyPriorityUi();
+          updatePriorityPickerUi();
           return;
         }
         const nextRankings = {};
@@ -1010,6 +1026,7 @@
             ? false
             : storedClientKeys.size > 0 && (!currentClientKey || !storedClientKeys.has(currentClientKey));
         updateApplyPriorityUi();
+        updatePriorityPickerUi();
       }
       function hasApplyPriorityData() {
         return Object.keys(applyPriorityRankings).length > 0;
@@ -1017,6 +1034,34 @@
       function getJobApplyRanking(jobId) {
         const id = Number(jobId);
         return applyPriorityRankings[id] || applyPriorityRankings[String(jobId)] || null;
+      }
+      function getSelectedPriorities() {
+        const checked = document.querySelectorAll('#priorityPickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => String(opt.value || '').trim())
+          .filter((value) => PRIORITY_FILTER_OPTIONS.some((item) => item.value === value));
+      }
+      function getSelectedPrioritiesCsv() {
+        return getSelectedPriorities().join(',');
+      }
+      function jobMatchesPriorityFilter(jobId) {
+        const selected = getSelectedPriorities();
+        if (!selected.length) return true;
+        const ranking = getJobApplyRanking(jobId);
+        if (!ranking) return true;
+        return selected.includes(ranking.priority);
+      }
+      function countVisibleJobsAfterPriorityFilter() {
+        return (Array.isArray(positions) ? positions : []).filter((p) => jobMatchesPriorityFilter(p.id)).length;
+      }
+      function buildJobsDashMessage() {
+        const loaded = Number(pageInfo.count || positions.length) || 0;
+        const visible = countVisibleJobsAfterPriorityFilter();
+        let msg = `Loaded ${loaded} jobs (page ${pageInfo.page}).`;
+        if (getSelectedPriorities().length && visible !== loaded) {
+          msg += ` Showing ${visible} after priority filter.`;
+        }
+        return msg;
       }
       function fitScoreClass(score) {
         const n = Number(score);
@@ -1166,11 +1211,12 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
         updateHighlyRelevantFilterState();
+        updatePriorityPickerUi();
         renderClientResumeUi();
         updateApplyPriorityUi();
       }
@@ -1760,6 +1806,56 @@
         document.getElementById('sourcePickerMenu').classList.remove('open');
       }
 
+      function renderPriorityPickerOptions() {
+        const menu = document.getElementById('priorityPickerMenu');
+        if (!menu) return;
+        menu.innerHTML = PRIORITY_FILTER_OPTIONS.map(
+          (item) =>
+            `<label class="skill-check"><input type="checkbox" value="${attrEsc(item.value)}" />${esc(item.label)}</label>`
+        ).join('');
+      }
+
+      function applySelectedPrioritiesCsv(csv) {
+        const selected = new Set(
+          String(csv || '')
+            .split(',')
+            .map((v) => v.trim())
+            .filter((value) => PRIORITY_FILTER_OPTIONS.some((item) => item.value === value))
+        );
+        document.querySelectorAll('#priorityPickerMenu input[type="checkbox"]').forEach((opt) => {
+          opt.checked = selected.has(String(opt.value || '').trim());
+        });
+        renderPriorityPickerSummary();
+      }
+
+      function renderPriorityPickerSummary() {
+        const selected = getSelectedPriorities();
+        const btn = document.getElementById('priorityPickerBtn');
+        if (!btn) return;
+        btn.textContent = selected.length ? `${selected.length} priorit${selected.length === 1 ? 'y' : 'ies'} selected` : 'All priorities';
+      }
+
+      function updatePriorityPickerUi() {
+        const btn = document.getElementById('priorityPickerBtn');
+        if (!btn) return;
+        btn.disabled = isSyncing;
+        if (!hasApplyPriorityData()) {
+          btn.title = 'Run analyze apply priority first to filter ranked jobs (unranked jobs always stay visible)';
+        } else {
+          btn.title = '';
+        }
+      }
+
+      function openPriorityPicker() {
+        isPriorityPickerOpen = true;
+        document.getElementById('priorityPickerMenu')?.classList.add('open');
+      }
+
+      function closePriorityPicker() {
+        isPriorityPickerOpen = false;
+        document.getElementById('priorityPickerMenu')?.classList.remove('open');
+      }
+
       function clearFiltersToLastWeek() {
         const now = new Date();
         const to = localIsoDate(now);
@@ -1771,6 +1867,7 @@
         applySelectedSkillIdsCsv('');
         applySelectedApplyTypesCsv('');
         applySelectedCountriesCsv('');
+        applySelectedPrioritiesCsv('');
         document.getElementById('sourceSel').value = '';
         document.getElementById('showOnlyHighlyRelevant').checked = false;
         setQ({
@@ -1780,6 +1877,7 @@
           applyTypes: '',
           source: '',
           country: '',
+          priorities: '',
           showOnlyHighlyRelevant: '',
           page: '1',
           jobId: '',
@@ -1860,7 +1958,7 @@
           await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
           renderJobs();
           updatePagerUi();
-          setMsg('dashMsg', `Loaded ${pageInfo.count} jobs (page ${pageInfo.page}).`);
+          setMsg('dashMsg', buildJobsDashMessage());
         } finally {
           setSyncBusy(false);
           updatePagerUi();
@@ -1900,7 +1998,14 @@
           updateApplyPriorityUi();
           return;
         }
-        const sorted = [...positions].sort(compareJobs);
+        const sorted = [...positions].sort(compareJobs).filter((p) => jobMatchesPriorityFilter(p.id));
+        if (!sorted.length) {
+          body.innerHTML = `<tr><td colspan="${colCount}" class="muted">No jobs match the current priority filter.</td></tr>`;
+          updateApplyPriorityUi();
+          updatePriorityPickerUi();
+          if (positions.length) setMsg('dashMsg', buildJobsDashMessage());
+          return;
+        }
         body.innerHTML = sorted.map((p) => {
           const app = appByScreenlyId(p.id);
           const rowCls = applyPriorityRowClass(p, app);
@@ -1935,6 +2040,8 @@
           });
         });
         updateApplyPriorityUi();
+        updatePriorityPickerUi();
+        if (positions.length) setMsg('dashMsg', buildJobsDashMessage());
       }
 
       async function ensureApplication(seekerId, job) {
@@ -2316,6 +2423,7 @@
         hydrateStateToInputs();
         renderSourcePickerOptions();
         renderCountryPickerOptions();
+        renderPriorityPickerOptions();
         if (isBotAdminUser) await loadAgents();
         await Promise.all([loadClients(), loadSkills()]);
         renderSelectedUserInfo();
@@ -2324,6 +2432,7 @@
         const s = q();
         applySelectedApplyTypesCsv(s.applyTypes || '');
         applySelectedCountriesCsv(s.country || '');
+        applySelectedPrioritiesCsv(s.priorities || '');
         const bootUser = s.seekerId
           ? users.find((u) => String(u.id) === String(s.seekerId)) || null
           : null;
@@ -2388,6 +2497,10 @@
         if (isCountryPickerOpen) closeCountryPicker();
         else openCountryPicker();
       });
+      document.getElementById('priorityPickerBtn').addEventListener('click', () => {
+        if (isPriorityPickerOpen) closePriorityPicker();
+        else openPriorityPicker();
+      });
       document.getElementById('skillPickerMenu').addEventListener('change', () => {
         renderSkillPickerSummary();
         setQ({ skillIds: getSelectedSkillIdsCsv(), page: 1 });
@@ -2399,6 +2512,11 @@
       document.getElementById('countryPickerMenu').addEventListener('change', () => {
         renderCountryPickerSummary();
         setQ({ country: getSelectedCountriesCsv(), page: 1 });
+      });
+      document.getElementById('priorityPickerMenu').addEventListener('change', () => {
+        renderPriorityPickerSummary();
+        setQ({ priorities: getSelectedPrioritiesCsv() });
+        renderJobs();
       });
       document.addEventListener('click', (event) => {
         const skillBtn = document.getElementById('skillPickerBtn');
@@ -2415,6 +2533,11 @@
         const countryMenu = document.getElementById('countryPickerMenu');
         if (isCountryPickerOpen && countryBtn && countryMenu && !countryBtn.contains(event.target) && !countryMenu.contains(event.target)) {
           closeCountryPicker();
+        }
+        const priorityBtn = document.getElementById('priorityPickerBtn');
+        const priorityMenu = document.getElementById('priorityPickerMenu');
+        if (isPriorityPickerOpen && priorityBtn && priorityMenu && !priorityBtn.contains(event.target) && !priorityMenu.contains(event.target)) {
+          closePriorityPicker();
         }
       });
       document.getElementById('showOnlyHighlyRelevant').addEventListener('change', (event) => {
