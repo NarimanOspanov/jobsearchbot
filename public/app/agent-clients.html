@@ -43,10 +43,22 @@
         grid-template-columns: 1fr;
         align-items: stretch;
       }
+      .selected-client-bar {
+        font-size: 13px;
+        color: var(--muted);
+        margin: 0 0 8px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--border);
+      }
       @media (min-width: 1024px) {
         .layout {
           grid-template-columns: minmax(200px, 22%) minmax(0, 78%);
           min-height: calc(100vh - 56px);
+        }
+        .layout.clients-column-hidden {
+          grid-template-columns: minmax(0, 1fr);
         }
         .layout .card.layout-col {
           min-height: 0;
@@ -418,8 +430,8 @@
         </label>
       </div>
 
-      <div class="layout">
-        <section class="card layout-col">
+      <div id="mainLayout" class="layout">
+        <section id="clientsColumnSection" class="card layout-col">
           <h2>Clients</h2>
           <div id="usersList" class="users-list layout-col-body"></div>
         </section>
@@ -428,10 +440,12 @@
           <div class="section-head-row">
             <h2>Client applications</h2>
             <div class="section-head-actions">
+              <button id="toggleClientsColumnBtn" type="button" class="ghost-btn">Hide clients</button>
               <button id="toggleFiltersBtn" type="button" class="ghost-btn">Show filters</button>
               <button id="toggleUserInfoBtn" type="button" class="ghost-btn">Show user info</button>
             </div>
           </div>
+          <p id="selectedClientBar" class="selected-client-bar" style="display:none"></p>
           <div id="userInfoSection" style="display:none">
             <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
             <div id="clientCommentBlock" class="client-comment-block" style="display:none">
@@ -700,6 +714,7 @@
       let isJobBusy = false;
       let isUserInfoHidden = true;
       let isFiltersHidden = true;
+      let isClientsColumnHidden = false;
       let isSkillPickerOpen = false;
       let isSourcePickerOpen = false;
       let isCountryPickerOpen = false;
@@ -774,6 +789,7 @@
           showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || '',
           country: p.get('country') || '',
           priorities: p.get('priorities') || '',
+          hideClients: p.get('hideClients') || '',
           jobId: p.get('jobId') || '',
           agentUserId: p.get('agentUserId') || '',
           page: p.get('page') || '1',
@@ -1320,6 +1336,34 @@
         if (section) section.style.display = isFiltersHidden ? 'none' : '';
         if (btn) btn.textContent = isFiltersHidden ? 'Show filters' : 'Hide filters';
       }
+      function renderSelectedClientBar() {
+        const bar = document.getElementById('selectedClientBar');
+        if (!bar) return;
+        if (!isClientsColumnHidden || !q().seekerId) {
+          bar.style.display = 'none';
+          bar.textContent = '';
+          return;
+        }
+        const user = getSelectedUser();
+        const label = user
+          ? `#${user.id} ${String(user.displayName || user.telegramUserName || '').trim()}`.trim()
+          : `Client #${q().seekerId}`;
+        bar.style.display = '';
+        bar.textContent = `Viewing: ${label}`;
+      }
+      function setClientsColumnVisibility(hidden, { updateQuery = true } = {}) {
+        isClientsColumnHidden = !!hidden;
+        const section = document.getElementById('clientsColumnSection');
+        const layout = document.getElementById('mainLayout');
+        const btn = document.getElementById('toggleClientsColumnBtn');
+        if (section) section.style.display = isClientsColumnHidden ? 'none' : '';
+        if (layout) layout.classList.toggle('clients-column-hidden', isClientsColumnHidden);
+        if (btn) btn.textContent = isClientsColumnHidden ? 'Show clients' : 'Hide clients';
+        renderSelectedClientBar();
+        if (updateQuery) {
+          setQ({ hideClients: isClientsColumnHidden ? '1' : '' });
+        }
+      }
       function openCvModal(title, url) {
         document.getElementById('cvModalTitle').textContent = title || 'Document';
         document.getElementById('cvModalFrame').src = url || 'about:blank';
@@ -1426,6 +1470,7 @@
             });
           });
         });
+        renderSelectedClientBar();
       }
       function renderSelectedUserInfo() {
         const el = document.getElementById('selectedUserInfo');
@@ -2312,6 +2357,7 @@
         applyUserWorkAuthToFilters(user, { force: true });
         renderUsers();
         renderSelectedUserInfo();
+        renderSelectedClientBar();
         try {
           await syncJobs();
         } catch (err) {
@@ -2429,6 +2475,7 @@
         renderSelectedUserInfo();
         setUserInfoVisibility(true);
         setFiltersVisibility(true);
+        setClientsColumnVisibility(isTruthyQueryParam(q().hideClients), { updateQuery: false });
         const s = q();
         applySelectedApplyTypesCsv(s.applyTypes || '');
         applySelectedCountriesCsv(s.country || '');
@@ -2572,6 +2619,9 @@
         if (event.target.id === 'workAuthHintModal') {
           document.getElementById('workAuthHintModal').classList.remove('on');
         }
+      });
+      document.getElementById('toggleClientsColumnBtn').addEventListener('click', () => {
+        setClientsColumnVisibility(!isClientsColumnHidden);
       });
       document.getElementById('toggleFiltersBtn').addEventListener('click', () => {
         setFiltersVisibility(!isFiltersHidden);
