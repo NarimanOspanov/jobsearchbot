@@ -4,8 +4,13 @@ import { screeningCronSecretAuth } from '../../middleware/cronSecretAuth.js';
 import {
   buildScreeningJobsUi,
   getPositionApplyScreeningStatus,
-  processDueScreeningResponses,
 } from '../../services/positionApplyScreeningService.js';
+import {
+  enqueueScreeningTick,
+  getPositionApplyScreeningQueueSnapshot,
+  getPositionApplyScreeningQueueState,
+  initPositionApplyScreeningQueue,
+} from '../../services/positionApplyScreeningQueueService.js';
 
 function parseRunOptions(req) {
   const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || req.body?.limit || '50'), 10) || 50));
@@ -34,6 +39,15 @@ function parseRunOptions(req) {
 
 export function createCronRouter() {
   const router = Router();
+  const queueState = initPositionApplyScreeningQueue();
+
+  if (queueState?.boardAdapter) {
+    router.use(
+      '/api/cron/position-apply-screening/board',
+      screeningCronSecretAuth,
+      queueState.boardAdapter.getRouter()
+    );
+  }
 
   router.get('/api/cron/position-apply-screening/status', screeningCronSecretAuth, async (req, res) => {
     try {
@@ -42,10 +56,12 @@ export function createCronRouter() {
         rejectionNotificationIds,
         onlyUserApplicationId,
       });
+      const queueSnapshot = await getPositionApplyScreeningQueueSnapshot();
       return res.json({
         ok: true,
         telegramReady: Boolean(runtimeBot.telegram),
         cronHealth: screeningCronHealthState,
+        queue: queueSnapshot,
         jobsUi: buildScreeningJobsUi(),
         ...status,
       });
@@ -57,19 +73,19 @@ export function createCronRouter() {
 
   const runScreening = async (req, res) => {
     try {
-      if (!runtimeBot.telegram) {
-        return res.status(503).json({ error: 'Telegram bot is unavailable (process not ready)' });
+      if (!getPositionApplyScreeningQueueState().enabled) {
+        return res.status(503).json({
+          error: 'Position apply screening queue is disabled (REDIS_URL is missing)',
+        });
       }
       const { limit, rejectionNotificationIds, onlyUserApplicationId } = parseRunOptions(req);
-      const result = await processDueScreeningResponses({
-        telegram: runtimeBot.telegram,
+      const enqueued = await enqueueScreeningTick({
         limit,
         rejectionNotificationIds,
         onlyUserApplicationId,
-        jobsUi: buildScreeningJobsUi(),
+        requestedBy: req.query.requestedBy || req.body?.requestedBy || 'cron-manual',
       });
-      console.log('Manual position apply screening run:', result);
-      return res.json({ ok: true, ...result });
+      return res.json({ ok: true, telegramReady: Boolean(runtimeBot.telegram), ...enqueued });
     } catch (err) {
       console.error('position-apply-screening run:', err);
       return res.status(500).json({ error: 'Failed to run position apply screening', message: err?.message });

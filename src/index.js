@@ -70,11 +70,9 @@ import { notifyPublisherOfNewApplication } from './services/publisherApplyNotifi
 import {
   buildOpenJobsReplyMarkup,
   buildScreeningAckText,
-  buildScreeningJobsUi,
   computeScreeningResponseDueAt,
   getPositionApplyScreeningResponseMinutes,
   logRejectionNotificationFilterStartup,
-  processDueScreeningResponses,
   sendScreeningAcknowledgment,
   USER_APPLICATION_STATUS,
 } from './services/positionApplyScreeningService.js';
@@ -100,7 +98,6 @@ import {
   clearPositionApplyAttributionStores,
   cvScoreResultByUserId,
   runtimeBot,
-  screeningCronHealthState,
 } from './bot/state.js';
 
 // routes
@@ -120,6 +117,7 @@ import { createApplyLinkRouter } from './routes/api/applyLink.js';
 import { createNotificationsRouter } from './routes/api/notifications.js';
 import { startApplyPriorityHourlyCronIfNeeded } from './services/agentApplyPriorityCronScheduler.js';
 import { initAgentApplyPriorityQueue } from './services/agentApplyPriorityQueueService.js';
+import { startPositionApplyScreeningCronIfNeeded } from './services/positionApplyScreeningCronScheduler.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1702,7 +1700,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<b>Position apply screening</b>',
       'Config <code>PositionApplyScreeningResponseMin</code> (default 4320 = 3 days) — minutes until auto rejection',
       'Env <code>REJECTION_NOTIFICATION_IDS</code> — optional comma-separated Users.TelegramChatId (or Users.Id for testing); empty = all',
-      'Env <code>SCREENING_CRON_SECRET</code> — secret for <code>GET/POST /api/cron/position-apply-screening/run</code>',
+      'Env <code>SCREENING_CRON_SECRET</code> — secret for screening cron/board (<code>/api/cron/position-apply-screening/board</code>)',
       'API <code>POST /api/app/admin/position-apply-screening/run</code> — process due screening responses',
       'API <code>GET /api/app/admin/user-application-outreach</code> — applicant outreach audit log',
       '',
@@ -2060,48 +2058,13 @@ async function main() {
     console.log('Polling started. Bot is ready.');
   }
 
-  const screeningJobsUi = buildScreeningJobsUi();
-  let screeningCronRunning = false;
-  const runScreeningCron = async () => {
-    if (screeningCronRunning || !runtimeBot.telegram) return;
-    screeningCronRunning = true;
-    screeningCronHealthState.running = true;
-    screeningCronHealthState.lastStartedAt = new Date().toISOString();
-    try {
-      const result = await processDueScreeningResponses({
-        telegram: runtimeBot.telegram,
-        jobsUi: screeningJobsUi,
-      });
-      screeningCronHealthState.lastResult = result;
-      screeningCronHealthState.lastError = null;
-      if (result.processed > 0 || result.warning || result.rejectionNotificationChatIds) {
-        console.log('Position apply screening cron:', result);
-      }
-    } catch (err) {
-      screeningCronHealthState.lastError = err?.message || String(err);
-      console.error('Position apply screening cron error:', err?.message || err);
-    } finally {
-      screeningCronRunning = false;
-      screeningCronHealthState.running = false;
-      screeningCronHealthState.runCount += 1;
-      screeningCronHealthState.lastFinishedAt = new Date().toISOString();
+  const screeningCronStart = startPositionApplyScreeningCronIfNeeded();
+  if (!screeningCronStart.started) {
+    if (screeningCronStart.reason === 'SCREENING_CRON_ENABLED=false') {
+      console.log('Position apply screening cron disabled (SCREENING_CRON_ENABLED=false).');
+    } else if (screeningCronStart.reason !== 'already_scheduled') {
+      console.log('Position apply screening cron not started:', screeningCronStart.reason);
     }
-  };
-  setTimeout(() => {
-    runScreeningCron().catch((err) => {
-      console.error('Position apply screening startup run error:', err?.message || err);
-    });
-  }, 30 * 1000);
-  setInterval(runScreeningCron, 60 * 1000);
-  screeningCronHealthState.intervalMs = 60 * 1000;
-  screeningCronHealthState.startupDelayMs = 30 * 1000;
-  const rejectionChatFilter = config.rejectionNotificationChatIds;
-  if (rejectionChatFilter.size > 0) {
-    console.log(
-      `Position apply screening cron: TEST MODE — only TelegramChatIds=[${Array.from(rejectionChatFilter).join(', ')}] (unset REJECTION_NOTIFICATION_IDS for all users)`
-    );
-  } else {
-    console.log('Position apply screening cron scheduled (every 1 min, first run in ~30 s)');
   }
 
 }

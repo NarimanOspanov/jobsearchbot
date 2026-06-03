@@ -116,6 +116,7 @@ export const runtimeBot = {
 };
 
 export const screeningCronHealthState = {
+  enabled: false,
   intervalMs: 60_000,
   startupDelayMs: 30_000,
   running: false,

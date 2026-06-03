@@ -55,6 +55,16 @@ export const config = {
   rejectionNotificationChatIds: parseCommaSeparatedIdSet(getEnv('REJECTION_NOTIFICATION_IDS')),
   /** Shared secret for POST/GET /api/cron/position-apply-screening/* (manual or external scheduler). */
   screeningCronSecret: getEnv('SCREENING_CRON_SECRET'),
+  /** Run position-apply-screening cron (Redis queue, or in-process fallback without REDIS_URL). */
+  screeningCronEnabled: String(process.env.SCREENING_CRON_ENABLED || 'true').toLowerCase() !== 'false',
+  screeningCronIntervalMs: Math.max(
+    10_000,
+    Number.parseInt(process.env.SCREENING_CRON_INTERVAL_MS || '60000', 10) || 60_000
+  ),
+  screeningCronStartupDelayMs: Math.max(
+    0,
+    Number.parseInt(process.env.SCREENING_CRON_STARTUP_DELAY_MS || '30000', 10) || 30_000
+  ),
   /** Redis URL for BullMQ queues (e.g. rediss://:password@host:10000). */
   redisUrl: getEnv('REDIS_URL'),
   /** Set true only for true OSS Redis Cluster (not Azure Managed Redis Enterprise). */
