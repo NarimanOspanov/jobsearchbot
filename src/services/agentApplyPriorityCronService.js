@@ -1,7 +1,17 @@
 import { Sequelize } from 'sequelize';
+import { config } from '../config.js';
 import { models } from '../db.js';
 import { buildAnyhiresPositionsSearchParams } from '../utils/positionUpstreamQuery.js';
 import { enqueueApplyPriorityJobsForClients, getAgentApplyPriorityQueueState } from './agentApplyPriorityQueueService.js';
+
+/** Hard stop when maxPages is unlimited (hasMore loop). */
+const CRON_ABSOLUTE_MAX_PAGES = 200;
+
+function normalizeCronMaxPages(maxPages) {
+  const parsed = Number.parseInt(String(maxPages ?? config.applyPriorityCronMaxPages ?? '0'), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.min(CRON_ABSOLUTE_MAX_PAGES, parsed);
+}
 
 function localIsoDate(date) {
   const y = date.getFullYear();
@@ -93,7 +103,8 @@ async function enqueueClientDefaultPages({
   let pagesWithJobs = 0;
   const queueJobIds = [];
 
-  for (let page = 1; page <= maxPages; page += 1) {
+  let page = 1;
+  while (true) {
     const query = {
       from,
       to,
@@ -129,6 +140,17 @@ async function enqueueClientDefaultPages({
     }
 
     if (!payload.hasMore || pageJobs.length === 0) break;
+    const atConfiguredLimit = maxPages != null && page >= maxPages;
+    const atAbsoluteLimit = page >= CRON_ABSOLUTE_MAX_PAGES;
+    if (atConfiguredLimit || atAbsoluteLimit) {
+      if (atAbsoluteLimit && maxPages == null) {
+        console.warn(
+          `Apply-priority cron: absolute page cap (${CRON_ABSOLUTE_MAX_PAGES}) for client ${client.Id}`
+        );
+      }
+      break;
+    }
+    page += 1;
   }
 
   return {
@@ -153,17 +175,17 @@ async function enqueueClientDefaultPages({
 
 export async function enqueueApplyPriorityForDefaultClientSearches({
   agentUserId = null,
-  pageSize = 100,
-  maxPages = 5,
+  pageSize = config.applyPriorityCronPageSize,
+  maxPages = config.applyPriorityCronMaxPages,
   requestedBy = null,
-}) {
+} = {}) {
   const queueState = getAgentApplyPriorityQueueState();
   if (!queueState.enabled) {
     throw new Error('Apply priority queue is disabled. Configure REDIS_URL first.');
   }
 
   const normalizedPageSize = Math.min(200, Math.max(1, Number.parseInt(String(pageSize || '100'), 10) || 100));
-  const normalizedMaxPages = Math.min(20, Math.max(1, Number.parseInt(String(maxPages || '5'), 10) || 5));
+  const normalizedMaxPages = normalizeCronMaxPages(maxPages);
   const normalizedAgentUserId = Number.isSafeInteger(Number(agentUserId)) && Number(agentUserId) > 0
     ? Number(agentUserId)
     : null;

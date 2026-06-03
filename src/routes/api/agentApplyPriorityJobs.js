@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { applyPriorityCronHealthState } from '../../bot/state.js';
+import { config } from '../../config.js';
 import { models } from '../../db.js';
 import { applyPriorityCronSecretAuth } from '../../middleware/applyPriorityCronSecretAuth.js';
 import {
@@ -71,8 +72,14 @@ export function createAgentApplyPriorityJobsRouter() {
   const enqueueDefault = async (req, res) => {
     try {
       const agentUserId = parseAgentUserId(req);
-      const pageSize = Number.parseInt(String(req.query.pageSize || req.body?.pageSize || '100'), 10);
-      const maxPages = Number.parseInt(String(req.query.maxPages || req.body?.maxPages || '5'), 10);
+      const pageSize = Number.parseInt(
+        String(req.query.pageSize ?? req.body?.pageSize ?? config.applyPriorityCronPageSize),
+        10
+      );
+      const maxPagesRaw = req.query.maxPages ?? req.body?.maxPages;
+      const maxPages = maxPagesRaw !== undefined && maxPagesRaw !== ''
+        ? Number.parseInt(String(maxPagesRaw), 10)
+        : config.applyPriorityCronMaxPages;
       const payload = await enqueueApplyPriorityForDefaultClientSearches({
         agentUserId,
         pageSize,

@@ -69,6 +69,16 @@ export const config = {
     Number.parseInt(process.env.APPLY_PRIORITY_CRON_INTERVAL_MS || String(60 * 60 * 1000), 10) ||
       60 * 60 * 1000
   ),
+  /** Jobs per Anyhires page when cron enqueues apply-priority (default 100, max 200). */
+  applyPriorityCronPageSize: Math.min(
+    200,
+    Math.max(1, Number.parseInt(process.env.APPLY_PRIORITY_CRON_PAGE_SIZE || '100', 10) || 100)
+  ),
+  /**
+   * Max pages per client per cron run. 0 or unset = all pages until hasMore (capped at 200 pages).
+   * Set e.g. 10 to limit API load per tick.
+   */
+  applyPriorityCronMaxPages: Number.parseInt(process.env.APPLY_PRIORITY_CRON_MAX_PAGES || '0', 10) || 0,
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',

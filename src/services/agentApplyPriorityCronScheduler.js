@@ -31,6 +31,8 @@ export function startApplyPriorityHourlyCronIfNeeded() {
     try {
       const result = await enqueueApplyPriorityForDefaultClientSearches({
         requestedBy: 'cron-hourly',
+        pageSize: config.applyPriorityCronPageSize,
+        maxPages: config.applyPriorityCronMaxPages,
       });
       applyPriorityCronHealthState.lastResult = result;
       applyPriorityCronHealthState.lastError = null;
