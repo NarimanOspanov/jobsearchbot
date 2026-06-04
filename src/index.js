@@ -2011,6 +2011,15 @@ async function main() {
     }
   }
 
+  const screeningCronEarly = startPositionApplyScreeningCronIfNeeded();
+  if (!screeningCronEarly.started) {
+    if (screeningCronEarly.reason === 'SCREENING_CRON_ENABLED=false') {
+      console.log('Position apply screening cron disabled (SCREENING_CRON_ENABLED=false).');
+    } else if (screeningCronEarly.reason !== 'already_scheduled') {
+      console.log('Position apply screening cron not started:', screeningCronEarly.reason);
+    }
+  }
+
   const bot = new Telegraf(config.telegramBotToken, { handlerTimeout: 300_000 });
   console.log('Checking Telegram connection (getMe)...');
 
@@ -2058,16 +2067,8 @@ async function main() {
     console.log('Polling started. Bot is ready.');
   }
 
-  const screeningCronStart = startPositionApplyScreeningCronIfNeeded();
-  if (!screeningCronStart.started) {
-    if (screeningCronStart.reason === 'SCREENING_CRON_ENABLED=false') {
-      console.log('Position apply screening cron disabled (SCREENING_CRON_ENABLED=false).');
-    } else if (screeningCronStart.reason !== 'already_scheduled') {
-      console.log('Position apply screening cron not started:', screeningCronStart.reason);
-    }
-  }
-
 }
+
 
 main().catch((err) => {
   console.error('Fatal:', err);
