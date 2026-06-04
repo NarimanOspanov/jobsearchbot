@@ -10,7 +10,10 @@ export function applyPriorityCronSecretAuth(req, res, next) {
   }
   const provided = String(req.headers['x-cron-secret'] || req.query.secret || '').trim();
   const cookieHeader = String(req.headers.cookie || '');
-  const hasAuthCookie = cookieHeader.split(';').some((part) => part.trim() === 'apply_priority_cron_auth=1');
+  const hasAuthCookie = cookieHeader.split(';').some((part) => {
+    const trimmed = part.trim();
+    return trimmed === 'apply_priority_cron_auth=1' || trimmed === 'screening_cron_auth=1';
+  });
   if ((!provided || provided !== expected) && !hasAuthCookie) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
