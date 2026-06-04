@@ -39,6 +39,11 @@ function parseRunOptions(req) {
 
 export function createCronRouter() {
   const router = Router();
+
+  router.use('/cron/position-apply-screening', (req, res) => {
+    res.redirect(308, `/api${req.originalUrl}`);
+  });
+
   const queueState = initPositionApplyScreeningQueue();
 
   if (queueState?.boardAdapter) {

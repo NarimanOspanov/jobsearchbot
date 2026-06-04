@@ -1,8 +1,8 @@
 import { config } from '../config.js';
 
-/** Requires header `X-Cron-Secret` or query `secret` matching SCREENING_CRON_SECRET. */
+/** Requires header `X-Cron-Secret` or query `secret` matching SCREENING_CRON_SECRET (or APPLY_PRIORITY_CRON_SECRET). */
 export function screeningCronSecretAuth(req, res, next) {
-  const expected = config.screeningCronSecret;
+  const expected = config.screeningCronSecret || config.applyPriorityCronSecret;
   if (!expected) {
     return res.status(503).json({
       error: 'SCREENING_CRON_SECRET is not configured on the server',
