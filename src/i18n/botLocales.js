@@ -68,7 +68,10 @@ export const BOT_LOCALES = {
       'Отправьте резюме файлом (PDF или изображение) — я разберу его и начну работу.\nКогда потребуются действия, я напишу.',
 
     hire_human_welcome:
-      'Здравствуйте! Вы оставили заявку на персонального ассистента по поиску работы.\n\nОтправьте резюме файлом (PDF или изображение) — мы разберём его и свяжемся с вами в ближайшее время.',
+      'Здравствуйте! Для того чтобы оставить заявку на услугу персонального ассистента, загрузите ваше резюме для оценки.',
+    hire_human_upload_cv:
+      'Отправьте резюме файлом PDF — мы разберём его и свяжемся с вами в ближайшее время.',
+    btn_hire_human_upload_cv: 'Загрузить резюме',
     hire_human_request_received:
       '✅ Спасибо! Мы получили вашу заявку и резюме. Персональный ассистент свяжется с вами в ближайшее время.\n\nПока можете посмотреть открытые вакансии с 100% удалёнкой.',
 
@@ -289,7 +292,10 @@ export const BOT_LOCALES = {
       'Send your resume as a file (PDF or image) — I will parse it and get started.\nI will message you when we need your input.',
 
     hire_human_welcome:
-      'Hello! You requested a personal human assistant for your job search.\n\nPlease send your resume as a file (PDF or image). We will review it and contact you shortly.',
+      'Hello! To request a personal assistant service, please upload your resume for review.',
+    hire_human_upload_cv:
+      'Send your resume as a PDF file — we will review it and contact you shortly.',
+    btn_hire_human_upload_cv: 'Upload resume',
     hire_human_request_received:
       '✅ Thank you! We received your request and resume. A personal assistant will contact you shortly.\n\nIn the meantime, feel free to browse open 100% remote jobs.',
 

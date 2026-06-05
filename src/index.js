@@ -202,8 +202,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUsePublisherStatsWebApp = isValidTelegramWebAppUrl(publisherStatsUrl);
   const canUseCvScoreWebApp = isValidTelegramWebAppUrl(cvScoreUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
+  const hireHumanImagePath = join(__dirname, '..', 'hire_human.png');
   const notSubscribedImagePath = join(__dirname, '..', 'not_subscribed.png');
   const subscribedImagePath = join(__dirname, '..', 'subscribed.png');
+  const HIRE_HUMAN_UPLOAD_CV_CALLBACK = 'hire_human_upload_cv';
   const buildStartKeyboard = (lang) => ({
     inline_keyboard: [
       [
@@ -508,6 +510,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.reply(tr(ctx, 'hireagent_send_cv'));
   };
 
+  const buildHireHumanIntroKeyboard = (lang) => ({
+    inline_keyboard: [[{ text: t(lang, 'btn_hire_human_upload_cv'), callback_data: HIRE_HUMAN_UPLOAD_CV_CALLBACK }]],
+  });
+
   const startHireHumanScenario = async (ctx, source = 'hire_human') => {
     const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
     if (chat?.type !== 'private') {
@@ -515,16 +521,24 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     if (ctx.callbackQuery) await withTypingTelegram(ctx.telegram, chat.id, 700);
+    const hireHumanSource = String(source || 'hire_human').slice(0, 64);
     hireAgentStateByChatId.set(chat.id, {
-      step: 'awaiting_cv_hire_human',
-      hireHumanSource: String(source || 'hire_human').slice(0, 64),
+      step: 'hire_human_intro',
+      hireHumanSource,
     });
+    const lang = langFromCtx(ctx);
     const welcomeText = tr(ctx, 'hire_human_welcome');
-    if (existsSync(startAvatarPath)) {
-      await ctx.replyWithPhoto({ source: startAvatarPath }, { caption: welcomeText });
+    const replyMarkup = buildHireHumanIntroKeyboard(lang);
+    const imagePath = existsSync(hireHumanImagePath)
+      ? hireHumanImagePath
+      : existsSync(startAvatarPath)
+        ? startAvatarPath
+        : null;
+    if (imagePath) {
+      await ctx.replyWithPhoto({ source: imagePath }, { caption: welcomeText, reply_markup: replyMarkup });
       return;
     }
-    await ctx.reply(welcomeText);
+    await ctx.reply(welcomeText, { reply_markup: replyMarkup });
   };
 
   const startPositionApplyScenario = async (ctx, positionId, { enableChannelBypass = false } = {}) => {
@@ -939,6 +953,24 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       /* ignore */
     }
     await startHireHumanScenario(ctx, 'hire_human');
+  });
+
+  bot.action(HIRE_HUMAN_UPLOAD_CV_CALLBACK, async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    const chatId = ctx.callbackQuery?.message?.chat?.id;
+    if (!chatId || ctx.callbackQuery?.message?.chat?.type !== 'private') return;
+    const st = hireAgentStateByChatId.get(chatId) || {};
+    const hireHumanSource = String(st.hireHumanSource || 'hire_human').slice(0, 64);
+    hireAgentStateByChatId.set(chatId, {
+      step: 'awaiting_cv_hire_human',
+      hireHumanSource,
+    });
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+    await ctx.reply(tr(ctx, 'hire_human_upload_cv'));
   });
 
   function resumeUrlSupportsTextExtraction(resumeUrl) {
