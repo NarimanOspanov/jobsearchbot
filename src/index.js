@@ -31,6 +31,7 @@ import {
   parseStartPayload,
   parseStartReferralChatId,
   parseStartApplyPayload,
+  parseHireHumanStartPayload,
 } from './utils/telegramUtils.js';
 
 // services
@@ -67,6 +68,7 @@ import {
 } from './services/agentAccessService.js';
 import { tailorResumeForSeeker } from './services/tailoredCvService.js';
 import { notifyPublisherOfNewApplication } from './services/publisherApplyNotificationService.js';
+import { upsertPendingHumanAssistantRequest } from './services/humanAssistantRequestService.js';
 import {
   buildOpenJobsReplyMarkup,
   buildScreeningAckText,
@@ -506,6 +508,20 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await ctx.reply(tr(ctx, 'hireagent_send_cv'));
   };
 
+  const startHireHumanScenario = async (ctx, source = 'hire_human') => {
+    const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
+    if (chat?.type !== 'private') {
+      await ctx.reply(tr(ctx, 'scenario_private_only'));
+      return;
+    }
+    if (ctx.callbackQuery) await withTypingTelegram(ctx.telegram, chat.id, 700);
+    hireAgentStateByChatId.set(chat.id, {
+      step: 'awaiting_cv_hire_human',
+      hireHumanSource: String(source || 'hire_human').slice(0, 64),
+    });
+    await ctx.reply(tr(ctx, 'hire_human_welcome'));
+  };
+
   const startPositionApplyScenario = async (ctx, positionId, { enableChannelBypass = false } = {}) => {
     const lang = langFromCtx(ctx);
     const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
@@ -664,6 +680,13 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         setPositionApplyAttribution(chatId, applyFromStart);
       }
       await startPositionApplyScenario(ctx, applyFromStart.positionId, { enableChannelBypass: true });
+      return;
+    }
+    const hireHumanSource = parseHireHumanStartPayload(payload);
+    if (hireHumanSource) {
+      const canProceedHireHuman = await enforceStartRequiredChannelsGate(ctx);
+      if (!canProceedHireHuman) return;
+      await startHireHumanScenario(ctx, hireHumanSource);
       return;
     }
     const canProceedToVacancies = await enforceStartRequiredChannelsGate(ctx);
@@ -898,6 +921,19 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.command('hireagent', async (ctx) => {
     await startHireAgentScenario(ctx);
+  });
+
+  bot.command('hire_human', async (ctx) => {
+    await startHireHumanScenario(ctx, 'hire_human');
+  });
+
+  bot.action('start_hire_human', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    await startHireHumanScenario(ctx, 'hire_human');
   });
 
   function resumeUrlSupportsTextExtraction(resumeUrl) {
@@ -1188,10 +1224,13 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const chatId = ctx.chat.id;
     const st = hireAgentStateByChatId.get(chatId);
     const isHireAgentCvFlow = st?.step === 'awaiting_cv';
+    const isHireHumanCvFlow = st?.step === 'awaiting_cv_hire_human';
     const isPositionCvFlow = st?.step === 'awaiting_cv_for_position';
     const isCvRoastFlow = st?.step === 'awaiting_cv_roast';
     const isCvTailorFlow = st?.step === 'awaiting_cv_tailor';
-    if (!isHireAgentCvFlow && !isPositionCvFlow && !isCvRoastFlow && !isCvTailorFlow) return next();
+    if (!isHireAgentCvFlow && !isHireHumanCvFlow && !isPositionCvFlow && !isCvRoastFlow && !isCvTailorFlow) {
+      return next();
+    }
     if (isCvRoastFlow || isCvTailorFlow) {
       const canProceed = await enforceStartRequiredChannelsGate(ctx);
       if (!canProceed) return;
@@ -1340,6 +1379,36 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         }
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
         clearPositionApplyChannelBypass(chatId);
+      } else if (isHireHumanCvFlow) {
+        const lang = langFromCtx(ctx);
+        const hireHumanSource = String(st?.hireHumanSource || 'hire_human').slice(0, 64);
+        await upsertPendingHumanAssistantRequest({ userId: user.Id, source: hireHumanSource });
+        const text = tr(ctx, 'hire_human_request_received');
+        const replyMarkup = buildOpenJobsReplyMarkup(lang, {
+          seekerJobsUrl,
+          canUseSeekerJobsWebApp,
+        });
+        await ctx.reply(text, { reply_markup: replyMarkup || undefined });
+        const assignLink = adminAgentAssignmentsUrl || agentClientsUrl || adminUrl;
+        const humanAssistantMessage = [
+          '🙋 Новая заявка на персонального ассистента',
+          `Имя: ${formatUserDisplayName(user)}`,
+          `Username: ${formatUsername(user.TelegramUserName, { withAt: false })}`,
+          `ChatId: ${user.TelegramChatId}`,
+          `UserId: ${user.Id}`,
+          `Source: ${hireHumanSource}`,
+          `Resume: ${resumeUrl}`,
+          assignLink ? `Assign: ${assignLink}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+        await notifyAdmins(
+          ctx,
+          humanAssistantMessage,
+          'Failed to send human assistant admin notification:',
+          { telegramChatId: user.TelegramChatId, userId: user.Id }
+        );
+        hireAgentStateByChatId.set(chatId, { step: 'idle' });
       } else if (hireAgentSimulationVisible) {
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_confirm' });
         const lang = langFromCtx(ctx);
@@ -1362,6 +1431,12 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       if (isCvRoastFlow || isCvTailorFlow) {
         await ctx.reply(tr(ctx, 'cvscore_process_failed'));
         hireAgentStateByChatId.set(chatId, { step: isCvRoastFlow ? 'awaiting_cv_roast' : 'awaiting_cv_tailor' });
+      } else if (isHireHumanCvFlow) {
+        await ctx.reply(tr(ctx, 'resume_save_failed'));
+        hireAgentStateByChatId.set(chatId, {
+          step: 'awaiting_cv_hire_human',
+          hireHumanSource: String(st?.hireHumanSource || 'hire_human').slice(0, 64),
+        });
       } else {
         await ctx.reply(tr(ctx, 'resume_save_failed'));
         hireAgentStateByChatId.set(chatId, { step: 'awaiting_cv' });

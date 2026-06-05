@@ -2,6 +2,7 @@ import { Sequelize } from 'sequelize';
 import { config } from '../config.js';
 import { models } from '../db.js';
 import { buildAnyhiresPositionsSearchParams } from '../utils/positionUpstreamQuery.js';
+import { getPendingHumanAssistantUserIds } from './humanAssistantRequestService.js';
 import { enqueueApplyPriorityJobsForClients, getAgentApplyPriorityQueueState } from './agentApplyPriorityQueueService.js';
 
 /** Hard stop when maxPages is unlimited (hasMore loop). */
@@ -195,9 +196,11 @@ export async function enqueueApplyPriorityForDefaultClientSearches({
     include: [{ model: models.Users, as: 'Client', required: true }],
     order: [['Id', 'ASC']],
   });
+  const pendingHumanAssistantUserIds = await getPendingHumanAssistantUserIds();
   const clients = assignments
     .map((row) => row.Client)
-    .filter((client) => client && String(client.ResumeURL || '').trim());
+    .filter((client) => client && String(client.ResumeURL || '').trim())
+    .filter((client) => !pendingHumanAssistantUserIds.has(Number(client.Id)));
 
   const dateRange = getDefaultDateRange();
   const perClient = [];
@@ -235,5 +238,53 @@ export async function enqueueApplyPriorityForDefaultClientSearches({
     totalSkippedAlreadyRanked,
     enqueued: totalQueued,
     clients: perClient,
+  };
+}
+
+export async function enqueueApplyPriorityDefaultForClient({
+  clientUserId,
+  pageSize = config.applyPriorityCronPageSize,
+  maxPages = config.applyPriorityCronMaxPages,
+  requestedBy = null,
+} = {}) {
+  const queueState = getAgentApplyPriorityQueueState();
+  if (!queueState.enabled) {
+    throw new Error('Apply priority queue is disabled. Configure REDIS_URL first.');
+  }
+
+  const normalizedClientUserId = Number.parseInt(String(clientUserId ?? ''), 10);
+  if (!Number.isSafeInteger(normalizedClientUserId) || normalizedClientUserId <= 0) {
+    throw new Error('clientUserId is required');
+  }
+
+  const client = await models.Users.findByPk(normalizedClientUserId);
+  if (!client) throw new Error(`Client ${normalizedClientUserId} not found`);
+  if (!String(client.ResumeURL || '').trim()) {
+    throw new Error('Client has no resume uploaded');
+  }
+
+  const normalizedPageSize = Math.min(200, Math.max(1, Number.parseInt(String(pageSize || '100'), 10) || 100));
+  const normalizedMaxPages = normalizeCronMaxPages(maxPages);
+  const dateRange = getDefaultDateRange();
+  const summary = await enqueueClientDefaultPages({
+    client,
+    from: dateRange.from,
+    to: dateRange.to,
+    pageSize: normalizedPageSize,
+    maxPages: normalizedMaxPages,
+    requestedBy,
+  });
+
+  return {
+    ok: true,
+    mode: queueState.mode || 'single',
+    defaults: {
+      from: dateRange.from,
+      to: dateRange.to,
+      pageSize: normalizedPageSize,
+      maxPages: normalizedMaxPages,
+    },
+    enqueued: summary.queuedJobs,
+    ...summary,
   };
 }

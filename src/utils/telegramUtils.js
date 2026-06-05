@@ -80,6 +80,18 @@ export async function downloadTelegramFileAsBuffer(telegram, fileId) {
   return Buffer.from(bytes);
 }
 
+/**
+ * @param {string} startPayload
+ * @returns {string | null} source token for HumanAssistantRequests.Source
+ */
+export function parseHireHumanStartPayload(startPayload) {
+  const payload = String(startPayload || '').trim();
+  if (!payload) return null;
+  if (payload === 'hire_human') return 'hire_human';
+  if (payload.startsWith('hire_human_')) return payload.slice(0, 64);
+  return null;
+}
+
 export function parseStartPayload(ctx) {
   const rawText = String(ctx.message?.text || '').trim();
   const commandMatch = rawText.match(/^\/start(?:@\w+)?(?:\s+(.+))?$/i);

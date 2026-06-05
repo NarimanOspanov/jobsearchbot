@@ -42,6 +42,11 @@
       <h1>Agent–client assignments</h1>
       <p id="globalMsg" class="muted"></p>
 
+      <section class="card" id="pendingRequestsCard">
+        <h2 id="pendingRequestsTitle">Pending human assistant requests</h2>
+        <div id="pendingRequestsList"><p class="muted">Loading…</p></div>
+      </section>
+
       <section class="card">
         <h2 id="formTitle">Add assignment</h2>
         <div class="row">
@@ -113,9 +118,103 @@
       }
 
       function formatUserLabel(u) {
-        const name = [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
+        const name = [
+          u.displayFirstName || u.firstName,
+          u.displayLastName || u.lastName,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
         const label = name || u.telegramUserName || `#${u.id}`;
-        return `${label} (${u.telegramChatId})`;
+        return `${label} (${u.telegramChatId || '—'})`;
+      }
+
+      function formatRequestCreatedAt(value) {
+        if (!value) return '—';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value).split('T')[0] || '—';
+        return d.toLocaleString();
+      }
+
+      function pickClientForAssign(client) {
+        if (!client?.id) return;
+        pickedClient = {
+          id: client.id,
+          firstName: client.firstName || client.displayFirstName || null,
+          lastName: client.lastName || client.displayLastName || null,
+          displayFirstName: client.displayFirstName || client.firstName || null,
+          displayLastName: client.displayLastName || client.lastName || null,
+          telegramUserName: client.telegramUserName || null,
+          telegramChatId: client.telegramChatId || null,
+        };
+        document.getElementById('clientPicked').textContent = `Client: ${formatUserLabel(pickedClient)}`;
+        document.getElementById('clientSearch').value = '';
+        document.getElementById('clientSearchResults').style.display = 'none';
+        setMsg('formMsg', 'Client pre-filled from pending request. Choose an agent and save.');
+        document.getElementById('formTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      async function loadPendingHumanRequests() {
+        const list = document.getElementById('pendingRequestsList');
+        const title = document.getElementById('pendingRequestsTitle');
+        const card = document.getElementById('pendingRequestsCard');
+        try {
+          const payload = await api('/api/app/admin/human-assistant-requests?status=pending&limit=200');
+          const rows = Array.isArray(payload?.requests) ? payload.requests : [];
+          if (title) {
+            title.textContent =
+              rows.length > 0
+                ? `Pending human assistant requests (${rows.length})`
+                : 'Pending human assistant requests';
+          }
+          if (!rows.length) {
+            list.innerHTML = '<p class="muted">No pending requests.</p>';
+            if (card) card.style.display = '';
+            return;
+          }
+          list.innerHTML = `
+            <table>
+              <thead>
+                <tr>
+                  <th>Id</th>
+                  <th>Client</th>
+                  <th>Chat</th>
+                  <th>Requested</th>
+                  <th>Resume</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows
+                  .map((row) => {
+                    const client = row.client || {};
+                    const resume = client.resumeUrl
+                      ? `<a href="${esc(client.resumeUrl)}" target="_blank" rel="noopener noreferrer">Open</a>`
+                      : '—';
+                    return `<tr>
+                      <td>${esc(row.id)}</td>
+                      <td>${esc(formatUserLabel(client))}</td>
+                      <td>${esc(client.telegramChatId || '—')}</td>
+                      <td>${esc(formatRequestCreatedAt(row.createdAt))}</td>
+                      <td>${resume}</td>
+                      <td><button type="button" class="ghost-btn" data-assign-user="${esc(client.id || row.userId)}">Assign</button></td>
+                    </tr>`;
+                  })
+                  .join('')}
+              </tbody>
+            </table>`;
+          list.querySelectorAll('button[data-assign-user]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const userId = btn.getAttribute('data-assign-user');
+              const row = rows.find(
+                (r) => String(r.client?.id || r.userId) === String(userId)
+              );
+              if (row?.client) pickClientForAssign(row.client);
+            });
+          });
+        } catch (err) {
+          list.innerHTML = `<p class="bad">${esc(err.message)}</p>`;
+        }
       }
 
       function resetForm() {
@@ -278,7 +377,7 @@
             setMsg('formMsg', 'Assignment created.');
           }
           resetForm();
-          await loadAssignments();
+          await Promise.all([loadAssignments(), loadPendingHumanRequests()]);
         } catch (e) {
           setMsg('formMsg', e.message, true);
         }
@@ -290,7 +389,7 @@
         if (!getTgInitDataString()) {
           throw new Error('Open from the bot via /admin_assignments (Telegram auth required).');
         }
-        await loadAssignments();
+        await Promise.all([loadPendingHumanRequests(), loadAssignments()]);
       }
 
       boot().catch((err) => setMsg('globalMsg', err.message, true));

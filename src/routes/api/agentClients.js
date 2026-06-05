@@ -10,7 +10,12 @@ import {
 } from '../../services/agentAccessService.js';
 import { rankJobsForAgentApply } from '../../services/agentApplyPriorityService.js';
 import { persistApplyPriorityForPageJobs } from '../../services/agentApplyPriorityPersistenceService.js';
+import { enqueueApplyPriorityDefaultForClient } from '../../services/agentApplyPriorityCronService.js';
 import { enqueueApplyPriorityJobsForClients, getAgentApplyPriorityQueueState } from '../../services/agentApplyPriorityQueueService.js';
+import {
+  listHumanAssistantRequests,
+  markHumanAssistantRequestAssigned,
+} from '../../services/humanAssistantRequestService.js';
 
 function displayNameFromUser(u, projection) {
   const fromResume = [
@@ -25,6 +30,19 @@ function displayNameFromUser(u, projection) {
     .join(' ');
   if (fromProfile) return fromProfile;
   return u.TelegramUserName || `#${u.Id}`;
+}
+
+function mapHumanAssistantRequestRow(row) {
+  const user = row.User;
+  return {
+    id: row.Id,
+    userId: row.UserId,
+    createdAt: row.CreatedAt,
+    status: row.Status,
+    source: row.Source,
+    assignedAt: row.AssignedAt,
+    client: user ? mapUserToAgentClientPayload(user) : null,
+  };
 }
 
 function mapAssignmentRow(row) {
@@ -168,6 +186,49 @@ export function createAgentClientsRouter() {
     }
   });
 
+  router.get('/api/app/admin/human-assistant-requests', adminMiniAppAuth, async (req, res) => {
+    try {
+      const status = String(req.query.status || 'pending').trim().toLowerCase() || 'pending';
+      const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '200'), 10) || 200));
+      const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
+      const rows = await listHumanAssistantRequests({ status, limit, offset });
+      return res.json({
+        status,
+        requests: rows.map(mapHumanAssistantRequestRow),
+      });
+    } catch (err) {
+      console.error('GET /api/app/admin/human-assistant-requests:', err);
+      return res.status(500).json({ error: 'Failed to load human assistant requests' });
+    }
+  });
+
+  router.post(
+    '/api/app/admin/clients/:clientUserId/apply-priority/enqueue-default',
+    adminMiniAppAuth,
+    async (req, res) => {
+      try {
+        const clientUserId = Number.parseInt(String(req.params.clientUserId), 10);
+        if (!Number.isSafeInteger(clientUserId) || clientUserId <= 0) {
+          return res.status(400).json({ error: 'Invalid client user id' });
+        }
+        const client = await models.Users.findByPk(clientUserId);
+        if (!client) return res.status(404).json({ error: 'Client not found' });
+
+        const payload = await enqueueApplyPriorityDefaultForClient({
+          clientUserId,
+          requestedBy: `admin:${req.actorUser?.Id ?? 'unknown'}`,
+        });
+        return res.json(payload);
+      } catch (err) {
+        console.error('POST /api/app/admin/clients/:clientUserId/apply-priority/enqueue-default:', err);
+        return res.status(500).json({
+          error: 'Failed to enqueue apply-priority jobs',
+          message: err?.message || String(err),
+        });
+      }
+    }
+  );
+
   router.get('/api/app/admin/agent-clients', adminMiniAppAuth, async (_req, res) => {
     try {
       const rows = await models.AgentClients.findAll({
@@ -208,6 +269,7 @@ export function createAgentClientsRouter() {
       }
 
       const row = await models.AgentClients.create({ AgentUserId: agentUserId, ClientUserId: clientUserId });
+      await markHumanAssistantRequestAssigned(clientUserId);
       const loaded = await models.AgentClients.findByPk(row.Id, {
         include: [
           { model: models.Users, as: 'Agent', required: true },
@@ -266,6 +328,7 @@ export function createAgentClientsRouter() {
       }
 
       await row.update({ AgentUserId: nextAgentId, ClientUserId: nextClientId });
+      await markHumanAssistantRequestAssigned(nextClientId);
       const loaded = await models.AgentClients.findByPk(id, {
         include: [
           { model: models.Users, as: 'Agent', required: true },

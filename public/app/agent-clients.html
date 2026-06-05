@@ -74,6 +74,24 @@
         }
       }
       .users-list button { width: 100%; text-align: left; margin: 4px 0; }
+      .pending-human-block { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+      .pending-human-block h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); font-weight: 600; }
+      .pending-human-item {
+        display: grid;
+        gap: 6px;
+        padding: 8px;
+        margin: 4px 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        background: rgba(79, 124, 255, 0.04);
+      }
+      .pending-human-item:hover { background: rgba(79, 124, 255, 0.1); }
+      .pending-human-item.selected { outline: 2px solid var(--accent); }
+      .pending-human-meta { font-size: 12px; color: var(--muted); }
+      .pending-human-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      .pending-human-actions button { width: auto; font-size: 12px; padding: 6px 8px; }
+      .assigned-clients-heading { margin: 0 0 8px; font-size: 14px; color: var(--muted); font-weight: 600; }
       .selected { outline: 2px solid var(--accent); }
       .artifacts a { color: #8ab4ff; display: inline-block; margin-right: 10px; text-decoration: underline; font-weight: 600; }
       a { color: #9ec5ff; text-decoration: underline; font-weight: 600; }
@@ -433,7 +451,14 @@
       <div id="mainLayout" class="layout">
         <section id="clientsColumnSection" class="card layout-col">
           <h2>Clients</h2>
-          <div id="usersList" class="users-list layout-col-body"></div>
+          <div class="layout-col-body">
+            <div id="pendingHumanSection" class="pending-human-block" style="display:none">
+              <h3>Pending human assistant</h3>
+              <div id="pendingHumanList" class="users-list"></div>
+            </div>
+            <h3 id="assignedClientsHeading" class="assigned-clients-heading" style="display:none">Assigned clients</h3>
+            <div id="usersList" class="users-list"></div>
+          </div>
         </section>
 
         <section class="card layout-col">
@@ -707,6 +732,7 @@
       const REMOTE_POSITIONS_URL = '/api/admin/remote-positions';
 
       let users = [];
+      let pendingHumanRequests = [];
       let agents = [];
       let isBotAdminUser = false;
       let isCareerAgentUser = false;
@@ -1502,6 +1528,102 @@
         }
       }
 
+      function formatPendingClientLabel(client) {
+        const name = [
+          String(client?.displayFirstName || client?.firstName || '').trim(),
+          String(client?.displayLastName || client?.lastName || '').trim(),
+        ]
+          .filter(Boolean)
+          .join(' ');
+        return name || client?.telegramUserName || `#${client?.id || '?'}`;
+      }
+
+      function formatRequestCreatedAt(value) {
+        if (!value) return '—';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value).split('T')[0] || '—';
+        return d.toLocaleString();
+      }
+
+      async function loadPendingHumanRequests() {
+        const section = document.getElementById('pendingHumanSection');
+        const heading = document.getElementById('assignedClientsHeading');
+        if (!isBotAdminUser) {
+          pendingHumanRequests = [];
+          if (section) section.style.display = 'none';
+          if (heading) heading.style.display = 'none';
+          return;
+        }
+        const payload = await api('/api/app/admin/human-assistant-requests?status=pending&limit=200');
+        pendingHumanRequests = Array.isArray(payload?.requests) ? payload.requests : [];
+        renderPendingHumanRequests();
+        if (section) section.style.display = pendingHumanRequests.length ? '' : 'none';
+        if (heading) heading.style.display = pendingHumanRequests.length ? '' : 'none';
+      }
+
+      function renderPendingHumanRequests() {
+        const root = document.getElementById('pendingHumanList');
+        if (!root) return;
+        const qs = q();
+        if (!pendingHumanRequests.length) {
+          root.innerHTML = '';
+          return;
+        }
+        root.innerHTML = pendingHumanRequests
+          .map((req) => {
+            const client = req.client || {};
+            const clientId = client.id || req.userId;
+            const selected = String(clientId) === String(qs.seekerId);
+            const resumeLink = client.resumeUrl
+              ? `<a href="${esc(client.resumeUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Resume</a>`
+              : '<span class="muted">No resume</span>';
+            return `
+              <div class="pending-human-item ${selected ? 'selected' : ''}" data-pending-user-id="${esc(clientId)}">
+                <div><strong>#${esc(clientId)}</strong> ${esc(formatPendingClientLabel(client))}</div>
+                <div class="pending-human-meta">
+                  Chat: ${esc(client.telegramChatId || '—')} · ${esc(formatRequestCreatedAt(req.createdAt))}
+                  ${req.source ? ` · ${esc(req.source)}` : ''}
+                </div>
+                <div class="pending-human-actions">
+                  ${resumeLink}
+                  <button type="button" class="ghost-btn" data-enqueue-priority="${esc(clientId)}">Run apply priority (background)</button>
+                  <span class="loader" data-enqueue-loader="${esc(clientId)}"></span>
+                </div>
+              </div>`;
+          })
+          .join('');
+
+        root.querySelectorAll('.pending-human-item[data-pending-user-id]').forEach((row) => {
+          row.addEventListener('click', () => {
+            onUserSelected(row.getAttribute('data-pending-user-id')).catch((err) => {
+              setMsg('dashMsg', err.message, true);
+            });
+          });
+        });
+        root.querySelectorAll('button[data-enqueue-priority]').forEach((btn) => {
+          btn.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            const clientUserId = btn.getAttribute('data-enqueue-priority');
+            const loader = root.querySelector(`[data-enqueue-loader="${clientUserId}"]`);
+            btn.disabled = true;
+            if (loader) loader.classList.add('on');
+            try {
+              const result = await api(
+                `/api/app/admin/clients/${encodeURIComponent(clientUserId)}/apply-priority/enqueue-default`,
+                { method: 'POST', body: '{}' }
+              );
+              const enqueued = Number(result?.enqueued || 0);
+              setMsg('dashMsg', `Apply priority enqueued (${enqueued} job${enqueued === 1 ? '' : 's'}).`);
+            } catch (err) {
+              setMsg('dashMsg', err.message, true);
+            } finally {
+              btn.disabled = false;
+              if (loader) loader.classList.remove('on');
+            }
+          });
+        });
+      }
+
       async function loadClients() {
         let url = '/api/app/agent/clients?limit=200';
         const aid = String(q().agentUserId || '').trim();
@@ -1509,6 +1631,7 @@
         const payload = await api(url);
         users = Array.isArray(payload?.clients) ? payload.clients : [];
         renderUsers();
+        renderPendingHumanRequests();
       }
       function renderUsers() {
         const root = document.getElementById('usersList');
@@ -2415,7 +2538,14 @@
       function getSelectedUser() {
         const seekerId = q().seekerId;
         if (!seekerId) return null;
-        return users.find((u) => String(u.id) === String(seekerId)) || null;
+        const fromClients = users.find((u) => String(u.id) === String(seekerId));
+        if (fromClients) return fromClients;
+        for (const req of pendingHumanRequests) {
+          const client = req.client;
+          if (client && String(client.id) === String(seekerId)) return client;
+          if (String(req.userId) === String(seekerId) && client) return client;
+        }
+        return null;
       }
 
       function userSkillIdsCsv(user) {
@@ -2589,7 +2719,7 @@
         renderPriorityPickerOptions();
         renderStatusPickerOptions();
         if (isBotAdminUser) await loadAgents();
-        await Promise.all([loadClients(), loadSkills()]);
+        await Promise.all([loadPendingHumanRequests(), loadClients(), loadSkills()]);
         renderSelectedUserInfo();
         setUserInfoVisibility(true);
         setFiltersVisibility(true);
@@ -2599,9 +2729,7 @@
         applySelectedCountriesCsv(s.country || '');
         applySelectedPrioritiesCsv(s.priorities || '');
         applySelectedStatusesCsv(s.statuses || '');
-        const bootUser = s.seekerId
-          ? users.find((u) => String(u.id) === String(s.seekerId)) || null
-          : null;
+        const bootUser = s.seekerId ? getSelectedUser() : null;
         if (s.skillIds) {
           applySelectedSkillIdsCsv(s.skillIds);
           syncHighlyRelevantCheckboxFromQuery();

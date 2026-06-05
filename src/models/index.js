@@ -17,6 +17,7 @@ import defineUserApplicationOutreach from './UserApplicationOutreach.js';
 import defineAdminNotification from './AdminNotification.js';
 import defineAdminNotificationRun from './AdminNotificationRun.js';
 import defineAgentClient from './AgentClient.js';
+import defineHumanAssistantRequest from './HumanAssistantRequest.js';
 
 /**
  * Initialize only the User model for empty bot runtime.
@@ -41,6 +42,7 @@ export function initModels(sequelize) {
   const AdminNotification = defineAdminNotification(sequelize);
   const AdminNotificationRun = defineAdminNotificationRun(sequelize);
   const AgentClient = defineAgentClient(sequelize);
+  const HumanAssistantRequest = defineHumanAssistantRequest(sequelize);
 
   User.hasMany(Application, { foreignKey: 'UserId' });
   Application.belongsTo(User, { foreignKey: 'UserId' });
@@ -76,6 +78,8 @@ export function initModels(sequelize) {
   AgentClient.belongsTo(User, { as: 'Agent', foreignKey: 'AgentUserId' });
   User.hasOne(AgentClient, { as: 'ClientAssignment', foreignKey: 'ClientUserId' });
   AgentClient.belongsTo(User, { as: 'Client', foreignKey: 'ClientUserId' });
+  User.hasMany(HumanAssistantRequest, { foreignKey: 'UserId' });
+  HumanAssistantRequest.belongsTo(User, { as: 'User', foreignKey: 'UserId' });
   return {
     User,
     Application,
@@ -115,5 +119,7 @@ export function initModels(sequelize) {
     AdminNotificationRuns: AdminNotificationRun,
     AgentClient,
     AgentClients: AgentClient,
+    HumanAssistantRequest,
+    HumanAssistantRequests: HumanAssistantRequest,
   };
 }

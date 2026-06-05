@@ -67,6 +67,11 @@ export const BOT_LOCALES = {
     hireagent_send_cv:
       'Отправьте резюме файлом (PDF или изображение) — я разберу его и начну работу.\nКогда потребуются действия, я напишу.',
 
+    hire_human_welcome:
+      'Здравствуйте! Вы оставили заявку на персонального ассистента по поиску работы.\n\nОтправьте резюме файлом (PDF или изображение) — мы разберём его и свяжемся с вами в ближайшее время.',
+    hire_human_request_received:
+      '✅ Спасибо! Мы получили вашу заявку и резюме. Персональный ассистент свяжется с вами в ближайшее время.\n\nПока можете посмотреть открытые вакансии с 100% удалёнкой.',
+
     position_service_unavailable: 'Сервис вакансий временно недоступен. Попробуйте позже.',
     position_not_found: 'Вакансия не найдена или уже архивирована.',
     position_header: 'Вакансия: {title}\nКомпания: {company}',
@@ -282,6 +287,11 @@ export const BOT_LOCALES = {
 
     hireagent_send_cv:
       'Send your resume as a file (PDF or image) — I will parse it and get started.\nI will message you when we need your input.',
+
+    hire_human_welcome:
+      'Hello! You requested a personal human assistant for your job search.\n\nPlease send your resume as a file (PDF or image). We will review it and contact you shortly.',
+    hire_human_request_received:
+      '✅ Thank you! We received your request and resume. A personal assistant will contact you shortly.\n\nIn the meantime, feel free to browse open 100% remote jobs.',
 
     position_service_unavailable: 'Job service is temporarily unavailable. Try again later.',
     position_not_found: 'Job not found or already archived.',
