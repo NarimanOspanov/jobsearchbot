@@ -519,7 +519,12 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       step: 'awaiting_cv_hire_human',
       hireHumanSource: String(source || 'hire_human').slice(0, 64),
     });
-    await ctx.reply(tr(ctx, 'hire_human_welcome'));
+    const welcomeText = tr(ctx, 'hire_human_welcome');
+    if (existsSync(startAvatarPath)) {
+      await ctx.replyWithPhoto({ source: startAvatarPath }, { caption: welcomeText });
+      return;
+    }
+    await ctx.reply(welcomeText);
   };
 
   const startPositionApplyScenario = async (ctx, positionId, { enableChannelBypass = false } = {}) => {
@@ -1389,7 +1394,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           canUseSeekerJobsWebApp,
         });
         await ctx.reply(text, { reply_markup: replyMarkup || undefined });
-        const assignLink = adminAgentAssignmentsUrl || agentClientsUrl || adminUrl;
         const humanAssistantMessage = [
           '🙋 Новая заявка на персонального ассистента',
           `Имя: ${formatUserDisplayName(user)}`,
@@ -1398,10 +1402,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
           `UserId: ${user.Id}`,
           `Source: ${hireHumanSource}`,
           `Resume: ${resumeUrl}`,
-          assignLink ? `Assign: ${assignLink}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
+        ].join('\n');
         await notifyAdmins(
           ctx,
           humanAssistantMessage,
