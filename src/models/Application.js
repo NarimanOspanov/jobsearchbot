@@ -26,6 +26,10 @@ export default function defineApplication(sequelize) {
         type: DataTypes.STRING(50),
         allowNull: true,
       },
+      ApplyType: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+      },
       Status: {
         type: DataTypes.STRING(50),
         allowNull: true,

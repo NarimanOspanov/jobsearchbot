@@ -2305,7 +2305,7 @@
           source: app?.Source || null,
           applyUrl: meta.applyUrl || null,
           shortSummary: meta.shortSummary || null,
-          applyType: meta.applyType || null,
+          applyType: app?.ApplyType || meta.applyType || null,
         };
       }
 
@@ -2519,12 +2519,14 @@
             vacancyTitle: job.title,
             companyName: job.company,
             source: job.source,
+            applyType: job.applyType || null,
             appliedAt: new Date().toISOString(),
             metaJson: {
               positionId: job.id,
               applyUrl: job.applyUrl || null,
               location: job.location || null,
               shortSummary: job.shortSummary || null,
+              applyType: job.applyType || null,
             },
           }),
         });

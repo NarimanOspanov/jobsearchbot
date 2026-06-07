@@ -49,6 +49,74 @@ function parseApplicationStatusesCsv(raw) {
   )];
 }
 
+function normalizeApplyType(value) {
+  const raw = String(value || '').trim();
+  return raw ? raw.slice(0, 50) : null;
+}
+
+function parseAppliedAtFromBody(value) {
+  if (value == null || value === '') return new Date();
+  const d = new Date(value);
+  return Number.isFinite(d.getTime()) ? d : new Date();
+}
+
+function serializeMetaJsonFromBody(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
+function buildApplicationSnapshotFromBody(body) {
+  const vacancyTitle = String(body?.vacancyTitle || '').trim();
+  const companyNameRaw = body?.companyName;
+  const sourceRaw = body?.source;
+  const applyType = normalizeApplyType(body?.applyType);
+  const metaJson = serializeMetaJsonFromBody(body?.metaJson);
+
+  return {
+    VacancyTitle: vacancyTitle ? vacancyTitle.slice(0, 255) : null,
+    CompanyName:
+      companyNameRaw != null && String(companyNameRaw).trim()
+        ? String(companyNameRaw).trim().slice(0, 255)
+        : companyNameRaw === null
+          ? null
+          : undefined,
+    Source:
+      sourceRaw != null && String(sourceRaw).trim()
+        ? String(sourceRaw).trim().slice(0, 50)
+        : sourceRaw === null
+          ? null
+          : undefined,
+    ApplyType: applyType,
+    MetaJson: metaJson,
+    AppliedAt: parseAppliedAtFromBody(body?.appliedAt),
+  };
+}
+
+function buildApplicationBackfillUpdates(existing, snapshot) {
+  const updates = {};
+  if (!String(existing.VacancyTitle || '').trim() && snapshot.VacancyTitle) {
+    updates.VacancyTitle = snapshot.VacancyTitle;
+  }
+  if (!String(existing.CompanyName || '').trim() && snapshot.CompanyName) {
+    updates.CompanyName = snapshot.CompanyName;
+  }
+  if (!String(existing.Source || '').trim() && snapshot.Source) {
+    updates.Source = snapshot.Source;
+  }
+  if (!String(existing.ApplyType || '').trim() && snapshot.ApplyType) {
+    updates.ApplyType = snapshot.ApplyType;
+  }
+  if (!String(existing.MetaJson || '').trim() && snapshot.MetaJson) {
+    updates.MetaJson = snapshot.MetaJson;
+  }
+  return updates;
+}
+
 export function createApplicationsRouter() {
   const router = Router();
 
@@ -171,16 +239,26 @@ export function createApplicationsRouter() {
       const existing = await models.Applications.findOne({
         where: { UserId: user.Id, ScreenlyJobId: screenlyJobId },
       });
-      if (existing) return res.status(200).json(existing);
-
-      const vacancyTitle = String(req.body.vacancyTitle || '').trim();
+      const snapshot = buildApplicationSnapshotFromBody(req.body);
+      if (existing) {
+        const backfill = buildApplicationBackfillUpdates(existing, snapshot);
+        if (Object.keys(backfill).length) {
+          await existing.update(backfill);
+          await existing.reload();
+        }
+        return res.status(200).json(existing);
+      }
 
       const row = await models.Applications.create({
         UserId: user.Id,
-        VacancyTitle: (vacancyTitle || `Screenly #${screenlyJobId}`).slice(0, 255),
+        VacancyTitle: (snapshot.VacancyTitle || `Screenly #${screenlyJobId}`).slice(0, 255),
         ScreenlyJobId: screenlyJobId,
+        CompanyName: snapshot.CompanyName ?? null,
+        Source: snapshot.Source ?? null,
+        ApplyType: snapshot.ApplyType,
+        MetaJson: snapshot.MetaJson,
         Status: 'applied',
-        AppliedAt: new Date(),
+        AppliedAt: snapshot.AppliedAt,
       });
       return res.status(201).json(row);
     } catch (err) {
@@ -210,6 +288,9 @@ export function createApplicationsRouter() {
       }
       if (req.body.source !== undefined) {
         updates.Source = req.body.source ? String(req.body.source).slice(0, 50) : null;
+      }
+      if (req.body.applyType !== undefined) {
+        updates.ApplyType = normalizeApplyType(req.body.applyType);
       }
       if (req.body.status !== undefined) {
         updates.Status = req.body.status ? String(req.body.status).slice(0, 50) : null;
