@@ -16,6 +16,7 @@ import {
   listHumanAssistantRequests,
   markHumanAssistantRequestAssigned,
 } from '../../services/humanAssistantRequestService.js';
+import { toSearchModeOrUndefined, toWorkAuthCountriesOrNullOrUndefined } from '../../utils/validators.js';
 
 function displayNameFromUser(u, projection) {
   const fromResume = [
@@ -376,6 +377,70 @@ export function createAgentClientsRouter() {
       } catch (err) {
         console.error('PATCH /api/app/agent/clients/:clientUserId/comment:', err);
         return res.status(500).json({ error: 'Failed to save client comment' });
+      }
+    }
+  );
+
+  router.patch(
+    '/api/app/agent/clients/:clientUserId/settings',
+    agentMiniAppAuth,
+    async (req, res) => {
+      try {
+        const clientUserId = Number.parseInt(String(req.params.clientUserId), 10);
+        if (!Number.isSafeInteger(clientUserId) || clientUserId <= 0) {
+          return res.status(400).json({ error: 'Invalid client user id' });
+        }
+        if (!(await enforceAgentClientAccess(req, res, clientUserId))) return;
+
+        const client = await models.Users.findByPk(clientUserId);
+        if (!client) return res.status(404).json({ error: 'Client not found' });
+
+        const updates = {};
+        if ('comment' in req.body) {
+          let comment = null;
+          if (req.body.comment != null) {
+            const raw = String(req.body.comment).trim();
+            if (raw.length > CLIENT_COMMENT_MAX_LENGTH) {
+              return res.status(400).json({
+                error: `comment must be at most ${CLIENT_COMMENT_MAX_LENGTH} characters`,
+              });
+            }
+            comment = raw || null;
+          }
+          updates.Comment = comment;
+        }
+        if ('searchMode' in req.body) {
+          const searchMode = toSearchModeOrUndefined(req.body.searchMode);
+          if (searchMode === undefined) {
+            return res.status(400).json({ error: 'Invalid searchMode' });
+          }
+          updates.SearchMode = searchMode;
+        }
+        if ('workAuthorizationCountries' in req.body) {
+          const workAuthorizationCountries = toWorkAuthCountriesOrNullOrUndefined(
+            req.body.workAuthorizationCountries
+          );
+          if (workAuthorizationCountries === undefined) {
+            return res.status(400).json({ error: 'Invalid workAuthorizationCountries' });
+          }
+          updates.WorkAuthorizationCountries = workAuthorizationCountries;
+        }
+        if (!Object.keys(updates).length) {
+          return res.status(400).json({ error: 'No valid fields to update' });
+        }
+
+        await client.update(updates);
+        await client.reload();
+
+        return res.json({
+          ok: true,
+          comment: client.Comment ?? null,
+          searchMode: client.SearchMode || 'not_urgent',
+          workAuthorizationCountries: client.WorkAuthorizationCountries || '',
+        });
+      } catch (err) {
+        console.error('PATCH /api/app/agent/clients/:clientUserId/settings:', err);
+        return res.status(500).json({ error: 'Failed to save client settings' });
       }
     }
   );

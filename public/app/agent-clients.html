@@ -152,6 +152,11 @@
       .client-comment-block textarea { min-height: 88px; }
       .client-resume-block { margin: 12px 0; }
       .client-resume-block .k { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
+      .client-settings-block { margin: 12px 0; display: grid; gap: 10px; }
+      .client-settings-block label { display: block; font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+      .client-settings-block select { width: 100%; max-width: 320px; }
+      .resume-open-link { margin: 6px 0 10px; }
+      .resume-open-link a { font-weight: 600; }
       .resume-file-input { display: none; }
       .resume-file-picker {
         display: block;
@@ -473,6 +478,22 @@
           <p id="selectedClientBar" class="selected-client-bar" style="display:none"></p>
           <div id="userInfoSection" style="display:none">
             <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
+            <div id="clientSettingsBlock" class="client-settings-block" style="display:none">
+              <div>
+                <label for="clientSearchModeSel">Search mode</label>
+                <select id="clientSearchModeSel">
+                  <option value="not_urgent">Not urgent</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              <div>
+                <label>Work authorization</label>
+                <div class="skills-picker">
+                  <button id="clientWorkAuthPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
+                  <div id="clientWorkAuthPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                </div>
+              </div>
+            </div>
             <div id="clientCommentBlock" class="client-comment-block" style="display:none">
               <label class="client-comment-label">
                 <span class="k">Do not apply to (companies)</span>
@@ -484,15 +505,18 @@
                 ></textarea>
               </label>
               <div class="row">
-                <button id="saveClientCommentBtn" type="button">Save</button>
+                <button id="saveClientCommentBtn" type="button">Save client settings</button>
                 <span id="clientCommentMsg" class="muted"></span>
               </div>
             </div>
             <div id="clientResumeBlock" class="client-resume-block" style="display:none">
               <span class="k">Resume</span>
               <p id="clientResumeStatus" class="muted">No resume uploaded yet.</p>
+              <p id="clientResumeOpenLink" class="resume-open-link" style="display:none">
+                <a id="clientResumeOpenAnchor" href="#" target="_blank" rel="noopener noreferrer">Open resume in browser</a>
+              </p>
               <div class="resume-actions">
-                <button id="viewClientResumeBtn" type="button" class="ghost-btn" disabled>View resume</button>
+                <button id="viewClientResumeBtn" type="button">View resume</button>
               </div>
               <input id="clientResumeFileInput" class="resume-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
               <label for="clientResumeFileInput" id="clientResumeFilePickerLabel" class="resume-file-picker">
@@ -753,6 +777,7 @@
       let isCountryPickerOpen = false;
       let isPriorityPickerOpen = false;
       let isStatusPickerOpen = false;
+      let isClientWorkAuthPickerOpen = false;
       let applicationsPeriodMode = false;
       let isUploadingClientResume = false;
       let useRemotePositionsApi = false;
@@ -1330,7 +1355,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'clientWorkAuthPickerBtn', 'clientSearchModeSel', 'saveClientCommentBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -1725,6 +1750,7 @@
           </div>
         `;
         syncClientCommentUi(u);
+        syncClientSettingsUi(u);
         syncClientResumeUi(u);
       }
 
@@ -1760,12 +1786,78 @@
         const u = user || getSelectedUser();
         const status = document.getElementById('clientResumeStatus');
         const viewBtn = document.getElementById('viewClientResumeBtn');
+        const openLink = document.getElementById('clientResumeOpenLink');
+        const openAnchor = document.getElementById('clientResumeOpenAnchor');
         const resumeUrl = String(u?.resumeUrl || '').trim();
         if (status) {
           status.textContent = resumeUrl ? 'Resume on file' : 'No resume uploaded yet.';
         }
+        if (openLink && openAnchor) {
+          if (resumeUrl) {
+            openAnchor.href = resumeUrl;
+            openLink.style.display = '';
+          } else {
+            openAnchor.removeAttribute('href');
+            openLink.style.display = 'none';
+          }
+        }
         if (viewBtn) viewBtn.disabled = !resumeUrl || isUploadingClientResume || isSyncing;
         refreshClientResumeFileUi();
+      }
+
+      function getClientWorkAuthCsv() {
+        const checked = document.querySelectorAll('#clientWorkAuthPickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => String(opt.value || '').trim())
+          .filter((value) => COUNTRY_AUTH_OPTIONS.some((item) => item.value === value))
+          .join(',');
+      }
+
+      function applyClientWorkAuthCsv(csv) {
+        const selected = new Set(
+          String(csv || '')
+            .split(',')
+            .map((v) => v.trim())
+            .filter((value) => COUNTRY_AUTH_OPTIONS.some((item) => item.value === value))
+        );
+        document.querySelectorAll('#clientWorkAuthPickerMenu input[type="checkbox"]').forEach((opt) => {
+          opt.checked = selected.has(String(opt.value || '').trim());
+        });
+        renderClientWorkAuthPickerSummary();
+      }
+
+      function renderClientWorkAuthPickerOptions() {
+        const menu = document.getElementById('clientWorkAuthPickerMenu');
+        if (!menu) return;
+        menu.innerHTML = COUNTRY_AUTH_OPTIONS.map(
+          (item) =>
+            `<label class="skill-check"><input type="checkbox" value="${attrEsc(item.value)}" />${esc(item.label)}</label>`
+        ).join('');
+      }
+
+      function renderClientWorkAuthPickerSummary() {
+        const selected = getClientWorkAuthCsv()
+          .split(',')
+          .map((v) => v.trim())
+          .filter(Boolean);
+        const btn = document.getElementById('clientWorkAuthPickerBtn');
+        if (!btn) return;
+        btn.textContent = selected.length ? `${selected.length} countr${selected.length === 1 ? 'y' : 'ies'} selected` : 'Not specified';
+      }
+
+      function syncClientSettingsUi(user) {
+        const block = document.getElementById('clientSettingsBlock');
+        if (!block) return;
+        if (!user) {
+          block.style.display = 'none';
+          return;
+        }
+        block.style.display = '';
+        const searchModeSel = document.getElementById('clientSearchModeSel');
+        if (searchModeSel) {
+          searchModeSel.value = String(user.searchMode || '').trim() === 'urgent' ? 'urgent' : 'not_urgent';
+        }
+        applyClientWorkAuthCsv(user.workAuthorizationCountries || '');
       }
 
       function refreshClientResumeFileUi() {
@@ -1867,9 +1959,14 @@
         const seekerId = q().seekerId;
         if (!seekerId) throw new Error('Select a client first.');
         const textarea = document.getElementById('clientCommentText');
+        const searchModeSel = document.getElementById('clientSearchModeSel');
         const btn = document.getElementById('saveClientCommentBtn');
         const raw = String(textarea?.value || '').trim();
-        const body = { comment: raw || null };
+        const body = {
+          comment: raw || null,
+          searchMode: searchModeSel?.value || 'not_urgent',
+          workAuthorizationCountries: getClientWorkAuthCsv() || null,
+        };
         if (isBotAdminUser) {
           const aid = String(q().agentUserId || '').trim();
           if (aid) body.agentUserId = Number(aid);
@@ -1877,13 +1974,24 @@
         if (btn) btn.disabled = true;
         try {
           const payload = await api(
-            `${API_BASE}/api/app/agent/clients/${encodeURIComponent(seekerId)}/comment`,
+            `${API_BASE}/api/app/agent/clients/${encodeURIComponent(seekerId)}/settings`,
             { method: 'PATCH', body: JSON.stringify(body) }
           );
-          const saved = payload?.comment ?? null;
+          const savedComment = payload?.comment ?? null;
+          const savedSearchMode = payload?.searchMode || 'not_urgent';
+          const savedWorkAuth = payload?.workAuthorizationCountries || '';
           const idx = users.findIndex((u) => String(u.id) === String(seekerId));
-          if (idx >= 0) users[idx] = { ...users[idx], comment: saved };
-          if (textarea) textarea.value = String(saved || '');
+          if (idx >= 0) {
+            users[idx] = {
+              ...users[idx],
+              comment: savedComment,
+              searchMode: savedSearchMode,
+              workAuthorizationCountries: savedWorkAuth,
+            };
+          }
+          if (textarea) textarea.value = String(savedComment || '');
+          if (searchModeSel) searchModeSel.value = savedSearchMode === 'urgent' ? 'urgent' : 'not_urgent';
+          applyClientWorkAuthCsv(savedWorkAuth);
           invalidateApplyPriorityCache();
           setMsg('clientCommentMsg', 'Saved.');
         } finally {
@@ -2689,6 +2797,18 @@
         openCvModal(`Resume: #${u.id}`, u.resumeUrl);
       }
 
+      function openSelectedUserResumeExternal(event) {
+        event?.preventDefault();
+        const u = getSelectedUser();
+        const resumeUrl = String(u?.resumeUrl || '').trim();
+        if (!resumeUrl) return;
+        if (typeof tg?.openLink === 'function') {
+          tg.openLink(resumeUrl);
+          return;
+        }
+        window.open(resumeUrl, '_blank', 'noopener,noreferrer');
+      }
+
       async function maybeAutoGenerateMaterials() {
         if (!selectedJob || isJobBusy) return;
         if (hasTailoredMaterials()) return;
@@ -2789,6 +2909,7 @@
         renderCountryPickerOptions();
         renderPriorityPickerOptions();
         renderStatusPickerOptions();
+        renderClientWorkAuthPickerOptions();
         if (isBotAdminUser) await loadAgents();
         await Promise.all([loadPendingHumanRequests(), loadClients(), loadSkills()]);
         renderSelectedUserInfo();
@@ -2918,6 +3039,18 @@
         if (isStatusPickerOpen && statusBtn && statusMenu && !statusBtn.contains(event.target) && !statusMenu.contains(event.target)) {
           closeStatusPicker();
         }
+        const clientWorkAuthBtn = document.getElementById('clientWorkAuthPickerBtn');
+        const clientWorkAuthMenu = document.getElementById('clientWorkAuthPickerMenu');
+        if (
+          isClientWorkAuthPickerOpen &&
+          clientWorkAuthBtn &&
+          clientWorkAuthMenu &&
+          !clientWorkAuthBtn.contains(event.target) &&
+          !clientWorkAuthMenu.contains(event.target)
+        ) {
+          clientWorkAuthMenu.classList.remove('open');
+          isClientWorkAuthPickerOpen = false;
+        }
       });
       document.getElementById('showOnlyHighlyRelevant').addEventListener('change', (event) => {
         if (!hasSelectedSkills()) {
@@ -2995,6 +3128,19 @@
       });
       document.getElementById('notesText').addEventListener('blur', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
       document.getElementById('genBtn').addEventListener('click', () => generateMaterials().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('clientWorkAuthPickerBtn').addEventListener('click', () => {
+        if (isClientWorkAuthPickerOpen) {
+          document.getElementById('clientWorkAuthPickerMenu')?.classList.remove('open');
+          isClientWorkAuthPickerOpen = false;
+        } else {
+          document.getElementById('clientWorkAuthPickerMenu')?.classList.add('open');
+          isClientWorkAuthPickerOpen = true;
+        }
+      });
+      document.getElementById('clientWorkAuthPickerMenu').addEventListener('change', () => {
+        renderClientWorkAuthPickerSummary();
+      });
+      document.getElementById('clientResumeOpenAnchor')?.addEventListener('click', openSelectedUserResumeExternal);
       document.getElementById('saveClientCommentBtn').addEventListener('click', () => {
         saveClientComment().catch((e) => setMsg('clientCommentMsg', e.message, true));
       });
