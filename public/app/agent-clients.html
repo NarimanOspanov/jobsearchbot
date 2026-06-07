@@ -785,11 +785,8 @@
       };
 
       const STATUS_FILTER_OPTIONS = [
-        { value: 'new', label: 'new' },
-        { value: 'applied', label: 'applied' },
-        { value: 'skipped', label: 'skipped' },
-        { value: 'pending_screening', label: 'pending_screening' },
-        { value: 'does_not_match', label: 'does_not_match' },
+        { value: 'applied', label: 'Applied' },
+        { value: 'skipped', label: 'Skipped' },
       ];
 
       const COUNTRY_AUTH_OPTIONS = [
@@ -1010,8 +1007,8 @@
           case 'posted':
             return (asComparableDate(a.publishedAt) - asComparableDate(b.publishedAt)) * dir;
           case 'status':
-            va = String(appA?.Status || 'new').toLowerCase();
-            vb = String(appB?.Status || 'new').toLowerCase();
+            va = String(appA?.Status || '').toLowerCase();
+            vb = String(appB?.Status || '').toLowerCase();
             break;
           default:
             va = String(a.title || '').toLowerCase();
@@ -1130,7 +1127,8 @@
         return getSelectedPriorities().join(',');
       }
       function getJobApplicationStatus(jobId) {
-        return String(appByScreenlyId(jobId)?.Status || 'new').toLowerCase();
+        const status = appByScreenlyId(jobId)?.Status;
+        return status ? String(status).toLowerCase() : null;
       }
       function jobMatchesPriorityFilter(jobId) {
         const selected = getSelectedPriorities();
@@ -1151,7 +1149,9 @@
       function jobMatchesStatusFilter(jobId) {
         const selected = getSelectedStatuses();
         if (!selected.length) return true;
-        return selected.includes(getJobApplicationStatus(jobId));
+        const status = getJobApplicationStatus(jobId);
+        if (!status) return false;
+        return selected.includes(status);
       }
       function jobMatchesClientFilters(jobId) {
         return jobMatchesPriorityFilter(jobId) && jobMatchesStatusFilter(jobId);
@@ -2302,7 +2302,7 @@
             <td>${esc(formatPostedDate(p.publishedAt))}</td>
             <td>${esc(p.source || '—')}</td>
             <td>${esc(getApplyTypeDisplay(p))}</td>
-            <td>${esc(app?.Status || 'new')}</td>
+            <td>${esc(app?.Status || '—')}</td>
           </tr>`;
         }).join('');
         body.querySelectorAll('tr[data-open]').forEach((row) => {
