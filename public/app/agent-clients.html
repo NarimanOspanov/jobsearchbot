@@ -753,6 +753,7 @@
       let isCountryPickerOpen = false;
       let isPriorityPickerOpen = false;
       let isStatusPickerOpen = false;
+      let applicationsPeriodMode = false;
       let isUploadingClientResume = false;
       let useRemotePositionsApi = false;
       let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
@@ -1160,8 +1161,18 @@
         return (Array.isArray(positions) ? positions : []).filter((p) => jobMatchesClientFilters(p.id)).length;
       }
       function buildJobsDashMessage() {
+        const from = document.getElementById('fromDate')?.value || q().from || '';
+        const to = document.getElementById('toDate')?.value || q().to || '';
         const loaded = Number(pageInfo.count || positions.length) || 0;
         const visible = countVisibleJobsAfterClientFilters();
+        if (applicationsPeriodMode) {
+          const statusLabel = getSelectedStatuses().join(', ') || 'applications';
+          let msg = `Loaded ${visible} ${statusLabel} application(s) applied ${from && to ? `from ${from} to ${to}` : 'in selected period'}.`;
+          if (getSelectedPriorities().length && visible !== loaded) {
+            msg += ` (${loaded} before priority filter)`;
+          }
+          return msg;
+        }
         let msg = `Loaded ${loaded} jobs (page ${pageInfo.page}).`;
         const filterParts = [];
         if (getSelectedPriorities().length) filterParts.push('priority');
@@ -2165,25 +2176,60 @@
         });
       }
 
+      function parseApplicationMetaJson(app) {
+        try {
+          const parsed = JSON.parse(String(app?.MetaJson || ''));
+          return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch {
+          return {};
+        }
+      }
+
+      function positionFromApplication(app) {
+        const meta = parseApplicationMetaJson(app);
+        const screenlyJobId = Number.parseInt(String(app?.ScreenlyJobId ?? ''), 10);
+        return {
+          id: Number.isSafeInteger(screenlyJobId) ? screenlyJobId : app?.Id,
+          title: app?.VacancyTitle || `Job #${screenlyJobId || app?.Id || '?'}`,
+          company: app?.CompanyName || '—',
+          location: meta.location || '—',
+          publishedAt: app?.AppliedAt || null,
+          source: app?.Source || null,
+          applyUrl: meta.applyUrl || null,
+          shortSummary: meta.shortSummary || null,
+          applyType: meta.applyType || null,
+        };
+      }
+
       function currentScreenlyJobIds() {
         return (Array.isArray(positions) ? positions : [])
           .map((p) => Number.parseInt(String(p?.id ?? ''), 10))
           .filter((id) => Number.isSafeInteger(id) && id > 0);
       }
 
-      async function loadApplicationsByUser(userId, { screenlyJobIds } = {}) {
+      async function loadApplicationsByUser(userId, { screenlyJobIds, appliedFrom, appliedTo, statuses } = {}) {
         const ids = (Array.isArray(screenlyJobIds) ? screenlyJobIds : [])
           .map((id) => Number.parseInt(String(id), 10))
           .filter((id) => Number.isSafeInteger(id) && id > 0);
         let url =
           `${API_BASE}/api/app/applications/by-user?userId=${encodeURIComponent(userId)}&offset=0${agentQuerySuffix()}`;
+        const normalizedStatuses = String(statuses || '')
+          .split(',')
+          .map((value) => value.trim().toLowerCase())
+          .filter((value) => STATUS_FILTER_OPTIONS.some((item) => item.value === value));
+        if (appliedFrom) url += `&appliedFrom=${encodeURIComponent(appliedFrom)}`;
+        if (appliedTo) url += `&appliedTo=${encodeURIComponent(appliedTo)}`;
+        if (normalizedStatuses.length) url += `&statuses=${encodeURIComponent(normalizedStatuses.join(','))}`;
         if (ids.length) {
           url += `&screenlyJobIds=${encodeURIComponent(ids.join(','))}&limit=${encodeURIComponent(String(Math.min(500, ids.length)))}`;
+        } else if (normalizedStatuses.length || appliedFrom || appliedTo) {
+          url += '&limit=500';
         } else {
           url += '&limit=100';
         }
         applications = await api(url);
         refreshApplyPriorityFromApplications();
+        return applications;
       }
 
       async function syncJobs() {
@@ -2218,6 +2264,31 @@
         });
         setSyncBusy(true);
         try {
+          const selectedStatuses = getSelectedStatuses();
+          if (selectedStatuses.length) {
+            applicationsPeriodMode = true;
+            await loadApplicationsByUser(seekerId, {
+              appliedFrom: from,
+              appliedTo: to,
+              statuses: selectedStatuses.join(','),
+            });
+            positions = applications
+              .filter((app) => Number.isSafeInteger(Number.parseInt(String(app?.ScreenlyJobId ?? ''), 10)))
+              .map(positionFromApplication);
+            pageInfo = {
+              page: 1,
+              pageSize: Math.max(positions.length, 1),
+              hasMore: false,
+              count: positions.length,
+              totalRows: positions.length,
+            };
+            renderJobs();
+            updatePagerUi();
+            setMsg('dashMsg', buildJobsDashMessage());
+            return;
+          }
+
+          applicationsPeriodMode = false;
           const positionsBase = useRemotePositionsApi ? REMOTE_POSITIONS_URL : POSITIONS_URL;
           const posUrl =
             `${positionsBase}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
@@ -2266,7 +2337,7 @@
           <th><button type="button" data-sort="title">Title${sortArrow('title')}</button></th>
           <th><button type="button" data-sort="company">Company${sortArrow('company')}</button></th>
           <th><button type="button" data-sort="location">Location${sortArrow('location')}</button></th>
-          <th><button type="button" data-sort="posted">Posted${sortArrow('posted')}</button></th>
+          <th><button type="button" data-sort="posted">${applicationsPeriodMode ? 'Applied' : 'Posted'}${sortArrow('posted')}</button></th>
           <th>Source</th>
           <th><button type="button" data-sort="apply_type">Apply type${sortArrow('apply_type')}</button></th>
           <th><button type="button" data-sort="status">Status${sortArrow('status')}</button></th>
@@ -2818,8 +2889,8 @@
       });
       document.getElementById('statusPickerMenu').addEventListener('change', () => {
         renderStatusPickerSummary();
-        setQ({ statuses: getSelectedStatusesCsv() });
-        renderJobs();
+        setQ({ statuses: getSelectedStatusesCsv(), page: '1' });
+        syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
       });
       document.addEventListener('click', (event) => {
         const skillBtn = document.getElementById('skillPickerBtn');

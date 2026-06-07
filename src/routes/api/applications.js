@@ -31,6 +31,24 @@ async function enforceAgentClientAccess(req, res, clientUserId) {
   return true;
 }
 
+function parseAppliedDateBound(value, endOfDay = false) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const d = new Date(`${raw}T00:00:00`);
+  if (!Number.isFinite(d.getTime())) return null;
+  if (endOfDay) d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function parseApplicationStatusesCsv(raw) {
+  return [...new Set(
+    String(raw || '')
+      .split(',')
+      .map((part) => part.trim().toLowerCase())
+      .filter(Boolean)
+  )];
+}
+
 export function createApplicationsRouter() {
   const router = Router();
 
@@ -84,14 +102,39 @@ export function createApplicationsRouter() {
         .filter((id) => Number.isSafeInteger(id) && id > 0);
       const uniqueScreenlyJobIds = [...new Set(screenlyJobIds)];
 
+      const appliedFrom = parseAppliedDateBound(req.query.appliedFrom, false);
+      const appliedTo = parseAppliedDateBound(req.query.appliedTo, true);
+      const statuses = parseApplicationStatusesCsv(req.query.statuses);
+
       const where = { UserId: userId };
       if (uniqueScreenlyJobIds.length) {
         where.ScreenlyJobId = { [Sequelize.Op.in]: uniqueScreenlyJobIds };
       }
 
+      const andConditions = [];
+      if (appliedFrom || appliedTo) {
+        const appliedAtRange = {};
+        if (appliedFrom) appliedAtRange[Sequelize.Op.gte] = appliedFrom;
+        if (appliedTo) appliedAtRange[Sequelize.Op.lte] = appliedTo;
+        andConditions.push({ AppliedAt: appliedAtRange });
+      }
+      if (statuses.length) {
+        andConditions.push(
+          Sequelize.where(Sequelize.fn('lower', Sequelize.col('Status')), {
+            [Sequelize.Op.in]: statuses,
+          })
+        );
+      }
+      if (andConditions.length) {
+        where[Sequelize.Op.and] = andConditions;
+      }
+
+      const usesApplicationPeriodQuery = Boolean(appliedFrom || appliedTo || statuses.length);
       const defaultLimit = uniqueScreenlyJobIds.length
         ? Math.min(500, Math.max(uniqueScreenlyJobIds.length, 1))
-        : 100;
+        : usesApplicationPeriodQuery
+          ? 500
+          : 100;
       const limit = Math.min(
         500,
         Math.max(1, parseInt(String(req.query.limit || String(defaultLimit)), 10) || defaultLimit)
