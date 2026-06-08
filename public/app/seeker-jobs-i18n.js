@@ -371,7 +371,6 @@
     if (genBtn) {
       genBtn.textContent = titleSkill ? sj(L, 'genCvCoverDeeplink') : sj(L, 'genCvCover');
     }
-    setText('jobModalShare', 'shareJob');
     setText('insightModalTitle', 'insightTitle');
     setText('highlyRelevantHintTitle', 'highlyRelevantModalTitle');
     const resumeTitleEl = document.querySelector('.resume-required-title');
@@ -423,9 +422,13 @@
     const sourceSel = document.getElementById('sourceSel');
     if (sourceSel?.options[0]) sourceSel.options[0].textContent = sj(L, 'filterAll');
 
-    ['jobModalClose', 'insightModalClose', 'highlyRelevantHintClose', 'resumeRequiredClose', 'subscribeRequiredClose', 'paymentRequiredClose', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
+    ['jobModalClose', 'insightModalClose', 'highlyRelevantHintClose', 'resumeRequiredClose', 'subscribeRequiredClose', 'paymentRequiredClose', 'prevPageBtn', 'nextPageBtn', 'jobModalShare'].forEach((id) => {
       const el = document.getElementById(id);
-      if (el) el.setAttribute('aria-label', sj(L, id === 'prevPageBtn' ? 'prevPage' : id === 'nextPageBtn' ? 'nextPage' : 'close'));
+      if (el) {
+        const labelKey =
+          id === 'prevPageBtn' ? 'prevPage' : id === 'nextPageBtn' ? 'nextPage' : id === 'jobModalShare' ? 'shareJob' : 'close';
+        el.setAttribute('aria-label', sj(L, labelKey));
+      }
     });
 
     const notes = document.getElementById('notesText');
