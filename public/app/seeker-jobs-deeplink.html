@@ -22,9 +22,6 @@
         color: var(--text);
         padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
       }
-      body.has-tma-bottom-nav {
-        padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
-      }
       .wrap { width: 100%; max-width: 100%; margin: 0 auto; padding: 6px 10px 10px; display: grid; gap: 6px; box-sizing: border-box; }
       #globalMsg:empty { display: none; }
       @media (min-width: 769px) {
@@ -890,7 +887,6 @@
 
     <script src="/app/tma-i18n.js"></script>
     <script src="/app/seeker-jobs-i18n.js"></script>
-    <script src="/app/tma-bottom-nav.js"></script>
     <script>
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
@@ -2385,7 +2381,6 @@
         }
         searchFiltersPanel = SeekerJobsI18n.initSearchFiltersPanel(uiLang);
         refreshSearchFiltersSummary();
-        TmaBottomNav.mount({ active: 'jobs', lang: uiLang });
       }
 
       ['fromDate', 'toDate'].forEach((id) => {
