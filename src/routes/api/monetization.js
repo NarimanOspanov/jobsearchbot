@@ -8,7 +8,12 @@ import { runtimeBot } from '../../bot/state.js';
 export function createMonetizationRouter() {
   const router = Router();
 
-  router.get('/api/app/bot-info', (_req, res) => res.json({ botUsername: runtimeBot.username }));
+  router.get('/api/app/bot-info', (_req, res) =>
+    res.json({
+      botUsername: runtimeBot.username,
+      miniAppShortName: process.env.TELEGRAM_MINI_APP_SHORT_NAME || 'app',
+    })
+  );
 
   router.get('/api/app/monetization/status', miniAppAuth, async (req, res) => {
     try {

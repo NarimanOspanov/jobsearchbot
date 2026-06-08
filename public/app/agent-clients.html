@@ -668,7 +668,8 @@
     </div>
     <div id="jobModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
-        <div class="modal-head">
+        <div class="modal-head" style="display:flex;justify-content:flex-end;gap:8px">
+          <button id="jobModalShare" type="button" class="ghost-btn">Share</button>
           <button id="jobModalClose" type="button" class="ghost-btn" aria-label="Close">×</button>
         </div>
         <div class="modal-body" style="padding:12px;overflow:auto;background:#0a1020">
@@ -725,6 +726,7 @@
       </div>
     </div>
 
+    <script src="/app/tma-job-share.js"></script>
     <script>
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
@@ -788,6 +790,8 @@
       let isAnalyzingApplyPriority = false;
       let isQueueingApplyPriorityAllClients = false;
       let skipStatusAutoSave = false;
+      let botUsername = '';
+      let miniAppShortName = 'app';
 
       const PRIORITY_LABELS = {
         apply_first: 'Apply first',
@@ -2534,6 +2538,43 @@
         return appByScreenlyId(job.id) || app;
       }
 
+      async function loadBotInfo() {
+        if (botUsername && miniAppShortName) {
+          return { botUsername, miniAppShortName };
+        }
+        const payload = await api('/api/app/bot-info');
+        botUsername = String(payload?.botUsername || '').trim();
+        miniAppShortName = String(payload?.miniAppShortName || 'app').trim() || 'app';
+        return { botUsername, miniAppShortName };
+      }
+
+      async function shareSelectedJobWithColleague() {
+        if (!selectedJob) {
+          setMsg('jobMsg', 'Open a job first.', true);
+          return;
+        }
+        const clientUserId = String(q().seekerId || '').trim();
+        if (!clientUserId) {
+          setMsg('jobMsg', 'Select a client first.', true);
+          return;
+        }
+        try {
+          const { botUsername: username, miniAppShortName: shortName } = await loadBotInfo();
+          if (!username) throw new Error('Could not get bot username.');
+          const shareUrl = TmaJobShare.buildAgentJobShareLink({
+            botUsername: username,
+            miniAppShortName: shortName,
+            seekerId: clientUserId,
+            jobId: selectedJob.id,
+          });
+          if (!shareUrl) throw new Error('Could not share job.');
+          const text = `Check out this job: ${selectedJob.title || ''} — ${selectedJob.company || ''}`;
+          TmaJobShare.shareJob({ tg, shareUrl, text });
+        } catch (err) {
+          setMsg('jobMsg', err?.message || 'Could not share job.', true);
+        }
+      }
+
       function openJobById(id) {
         const job = positions.find((x) => Number(x.id) === Number(id));
         if (!job) {
@@ -3154,6 +3195,9 @@
       document.getElementById('cvModalClose').addEventListener('click', closeCvModal);
       document.getElementById('cvModal').addEventListener('click', (e) => {
         if (e.target.id === 'cvModal') closeCvModal();
+      });
+      document.getElementById('jobModalShare').addEventListener('click', () => {
+        shareSelectedJobWithColleague().catch((e) => setMsg('jobMsg', e.message, true));
       });
       document.getElementById('jobModalClose').addEventListener('click', closeJobModal);
       document.getElementById('jobModal').addEventListener('click', (e) => {

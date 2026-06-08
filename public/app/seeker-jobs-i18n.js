@@ -78,6 +78,9 @@
       published: 'Опубликовано',
       applyVia: 'Отклик',
       applyNow: 'Откликнуться',
+      shareJob: 'Поделиться',
+      shareJobText: 'Посмотри вакансию: {title} — {company}',
+      errShareJob: 'Не удалось поделиться вакансией.',
       remote: 'Удаленка',
       remoteWhy: 'Почему AI считает эту вакансию удаленной?',
       skillWhy: 'Почему AI выделил этот навык?',
@@ -209,6 +212,9 @@
       published: 'Posted',
       applyVia: 'Apply via',
       applyNow: 'Apply',
+      shareJob: 'Share',
+      shareJobText: 'Check out this job: {title} — {company}',
+      errShareJob: 'Could not share job.',
       remote: 'Remote',
       remoteWhy: 'Why does AI consider this job remote?',
       skillWhy: 'Why did AI highlight this skill?',
@@ -365,6 +371,7 @@
     if (genBtn) {
       genBtn.textContent = titleSkill ? sj(L, 'genCvCoverDeeplink') : sj(L, 'genCvCover');
     }
+    setText('jobModalShare', 'shareJob');
     setText('insightModalTitle', 'insightTitle');
     setText('highlyRelevantHintTitle', 'highlyRelevantModalTitle');
     const resumeTitleEl = document.querySelector('.resume-required-title');

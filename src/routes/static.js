@@ -6,21 +6,37 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicApp = join(__dirname, '..', '..', 'public', 'app');
 
-function isSeekerJobsDeeplinkRequest(req) {
-  const rawStart = String(req.query.startapp || req.query.startApp || '').trim();
-  return rawStart.startsWith('seekerjobs__');
+function getStartappPayload(req) {
+  return String(req.query.startapp || req.query.startApp || '').trim();
+}
+
+function resolveStartappEntryPage(rawStart) {
+  if (rawStart.startsWith('seekerjobs__')) return 'seeker-jobs-deeplink.html';
+  return null;
 }
 
 export function createStaticRouter() {
   const router = Router();
 
   router.get('/app', (req, res, next) => {
-    if (!isSeekerJobsDeeplinkRequest(req)) return next();
-    return res.sendFile(join(publicApp, 'seeker-jobs-deeplink.html'));
+    const rawStart = getStartappPayload(req);
+    if (rawStart.startsWith('agentclients__')) {
+      const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+      return res.redirect(302, `/app/index.html${qs}`);
+    }
+    const entryPage = resolveStartappEntryPage(rawStart);
+    if (!entryPage) return next();
+    return res.sendFile(join(publicApp, entryPage));
   });
   router.get('/app/', (req, res, next) => {
-    if (!isSeekerJobsDeeplinkRequest(req)) return next();
-    return res.sendFile(join(publicApp, 'seeker-jobs-deeplink.html'));
+    const rawStart = getStartappPayload(req);
+    if (rawStart.startsWith('agentclients__')) {
+      const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+      return res.redirect(302, `/app/index.html${qs}`);
+    }
+    const entryPage = resolveStartappEntryPage(rawStart);
+    if (!entryPage) return next();
+    return res.sendFile(join(publicApp, entryPage));
   });
   router.use('/app', express.static(publicApp));
   router.get('/app/applications', (_req, res) => res.sendFile(join(publicApp, 'applications.html')));

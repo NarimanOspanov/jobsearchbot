@@ -751,7 +751,8 @@
     </div>
     <div id="jobModal" class="modal-backdrop" role="dialog" aria-modal="true">
       <div class="modal-card">
-        <div class="modal-head">
+        <div class="modal-head" style="display:flex;justify-content:flex-end;gap:8px">
+          <button id="jobModalShare" type="button" class="ghost-btn">Поделиться</button>
           <button id="jobModalClose" type="button" class="ghost-btn" aria-label="Закрыть">×</button>
         </div>
         <div class="modal-body">
@@ -887,6 +888,7 @@
 
     <script src="/app/tma-i18n.js"></script>
     <script src="/app/seeker-jobs-i18n.js"></script>
+    <script src="/app/tma-job-share.js"></script>
     <script>
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
@@ -1018,6 +1020,7 @@
       let pendingSubscribeJobId = null;
       let monetizationStatus = null;
       let botUsername = '';
+      let miniAppShortName = 'app';
       let bootDeepLinkSkillIdsCsv = '';
       let profileWorkAuthCountriesCsv = '';
       const CHANNEL_ALTERNATIVE_URL = 'https://t.me/+0zv_MNh22Xw3NTMy';
@@ -1238,12 +1241,14 @@
           initialParams.has('source') ||
           initialParams.has('sourceIds') ||
           initialParams.has('country') ||
+          initialParams.has('jobId') ||
           isTruthyQueryParam(initialParams.get('showOnlyHighlyRelevant'));
         const hasResolvedStateFilters =
           Boolean(String(state?.skillIds || '').trim()) ||
           Boolean(String(state?.applyTypes || '').trim()) ||
           Boolean(String(state?.source || '').trim()) ||
           Boolean(String(state?.country || '').trim()) ||
+          Boolean(String(state?.jobId || '').trim()) ||
           isTruthyQueryParam(state?.showOnlyHighlyRelevant);
         return hasDeepLinkPayload || hasFilterOverrides || hasResolvedStateFilters;
       }
@@ -1691,11 +1696,54 @@
         return monetizationStatus;
       }
 
-      async function loadBotUsername() {
-        if (botUsername) return botUsername;
+      async function loadBotInfo() {
+        if (botUsername && miniAppShortName) {
+          return { botUsername, miniAppShortName };
+        }
         const payload = await api('/api/app/bot-info');
         botUsername = String(payload?.botUsername || '').trim();
-        return botUsername;
+        miniAppShortName = String(payload?.miniAppShortName || 'app').trim() || 'app';
+        return { botUsername, miniAppShortName };
+      }
+
+      async function loadBotUsername() {
+        const info = await loadBotInfo();
+        return info.botUsername;
+      }
+
+      async function shareSelectedJobWithColleague() {
+        if (!selectedJob) {
+          setMsg('jobMsg', sj('errOpenJobFirst'), true);
+          return;
+        }
+        try {
+          const { botUsername: username, miniAppShortName: shortName } = await loadBotInfo();
+          if (!username) throw new Error(sj('errBotUsername'));
+          const s = q();
+          const shareUrl = TmaJobShare.buildSeekerJobShareLink({
+            botUsername: username,
+            miniAppShortName: shortName,
+            jobId: selectedJob.id,
+            from: s.from || document.getElementById('fromDate').value,
+            to: s.to || document.getElementById('toDate').value,
+            skillIds: s.skillIds || getSelectedSkillIdsCsv(),
+          });
+          if (!shareUrl) throw new Error(sj('errShareJob'));
+          const text = sj('shareJobText', {
+            title: selectedJob.title || '',
+            company: selectedJob.company || '',
+          });
+          TmaJobShare.shareJob({ tg, shareUrl, text });
+        } catch (err) {
+          setMsg('jobMsg', err?.message || sj('errShareJob'), true);
+        }
+      }
+
+      async function maybeOpenSharedJobOnBoot() {
+        const jobId = Number(q().jobId || 0);
+        if (!Number.isSafeInteger(jobId) || jobId <= 0) return;
+        if (!positions.find((x) => Number(x.id) === jobId)) return;
+        openJobById(jobId);
       }
 
       function openTelegramLinkAndCloseMiniApp(url) {
@@ -2379,6 +2427,7 @@
         if (shouldAutoSearchOnBoot(s)) {
           await syncJobs({ trackSearchClick: true });
         }
+        await maybeOpenSharedJobOnBoot();
         searchFiltersPanel = SeekerJobsI18n.initSearchFiltersPanel(uiLang);
         refreshSearchFiltersSummary();
       }
@@ -2558,6 +2607,9 @@
       document.getElementById('workAuthHintClose').addEventListener('click', closeWorkAuthHintModal);
       document.getElementById('workAuthHintModal').addEventListener('click', (event) => {
         if (event.target.id === 'workAuthHintModal') closeWorkAuthHintModal();
+      });
+      document.getElementById('jobModalShare').addEventListener('click', () => {
+        shareSelectedJobWithColleague().catch((e) => setMsg('jobMsg', e.message, true));
       });
       document.getElementById('jobModalClose').addEventListener('click', closeJobModal);
       document.getElementById('jobModal').addEventListener('click', (event) => {
