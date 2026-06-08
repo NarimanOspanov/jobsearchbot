@@ -202,7 +202,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUsePublisherStatsWebApp = isValidTelegramWebAppUrl(publisherStatsUrl);
   const canUseCvScoreWebApp = isValidTelegramWebAppUrl(cvScoreUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
-  const hireHumanImagePath = join(__dirname, '..', 'hire_human.png');
   const notSubscribedImagePath = join(__dirname, '..', 'not_subscribed.png');
   const subscribedImagePath = join(__dirname, '..', 'subscribed.png');
   const HIRE_HUMAN_UPLOAD_CV_CALLBACK = 'hire_human_upload_cv';
@@ -511,7 +510,14 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   };
 
   const buildHireHumanIntroKeyboard = (lang) => ({
-    inline_keyboard: [[{ text: t(lang, 'btn_hire_human_upload_cv'), callback_data: HIRE_HUMAN_UPLOAD_CV_CALLBACK }]],
+    inline_keyboard: [
+      [{ text: t(lang, 'btn_hire_human_upload_cv'), callback_data: HIRE_HUMAN_UPLOAD_CV_CALLBACK }],
+      [
+        canUseSeekerJobsWebApp
+          ? { text: t(lang, 'btn_hire_human_browse_jobs'), web_app: { url: seekerJobsUrl } }
+          : { text: t(lang, 'btn_hire_human_browse_jobs'), callback_data: 'start_open_jobsearch' },
+      ],
+    ],
   });
 
   const startHireHumanScenario = async (ctx, source = 'hire_human') => {
@@ -529,13 +535,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const lang = langFromCtx(ctx);
     const welcomeText = tr(ctx, 'hire_human_welcome');
     const replyMarkup = buildHireHumanIntroKeyboard(lang);
-    const imagePath = existsSync(hireHumanImagePath)
-      ? hireHumanImagePath
-      : existsSync(startAvatarPath)
-        ? startAvatarPath
-        : null;
-    if (imagePath) {
-      await ctx.replyWithPhoto({ source: imagePath }, { caption: welcomeText, reply_markup: replyMarkup });
+    if (existsSync(startAvatarPath)) {
+      await ctx.replyWithPhoto(
+        { source: startAvatarPath },
+        { caption: welcomeText, reply_markup: replyMarkup }
+      );
       return;
     }
     await ctx.reply(welcomeText, { reply_markup: replyMarkup });

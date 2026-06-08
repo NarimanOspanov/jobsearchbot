@@ -67,11 +67,17 @@ export const BOT_LOCALES = {
     hireagent_send_cv:
       'Отправьте резюме файлом (PDF или изображение) — я разберу его и начну работу.\nКогда потребуются действия, я напишу.',
 
-    hire_human_welcome:
-      'Здравствуйте! Для того чтобы оставить заявку на услугу персонального ассистента, загрузите ваше резюме для оценки.',
+    hire_human_welcome: [
+      'Привет!',
+      '',
+      'Платите только после трудоустройства. Живой ассистент подаёт ~1 000 удалённых откликов в месяц за вас.',
+      '',
+      'Подробнее: https://screenly.work/',
+    ].join('\n'),
     hire_human_upload_cv:
       'Отправьте резюме файлом PDF — мы разберём его и свяжемся с вами в ближайшее время и назначим время для онлайн консультации.',
-    btn_hire_human_upload_cv: 'Загрузить резюме',
+    btn_hire_human_upload_cv: 'Нанять ассистента',
+    btn_hire_human_browse_jobs: 'Ознакомиться с вакансиями',
     hire_human_request_received:
       '✅ Спасибо! Мы получили вашу заявку и резюме. Персональный ассистент свяжется с вами в ближайшее время.\n\nПока можете посмотреть открытые вакансии с 100% удалёнкой.',
 
@@ -291,11 +297,17 @@ export const BOT_LOCALES = {
     hireagent_send_cv:
       'Send your resume as a file (PDF or image) — I will parse it and get started.\nI will message you when we need your input.',
 
-    hire_human_welcome:
-      'Hello! To request a personal assistant service, please upload your resume for review.',
+    hire_human_welcome: [
+      'Hi!',
+      '',
+      'Pay only after placement. A real human assistant applies to ~1,000 remote jobs a month for you.',
+      '',
+      'More details: https://screenly.work/',
+    ].join('\n'),
     hire_human_upload_cv:
       'Send your resume as a PDF file — we will review it, contact you shortly, and schedule an online consultation.',
-    btn_hire_human_upload_cv: 'Upload resume',
+    btn_hire_human_upload_cv: 'Hire assistant',
+    btn_hire_human_browse_jobs: 'Browse jobs',
     hire_human_request_received:
       '✅ Thank you! We received your request and resume. A personal assistant will contact you shortly.\n\nIn the meantime, feel free to browse open 100% remote jobs.',
 
