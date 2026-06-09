@@ -593,6 +593,7 @@ export function createAgentClientsRouter() {
       if (
         message.includes('Upload client resume') ||
         message.includes('Resume text is empty') ||
+        message.includes('Fill in apply preferences') ||
         message.includes('Fill in client comment') ||
         message.includes('Set client roles/skills')
       ) {

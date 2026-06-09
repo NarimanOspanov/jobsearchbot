@@ -277,7 +277,7 @@ export async function enqueueApplyPriorityDefaultForClient({
     throw new Error('Client has no resume uploaded');
   }
   if (!clientIsReadyForApplyPriority(client)) {
-    throw new Error('Set client roles/skills and comment (companies to skip) before running apply priority');
+    throw new Error('Set client roles/skills and apply preferences before running apply priority');
   }
 
   const normalizedPageSize = Math.min(200, Math.max(1, Number.parseInt(String(pageSize || '100'), 10) || 100));

@@ -451,7 +451,7 @@ export async function rankJobsForAgentApplyBatchWithAI({
 Candidate resume (facts only — do not invent credentials):
 ${resume}
 
-Agent notes about this candidate (may include companies to skip, employers to avoid, roles to prioritize):
+Agent apply preferences for this candidate (free-form notes from the career agent — may include companies to avoid, priority employers, target industries, preferred or excluded roles, current employer, etc.):
 ${comment || '(none)'}
 
 ${modeHint}
@@ -471,10 +471,12 @@ Return strict JSON only as an array with one object per job id listed above:
 ]
 
 Rules:
-- score: integer 0..100 resume-to-job fit based ONLY on resume facts vs job requirements
-- priority apply_first: top-tier fit and should be applied soon; good: solid fit; low: weak fit; skip: do not apply (conflicts with agent notes, current employer in notes, or very poor fit)
-- If agent notes say to skip a company or role, mark matching jobs priority skip with score 0
-- justification: 1-2 short sentences for the agent (plain language)
+- score: integer 0..100 resume-to-job fit based ONLY on resume facts vs job requirements, adjusted by agent apply preferences below
+- Use agent apply preferences when scoring and ranking: favor jobs that match priority companies, industries, or roles mentioned; penalize or skip jobs that conflict with exclusions
+- priority apply_first: top-tier fit (resume + preferences) and should be applied soon; good: solid fit; low: weak fit; skip: conflicts with preferences (companies/industries/roles to avoid), current employer listed in preferences, or very poor resume fit
+- If preferences say to skip or avoid a company, industry, or role type, mark matching jobs priority skip with score 0
+- If preferences list priority companies, industries, or roles, boost matching jobs in score and prefer apply_first or good when resume fit is reasonable
+- justification: 1-2 short sentences for the agent (plain language); mention preference match or conflict when relevant
 - skipReason: required when priority is skip, else null
 - Include every job id exactly once
 - Do not invent resume facts`;

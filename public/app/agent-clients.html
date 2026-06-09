@@ -690,12 +690,12 @@
               </div>
               <div id="clientCommentBlock" class="client-comment-block">
                 <label class="client-comment-label">
-                  <span class="k">Do not apply to (companies)</span>
+                  <span class="k">Apply preferences</span>
                   <textarea
                     id="clientCommentText"
-                    rows="4"
-                    placeholder="Current employer: Acme Inc. Other companies to skip: ..."
-                    aria-label="Do not apply to companies"
+                    rows="5"
+                    placeholder="Free-form notes for AI job ranking. Examples: companies to skip (cvat.ai, CDEK), priority companies (Stripe), industries (fintech), preferred roles (senior backend), current employer..."
+                    aria-label="Apply preferences"
                   ></textarea>
                 </label>
                 <div class="row">
@@ -782,7 +782,7 @@
                 <span id="analyzeApplyPriorityLoader" class="loader" aria-hidden="true" hidden></span>
                 <button id="queueAnalyzeAllClientsBtn" type="button" class="ghost-btn" disabled hidden>Analyze all clients (background)</button>
                 <span id="queueAnalyzeAllClientsLoader" class="loader" aria-hidden="true" hidden></span>
-                <span id="applyPriorityStaleHint" class="apply-priority-stale-hint" hidden>Comment or resume changed — re-analyze</span>
+                <span id="applyPriorityStaleHint" class="apply-priority-stale-hint" hidden>Preferences or resume changed — re-analyze</span>
                 <span class="pager">
                   <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Previous page">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
@@ -1478,7 +1478,7 @@
         if (!seekerId || !user) throw new Error('Select a client first.');
         if (!user.resumeUrl) throw new Error('Upload client resume before analyzing priority');
         if (!String(user.comment || '').trim()) {
-          throw new Error('Fill in "Do not apply to (companies)" before analyzing priority');
+          throw new Error('Fill in Apply preferences before analyzing priority');
         }
         if (!clientHasApplyPrioritySkills(user)) {
           throw new Error('Set client roles/skills before analyzing priority');
@@ -2081,7 +2081,7 @@
         const user = getSelectedUser();
         if (!user?.resumeUrl) throw new Error('Upload client resume before running apply priority.');
         if (!String(user.comment || '').trim()) {
-          throw new Error('Fill in "Do not apply to (companies)" before running apply priority.');
+          throw new Error('Fill in Apply preferences before running apply priority.');
         }
         if (!clientHasApplyPrioritySkills(user)) {
           throw new Error('Set client roles/skills before running apply priority.');

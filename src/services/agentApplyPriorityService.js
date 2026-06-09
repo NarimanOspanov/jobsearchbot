@@ -157,7 +157,7 @@ export async function rankJobsForAgentApply({ clientUser, jobs }) {
   const searchMode = String(clientUser?.SearchMode || 'not_urgent').trim() === 'urgent' ? 'urgent' : 'not_urgent';
   const agentComment = String(clientUser?.Comment || '').trim();
   if (!agentComment) {
-    throw new Error('Fill in client comment (companies to skip) before analyzing apply priority');
+    throw new Error('Fill in apply preferences before analyzing apply priority');
   }
   if (!clientHasApplyPrioritySkills(clientUser)) {
     throw new Error('Set client roles/skills before analyzing apply priority');
