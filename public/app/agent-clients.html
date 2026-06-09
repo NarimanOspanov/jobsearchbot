@@ -73,7 +73,25 @@
           overflow: auto;
         }
       }
-      .users-list button { width: 100%; text-align: left; margin: 4px 0; }
+      .users-list button {
+        width: 100%;
+        text-align: left;
+        margin: 4px 0;
+        background: rgba(79, 124, 255, 0.1);
+        border: 1px solid rgba(79, 124, 255, 0.28);
+        color: var(--text);
+        transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .users-list button:hover {
+        background: rgba(79, 124, 255, 0.16);
+        border-color: rgba(79, 124, 255, 0.45);
+      }
+      .users-list button.selected {
+        background: rgba(79, 124, 255, 0.28);
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent), 0 4px 14px rgba(79, 124, 255, 0.38);
+        font-weight: 600;
+      }
       .pending-human-block { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
       .pending-human-block h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); font-weight: 600; }
       .pending-human-item {
@@ -87,12 +105,15 @@
         background: rgba(79, 124, 255, 0.04);
       }
       .pending-human-item:hover { background: rgba(79, 124, 255, 0.1); }
-      .pending-human-item.selected { outline: 2px solid var(--accent); }
+      .pending-human-item.selected {
+        border-color: var(--accent);
+        background: rgba(79, 124, 255, 0.16);
+        box-shadow: 0 0 0 1px var(--accent), 0 4px 14px rgba(79, 124, 255, 0.28);
+      }
       .pending-human-meta { font-size: 12px; color: var(--muted); }
       .pending-human-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
       .pending-human-actions button { width: auto; font-size: 12px; padding: 6px 8px; }
       .assigned-clients-heading { margin: 0 0 8px; font-size: 14px; color: var(--muted); font-weight: 600; }
-      .selected { outline: 2px solid var(--accent); }
       .artifacts a { color: #8ab4ff; display: inline-block; margin-right: 10px; text-decoration: underline; font-weight: 600; }
       a { color: #9ec5ff; text-decoration: underline; font-weight: 600; }
       a:hover { color: #c7ddff; }
