@@ -86,7 +86,7 @@
     <div class="wrap">
       <div class="card">
         <h1>Job poster efficiency</h1>
-        <p class="muted">Applications from tracked apply links (<code>Publisher</code> + <code>PublishedIn</code> on UserApplications).</p>
+        <p class="muted">Tracked apply links: new user signups (<code>PublisherSignups</code>) and completed applications (<code>UserApplications</code>).</p>
         <div class="toolbar" style="margin-top:12px">
           <label class="muted">Period (days)
             <select id="periodSel">
@@ -114,6 +114,7 @@
             <thead>
               <tr>
                 <th>Publisher</th>
+                <th>Signups</th>
                 <th>Applications</th>
                 <th>Channels</th>
                 <th>Positions</th>
@@ -132,11 +133,30 @@
               <tr>
                 <th>Publisher</th>
                 <th>Channel chat id</th>
+                <th>Signups</th>
                 <th>Applications</th>
                 <th>Positions</th>
               </tr>
             </thead>
             <tbody id="byChannelBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Recent signups</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>New user</th>
+                <th>Publisher</th>
+                <th>Channel</th>
+                <th>Position</th>
+              </tr>
+            </thead>
+            <tbody id="recentSignupsBody"></tbody>
           </table>
         </div>
       </div>
@@ -197,10 +217,11 @@
         const all = Number(totals?.applications || 0);
         const rate = all > 0 ? `${Math.round((tracked / all) * 100)}%` : '—';
         const items = [
+          ['New signups', Number(totals?.signups || 0)],
           ['Applications', all],
-          ['Tracked', tracked],
-          ['Untracked', Number(totals?.untrackedApplications || 0)],
-          ['Tracking rate', rate],
+          ['Tracked applications', tracked],
+          ['Untracked applications', Number(totals?.untrackedApplications || 0)],
+          ['Application tracking rate', rate],
           ['Publishers', Number(totals?.uniquePublishers || 0)],
           ['Channels', Number(totals?.uniqueChannels || 0)],
         ];
@@ -237,6 +258,7 @@
               .map(
                 (row) => `<tr>
                   <td>${esc(row.publisherName)} <span class="muted">#${esc(row.publisherUserId)}</span></td>
+                  <td>${esc(row.signups ?? 0)}</td>
                   <td>${esc(row.applications)}</td>
                   <td>${esc(row.uniqueChannels)}</td>
                   <td>${esc(row.uniquePositions)}</td>
@@ -253,8 +275,25 @@
                 (row) => `<tr>
                   <td>${esc(row.publisherName)} <span class="muted">#${esc(row.publisherUserId)}</span></td>
                   <td><code>${esc(row.publishedInChatId)}</code></td>
+                  <td>${esc(row.signups ?? 0)}</td>
                   <td>${esc(row.applications)}</td>
                   <td>${esc(row.uniquePositions)}</td>
+                </tr>`
+              )
+              .join('')
+          );
+
+          const recentSignups = Array.isArray(payload?.recentSignups) ? payload.recentSignups : [];
+          renderTableRows(
+            'recentSignupsBody',
+            recentSignups
+              .map(
+                (row) => `<tr>
+                  <td>${esc(formatDt(row.dateTime))}</td>
+                  <td>${esc(row.signupUserName)}</td>
+                  <td>${esc(row.publisherName)}</td>
+                  <td><code>${esc(row.publishedInChatId)}</code></td>
+                  <td>${esc(row.positionTitle || row.positionId || '—')}</td>
                 </tr>`
               )
               .join('')

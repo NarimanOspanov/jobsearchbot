@@ -68,6 +68,10 @@ import {
 } from './services/agentAccessService.js';
 import { tailorResumeForSeeker } from './services/tailoredCvService.js';
 import { notifyPublisherOfNewApplication } from './services/publisherApplyNotificationService.js';
+import {
+  notifyPublisherOfNewSignup,
+  recordTrackedPublisherSignup,
+} from './services/publisherSignupService.js';
 import { upsertPendingHumanAssistantRequest } from './services/humanAssistantRequestService.js';
 import {
   buildOpenJobsReplyMarkup,
@@ -701,6 +705,38 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         applyFromStart.publishedInChatId != null
       ) {
         setPositionApplyAttribution(chatId, applyFromStart);
+        if (ctx.state.isFirstTimeUser) {
+          const { user } = await ensureUserByTelegramId(
+            chatId,
+            ctx.from?.username ?? null,
+            ctx.from?.first_name ?? null,
+            ctx.from?.last_name ?? null
+          );
+          if (user) {
+            try {
+              const signupResult = await recordTrackedPublisherSignup({
+                user,
+                positionId: applyFromStart.positionId,
+                publisherUserId: applyFromStart.publisherUserId,
+                publishedInChatId: applyFromStart.publishedInChatId,
+                startPayload: payload,
+              });
+              if (signupResult.created) {
+                notifyPublisherOfNewSignup({
+                  telegram: ctx.telegram,
+                  signupUser: user,
+                  positionId: applyFromStart.positionId,
+                  publisherUserId: applyFromStart.publisherUserId,
+                  publishedInChatId: applyFromStart.publishedInChatId,
+                }).catch((err) => {
+                  console.warn('Publisher signup notification error:', err?.message || err);
+                });
+              }
+            } catch (err) {
+              console.warn('recordTrackedPublisherSignup failed:', err?.message || err);
+            }
+          }
+        }
       }
       await startPositionApplyScenario(ctx, applyFromStart.positionId, { enableChannelBypass: true });
       return;

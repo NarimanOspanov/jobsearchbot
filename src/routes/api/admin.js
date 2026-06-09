@@ -213,21 +213,25 @@ export function createAdminRouter() {
         : 7;
       const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
 
-      if (!models.UserApplications) {
+      const emptyTotals = {
+        applications: 0,
+        trackedApplications: 0,
+        untrackedApplications: 0,
+        signups: 0,
+        trackedSignups: 0,
+        uniquePublishers: 0,
+        uniqueChannels: 0,
+      };
+      if (!models.UserApplications && !models.PublisherSignups) {
         return res.json({
           success: true,
           period,
           since: since.toISOString(),
-          totals: {
-            applications: 0,
-            trackedApplications: 0,
-            untrackedApplications: 0,
-            uniquePublishers: 0,
-            uniqueChannels: 0,
-          },
+          totals: emptyTotals,
           byPublisher: [],
           byPublisherChannel: [],
           recent: [],
+          recentSignups: [],
         });
       }
 
@@ -242,69 +246,141 @@ export function createAdminRouter() {
         return `User #${user?.Id ?? '-'}`;
       };
 
-      const [totalsRow] = await sequelize.query(
-        `SELECT
-           COUNT(*) AS applications,
-           SUM(CASE WHEN ua.Publisher IS NOT NULL AND ua.PublishedIn IS NOT NULL THEN 1 ELSE 0 END) AS trackedApplications,
-           SUM(CASE WHEN ua.Publisher IS NULL OR ua.PublishedIn IS NULL THEN 1 ELSE 0 END) AS untrackedApplications,
-           COUNT(DISTINCT CASE WHEN ua.Publisher IS NOT NULL THEN ua.Publisher END) AS uniquePublishers,
-           COUNT(DISTINCT CASE WHEN ua.PublishedIn IS NOT NULL THEN ua.PublishedIn END) AS uniqueChannels
-         FROM dbo.UserApplications AS ua
-         WHERE ua.DateTime >= :since`,
-        { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
-      );
+      const [totalsRow] = models.UserApplications
+        ? await sequelize.query(
+            `SELECT
+               COUNT(*) AS applications,
+               SUM(CASE WHEN ua.Publisher IS NOT NULL AND ua.PublishedIn IS NOT NULL THEN 1 ELSE 0 END) AS trackedApplications,
+               SUM(CASE WHEN ua.Publisher IS NULL OR ua.PublishedIn IS NULL THEN 1 ELSE 0 END) AS untrackedApplications,
+               COUNT(DISTINCT CASE WHEN ua.Publisher IS NOT NULL THEN ua.Publisher END) AS uniquePublishers,
+               COUNT(DISTINCT CASE WHEN ua.PublishedIn IS NOT NULL THEN ua.PublishedIn END) AS uniqueChannels
+             FROM dbo.UserApplications AS ua
+             WHERE ua.DateTime >= :since`,
+            { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+          )
+        : [{}];
 
-      const byPublisherRows = await sequelize.query(
-        `SELECT
-           ua.Publisher AS publisherUserId,
-           COUNT(*) AS applications,
-           COUNT(DISTINCT ua.PublishedIn) AS uniqueChannels,
-           COUNT(DISTINCT ua.PositionId) AS uniquePositions
-         FROM dbo.UserApplications AS ua
-         WHERE ua.DateTime >= :since AND ua.Publisher IS NOT NULL
-         GROUP BY ua.Publisher
-         ORDER BY applications DESC`,
-        { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
-      );
+      const [signupTotalsRow] = models.PublisherSignups
+        ? await sequelize.query(
+            `SELECT
+               COUNT(*) AS signups,
+               COUNT(*) AS trackedSignups,
+               COUNT(DISTINCT ps.Publisher) AS uniqueSignupPublishers,
+               COUNT(DISTINCT ps.PublishedIn) AS uniqueSignupChannels
+             FROM dbo.PublisherSignups AS ps
+             WHERE ps.SignedUpAt >= :since`,
+            { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+          )
+        : [{ signups: 0, trackedSignups: 0 }];
 
-      const byPublisherChannelRows = await sequelize.query(
-        `SELECT
-           ua.Publisher AS publisherUserId,
-           ua.PublishedIn AS publishedInChatId,
-           COUNT(*) AS applications,
-           COUNT(DISTINCT ua.PositionId) AS uniquePositions
-         FROM dbo.UserApplications AS ua
-         WHERE ua.DateTime >= :since
-           AND ua.Publisher IS NOT NULL
-           AND ua.PublishedIn IS NOT NULL
-         GROUP BY ua.Publisher, ua.PublishedIn
-         ORDER BY applications DESC`,
-        { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
-      );
+      const byPublisherRows = models.UserApplications
+        ? await sequelize.query(
+            `SELECT
+               ua.Publisher AS publisherUserId,
+               COUNT(*) AS applications,
+               COUNT(DISTINCT ua.PublishedIn) AS uniqueChannels,
+               COUNT(DISTINCT ua.PositionId) AS uniquePositions
+             FROM dbo.UserApplications AS ua
+             WHERE ua.DateTime >= :since AND ua.Publisher IS NOT NULL
+             GROUP BY ua.Publisher
+             ORDER BY applications DESC`,
+            { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+          )
+        : [];
+
+      const signupByPublisherRows = models.PublisherSignups
+        ? await sequelize.query(
+            `SELECT
+               ps.Publisher AS publisherUserId,
+               COUNT(*) AS signups,
+               COUNT(DISTINCT ps.PublishedIn) AS uniqueChannels,
+               COUNT(DISTINCT ps.PositionId) AS uniquePositions
+             FROM dbo.PublisherSignups AS ps
+             WHERE ps.SignedUpAt >= :since
+             GROUP BY ps.Publisher
+             ORDER BY signups DESC`,
+            { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+          )
+        : [];
+
+      const byPublisherChannelRows = models.UserApplications
+        ? await sequelize.query(
+            `SELECT
+               ua.Publisher AS publisherUserId,
+               ua.PublishedIn AS publishedInChatId,
+               COUNT(*) AS applications,
+               COUNT(DISTINCT ua.PositionId) AS uniquePositions
+             FROM dbo.UserApplications AS ua
+             WHERE ua.DateTime >= :since
+               AND ua.Publisher IS NOT NULL
+               AND ua.PublishedIn IS NOT NULL
+             GROUP BY ua.Publisher, ua.PublishedIn
+             ORDER BY applications DESC`,
+            { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+          )
+        : [];
+
+      const signupByPublisherChannelRows = models.PublisherSignups
+        ? await sequelize.query(
+            `SELECT
+               ps.Publisher AS publisherUserId,
+               ps.PublishedIn AS publishedInChatId,
+               COUNT(*) AS signups,
+               COUNT(DISTINCT ps.PositionId) AS uniquePositions
+             FROM dbo.PublisherSignups AS ps
+             WHERE ps.SignedUpAt >= :since
+             GROUP BY ps.Publisher, ps.PublishedIn
+             ORDER BY signups DESC`,
+            { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+          )
+        : [];
 
       const recentLimit = Math.min(200, Math.max(1, Number.parseInt(String(req.query.recentLimit || '50'), 10) || 50));
-      const recentRows = await sequelize.query(
-        `SELECT TOP (${recentLimit})
-           ua.Id AS id,
-           ua.DateTime AS dateTime,
-           ua.Publisher AS publisherUserId,
-           ua.PublishedIn AS publishedInChatId,
-           ua.PositionId AS positionId,
-           ua.UserId AS applicantUserId,
-           p.Title AS positionTitle
-         FROM dbo.UserApplications AS ua
-         LEFT JOIN dbo.Positions AS p ON p.Id = ua.PositionId
-         WHERE ua.DateTime >= :since
-         ORDER BY ua.DateTime DESC, ua.Id DESC`,
-        { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
-      );
+      const recentRows = models.UserApplications
+        ? await sequelize.query(
+            `SELECT TOP (${recentLimit})
+               ua.Id AS id,
+               ua.DateTime AS dateTime,
+               ua.Publisher AS publisherUserId,
+               ua.PublishedIn AS publishedInChatId,
+               ua.PositionId AS positionId,
+               ua.UserId AS applicantUserId,
+               p.Title AS positionTitle
+             FROM dbo.UserApplications AS ua
+             LEFT JOIN dbo.Positions AS p ON p.Id = ua.PositionId
+             WHERE ua.DateTime >= :since
+             ORDER BY ua.DateTime DESC, ua.Id DESC`,
+            { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+          )
+        : [];
+
+      const recentSignupRows = models.PublisherSignups
+        ? await sequelize.query(
+            `SELECT TOP (${recentLimit})
+               ps.Id AS id,
+               ps.SignedUpAt AS dateTime,
+               ps.Publisher AS publisherUserId,
+               ps.PublishedIn AS publishedInChatId,
+               ps.PositionId AS positionId,
+               ps.UserId AS signupUserId,
+               p.Title AS positionTitle
+             FROM dbo.PublisherSignups AS ps
+             LEFT JOIN dbo.Positions AS p ON p.Id = ps.PositionId
+             WHERE ps.SignedUpAt >= :since
+             ORDER BY ps.SignedUpAt DESC, ps.Id DESC`,
+            { replacements: { since }, type: Sequelize.QueryTypes.SELECT }
+          )
+        : [];
 
       const publisherIds = Array.from(
         new Set(
           [
             ...byPublisherRows.map((r) => Number(r?.publisherUserId)),
+            ...signupByPublisherRows.map((r) => Number(r?.publisherUserId)),
             ...byPublisherChannelRows.map((r) => Number(r?.publisherUserId)),
+            ...signupByPublisherChannelRows.map((r) => Number(r?.publisherUserId)),
             ...recentRows.map((r) => Number(r?.publisherUserId)),
+            ...recentSignupRows.map((r) => Number(r?.publisherUserId)),
           ].filter((id) => Number.isSafeInteger(id) && id > 0)
         )
       );
@@ -315,7 +391,14 @@ export function createAdminRouter() {
             .filter((id) => Number.isSafeInteger(id) && id > 0)
         )
       );
-      const userIds = Array.from(new Set([...publisherIds, ...applicantIds]));
+      const signupUserIds = Array.from(
+        new Set(
+          recentSignupRows
+            .map((r) => Number(r?.signupUserId))
+            .filter((id) => Number.isSafeInteger(id) && id > 0)
+        )
+      );
+      const userIds = Array.from(new Set([...publisherIds, ...applicantIds, ...signupUserIds]));
       const users =
         userIds.length > 0 && models.Users
           ? await models.Users.findAll({
@@ -325,31 +408,92 @@ export function createAdminRouter() {
           : [];
       const userById = new Map(users.map((u) => [Number(u.Id), u]));
 
-      const byPublisher = (Array.isArray(byPublisherRows) ? byPublisherRows : []).map((row) => {
-        const publisherUserId = Number(row?.publisherUserId);
+      const applicationsByPublisher = new Map(
+        (Array.isArray(byPublisherRows) ? byPublisherRows : []).map((row) => [
+          Number(row?.publisherUserId),
+          row,
+        ])
+      );
+      const signupsByPublisher = new Map(
+        (Array.isArray(signupByPublisherRows) ? signupByPublisherRows : []).map((row) => [
+          Number(row?.publisherUserId),
+          row,
+        ])
+      );
+      const mergedPublisherIds = Array.from(
+        new Set([...applicationsByPublisher.keys(), ...signupsByPublisher.keys()].filter((id) => id > 0))
+      ).sort((a, b) => {
+        const appsA = Number(applicationsByPublisher.get(a)?.applications || 0);
+        const appsB = Number(applicationsByPublisher.get(b)?.applications || 0);
+        if (appsB !== appsA) return appsB - appsA;
+        return (
+          Number(signupsByPublisher.get(b)?.signups || 0) - Number(signupsByPublisher.get(a)?.signups || 0)
+        );
+      });
+      const byPublisher = mergedPublisherIds.map((publisherUserId) => {
+        const appRow = applicationsByPublisher.get(publisherUserId);
+        const signupRow = signupsByPublisher.get(publisherUserId);
         const publisher = userById.get(publisherUserId);
         return {
           publisherUserId,
           publisherName: publisher ? buildUserLabel(publisher) : `User #${publisherUserId}`,
-          applications: Number(row?.applications || 0),
-          uniqueChannels: Number(row?.uniqueChannels || 0),
-          uniquePositions: Number(row?.uniquePositions || 0),
+          applications: Number(appRow?.applications || 0),
+          signups: Number(signupRow?.signups || 0),
+          uniqueChannels: Math.max(
+            Number(appRow?.uniqueChannels || 0),
+            Number(signupRow?.uniqueChannels || 0)
+          ),
+          uniquePositions: Math.max(
+            Number(appRow?.uniquePositions || 0),
+            Number(signupRow?.uniquePositions || 0)
+          ),
         };
       });
 
-      const byPublisherChannel = (Array.isArray(byPublisherChannelRows) ? byPublisherChannelRows : []).map(
-        (row) => {
-          const publisherUserId = Number(row?.publisherUserId);
-          const publisher = userById.get(publisherUserId);
-          return {
-            publisherUserId,
-            publisherName: publisher ? buildUserLabel(publisher) : `User #${publisherUserId}`,
-            publishedInChatId: Number(row?.publishedInChatId),
-            applications: Number(row?.applications || 0),
-            uniquePositions: Number(row?.uniquePositions || 0),
-          };
-        }
+      const applicationsByPublisherChannel = new Map(
+        (Array.isArray(byPublisherChannelRows) ? byPublisherChannelRows : []).map((row) => [
+          `${Number(row?.publisherUserId)}:${Number(row?.publishedInChatId)}`,
+          row,
+        ])
       );
+      const signupsByPublisherChannel = new Map(
+        (Array.isArray(signupByPublisherChannelRows) ? signupByPublisherChannelRows : []).map((row) => [
+          `${Number(row?.publisherUserId)}:${Number(row?.publishedInChatId)}`,
+          row,
+        ])
+      );
+      const mergedChannelKeys = Array.from(
+        new Set([
+          ...applicationsByPublisherChannel.keys(),
+          ...signupsByPublisherChannel.keys(),
+        ])
+      ).sort((a, b) => {
+        const appsA = Number(applicationsByPublisherChannel.get(a)?.applications || 0);
+        const appsB = Number(applicationsByPublisherChannel.get(b)?.applications || 0);
+        if (appsB !== appsA) return appsB - appsA;
+        return (
+          Number(signupsByPublisherChannel.get(b)?.signups || 0) -
+          Number(signupsByPublisherChannel.get(a)?.signups || 0)
+        );
+      });
+      const byPublisherChannel = mergedChannelKeys.map((key) => {
+        const appRow = applicationsByPublisherChannel.get(key);
+        const signupRow = signupsByPublisherChannel.get(key);
+        const publisherUserId = Number(appRow?.publisherUserId ?? signupRow?.publisherUserId);
+        const publishedInChatId = Number(appRow?.publishedInChatId ?? signupRow?.publishedInChatId);
+        const publisher = userById.get(publisherUserId);
+        return {
+          publisherUserId,
+          publisherName: publisher ? buildUserLabel(publisher) : `User #${publisherUserId}`,
+          publishedInChatId,
+          applications: Number(appRow?.applications || 0),
+          signups: Number(signupRow?.signups || 0),
+          uniquePositions: Math.max(
+            Number(appRow?.uniquePositions || 0),
+            Number(signupRow?.uniquePositions || 0)
+          ),
+        };
+      });
 
       const recent = (Array.isArray(recentRows) ? recentRows : []).map((row) => {
         const publisherUserId =
@@ -371,12 +515,47 @@ export function createAdminRouter() {
         };
       });
 
+      const uniquePublishers = new Set([
+        ...(Array.isArray(byPublisherRows) ? byPublisherRows : []).map((r) => Number(r?.publisherUserId)),
+        ...(Array.isArray(signupByPublisherRows) ? signupByPublisherRows : []).map((r) =>
+          Number(r?.publisherUserId)
+        ),
+      ]).size;
+      const uniqueChannels = new Set([
+        ...(Array.isArray(byPublisherChannelRows) ? byPublisherChannelRows : []).map(
+          (r) => `${Number(r?.publisherUserId)}:${Number(r?.publishedInChatId)}`
+        ),
+        ...(Array.isArray(signupByPublisherChannelRows) ? signupByPublisherChannelRows : []).map(
+          (r) => `${Number(r?.publisherUserId)}:${Number(r?.publishedInChatId)}`
+        ),
+      ]).size;
+
+      const recentSignups = (Array.isArray(recentSignupRows) ? recentSignupRows : []).map((row) => {
+        const publisherUserId = Number(row?.publisherUserId);
+        const signupUserId = Number(row?.signupUserId);
+        const publisher = userById.get(publisherUserId);
+        const signupUser = userById.get(signupUserId);
+        return {
+          id: Number(row?.id),
+          dateTime: row?.dateTime || null,
+          publisherUserId,
+          publisherName: publisher ? buildUserLabel(publisher) : `User #${publisherUserId}`,
+          publishedInChatId: Number(row?.publishedInChatId),
+          positionId: row?.positionId || null,
+          positionTitle: row?.positionTitle || null,
+          signupUserId,
+          signupUserName: signupUser ? buildUserLabel(signupUser) : `User #${signupUserId}`,
+        };
+      });
+
       const totals = {
         applications: Number(totalsRow?.applications || 0),
         trackedApplications: Number(totalsRow?.trackedApplications || 0),
         untrackedApplications: Number(totalsRow?.untrackedApplications || 0),
-        uniquePublishers: Number(totalsRow?.uniquePublishers || 0),
-        uniqueChannels: Number(totalsRow?.uniqueChannels || 0),
+        signups: Number(signupTotalsRow?.signups || 0),
+        trackedSignups: Number(signupTotalsRow?.trackedSignups || 0),
+        uniquePublishers,
+        uniqueChannels,
       };
 
       return res.json({
@@ -387,6 +566,7 @@ export function createAdminRouter() {
         byPublisher,
         byPublisherChannel,
         recent,
+        recentSignups,
       });
     } catch (err) {
       console.error('GET /api/app/admin/publisher-stats:', err);

@@ -41,6 +41,7 @@ Test each command in a **private chat** with the bot.
 | Channel joined → press "Я подписался" button | Bot detects subscription | Confirmation message + bonus opens granted once |
 | `/start ref_<chatId>` deeplink | Friend opens bot via your referral link | Referrer receives bonus opens notification |
 | `/start apply_<positionId>` deeplink | Candidate opens apply link | Hire Agent scenario starts for that position |
+| `/start apply_<positionId>_<token>` tracked deeplink (new user) | First-time user opens tracked apply link | `PublisherSignups` row created; publisher receives “New signup” Telegram message; apply scenario starts |
 | Position apply — upload resume | Complete apply flow after deeplink | Screening acknowledgment (text only); DB row `Status=pending_screening`, `ScreeningResponseDueAt` set |
 | Position apply — after N minutes | Cron (every 1 min) or `POST /api/app/admin/position-apply-screening/run` | Polite rejection + Open jobs button; `Status=does_not_match`; audit in `UserApplicationOutreach` |
 | `/start buy_silver` deeplink | Payment initiation | Telegram Stars invoice for Silver plan is sent |

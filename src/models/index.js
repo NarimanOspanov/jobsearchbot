@@ -18,6 +18,7 @@ import defineAdminNotification from './AdminNotification.js';
 import defineAdminNotificationRun from './AdminNotificationRun.js';
 import defineAgentClient from './AgentClient.js';
 import defineHumanAssistantRequest from './HumanAssistantRequest.js';
+import definePublisherSignup from './PublisherSignup.js';
 
 /**
  * Initialize only the User model for empty bot runtime.
@@ -43,6 +44,7 @@ export function initModels(sequelize) {
   const AdminNotificationRun = defineAdminNotificationRun(sequelize);
   const AgentClient = defineAgentClient(sequelize);
   const HumanAssistantRequest = defineHumanAssistantRequest(sequelize);
+  const PublisherSignup = definePublisherSignup(sequelize);
 
   User.hasMany(Application, { foreignKey: 'UserId' });
   Application.belongsTo(User, { foreignKey: 'UserId' });
@@ -80,6 +82,10 @@ export function initModels(sequelize) {
   AgentClient.belongsTo(User, { as: 'Client', foreignKey: 'ClientUserId' });
   User.hasMany(HumanAssistantRequest, { foreignKey: 'UserId' });
   HumanAssistantRequest.belongsTo(User, { as: 'User', foreignKey: 'UserId' });
+  User.hasOne(PublisherSignup, { foreignKey: 'UserId' });
+  PublisherSignup.belongsTo(User, { foreignKey: 'UserId' });
+  Position.hasMany(PublisherSignup, { foreignKey: 'PositionId' });
+  PublisherSignup.belongsTo(Position, { foreignKey: 'PositionId' });
   return {
     User,
     Application,
@@ -121,5 +127,7 @@ export function initModels(sequelize) {
     AgentClients: AgentClient,
     HumanAssistantRequest,
     HumanAssistantRequests: HumanAssistantRequest,
+    PublisherSignup,
+    PublisherSignups: PublisherSignup,
   };
 }
