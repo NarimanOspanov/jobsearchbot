@@ -332,6 +332,33 @@
       }
       .user-info-tab-panel { display: block; }
       .user-info-tab-panel.is-hidden { display: none; }
+      #userInfoSection {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .user-info-tab-panel[data-user-tab-panel="applications"] {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .user-info-tab-panel[data-user-tab-panel="applications"].is-hidden {
+        display: none;
+      }
+      .user-info-tab-panel[data-user-tab-panel="applications"] .layout-col-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+      .applications-filters-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
       .client-resume-preview {
         margin-top: 12px;
         border: 1px solid var(--border);
@@ -579,21 +606,16 @@
         </section>
 
         <section class="card layout-col">
-          <div class="section-head-row">
-            <h2>Client applications</h2>
-            <div class="section-head-actions">
-              <button id="toggleFiltersBtn" type="button" class="ghost-btn">Show filters</button>
-              <button id="toggleUserInfoBtn" type="button" class="ghost-btn">Show user info</button>
-            </div>
-          </div>
+          <h2>Client</h2>
           <p id="selectedClientBar" class="selected-client-bar" style="display:none"></p>
-          <div id="userInfoSection" style="display:none">
-            <div id="userInfoTabs" class="user-info-tabs" style="display:none" role="tablist" aria-label="Client details">
-              <button type="button" class="user-info-tab-btn is-active" data-user-tab="profile" role="tab" aria-selected="true">Main user info</button>
+          <div id="userInfoSection">
+            <div id="userInfoTabs" class="user-info-tabs" role="tablist" aria-label="Client details">
+              <button type="button" class="user-info-tab-btn" data-user-tab="profile" role="tab" aria-selected="false">Main user info</button>
               <button type="button" class="user-info-tab-btn" data-user-tab="resume" role="tab" aria-selected="false">Resume</button>
               <button type="button" class="user-info-tab-btn" data-user-tab="preferences" role="tab" aria-selected="false">Preferences</button>
+              <button type="button" class="user-info-tab-btn is-active" data-user-tab="applications" role="tab" aria-selected="true">Applications</button>
             </div>
-            <div id="userInfoTabProfile" class="user-info-tab-panel" data-user-tab-panel="profile" role="tabpanel">
+            <div id="userInfoTabProfile" class="user-info-tab-panel is-hidden" data-user-tab-panel="profile" role="tabpanel">
               <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
             </div>
             <div id="userInfoTabResume" class="user-info-tab-panel is-hidden" data-user-tab-panel="resume" role="tabpanel">
@@ -667,103 +689,108 @@
                 <span id="enqueueClientApplyPriorityRewriteLoader" class="loader" aria-hidden="true"></span>
               </div>
             </div>
-          </div>
-          <div id="filtersSection" style="display:none">
-            <div class="row date-range-row">
-              <span class="date-range">
-                <label>From <input id="fromDate" type="date" /></label>
-                <label>To <input id="toDate" type="date" /></label>
-              </span>
-            </div>
-            <div class="row date-range-row">
-              <label>Roles</label>
-              <div class="skills-picker">
-                <button id="skillPickerBtn" type="button" class="skills-picker-btn">All roles</button>
-                <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            <div id="userInfoTabApplications" class="user-info-tab-panel" data-user-tab-panel="applications" role="tabpanel">
+              <div class="applications-filters-row">
+                <button id="toggleFiltersBtn" type="button" class="ghost-btn">Show filters</button>
               </div>
-              <span id="highlyRelevantFilterWrap" class="highly-relevant-filter" aria-hidden="true">
-                <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
-                <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="What does Top matches mean?" aria-label="What does Top matches mean?">?</button>
-              </span>
-            </div>
-            <div class="row date-range-row">
-              <label>Search in</label>
-              <div class="skills-picker">
-                <button id="sourcePickerBtn" type="button" class="skills-picker-btn">All sources</button>
-                <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+              <div id="filtersSection" style="display:none">
+                <div class="row date-range-row">
+                  <span class="date-range">
+                    <label>From <input id="fromDate" type="date" /></label>
+                    <label>To <input id="toDate" type="date" /></label>
+                  </span>
+                </div>
+                <div class="row date-range-row">
+                  <label>Roles</label>
+                  <div class="skills-picker">
+                    <button id="skillPickerBtn" type="button" class="skills-picker-btn">All roles</button>
+                    <div id="skillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                  </div>
+                  <span id="highlyRelevantFilterWrap" class="highly-relevant-filter" aria-hidden="true">
+                    <label><input id="showOnlyHighlyRelevant" type="checkbox" /> Top matches</label>
+                    <button type="button" id="highlyRelevantHintBtn" class="hint-btn" title="What does Top matches mean?" aria-label="What does Top matches mean?">?</button>
+                  </span>
+                </div>
+                <div class="row date-range-row">
+                  <label>Search in</label>
+                  <div class="skills-picker">
+                    <button id="sourcePickerBtn" type="button" class="skills-picker-btn">All sources</button>
+                    <div id="sourcePickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                  </div>
+                </div>
+                <div class="row date-range-row">
+                  <label>Work auth</label>
+                  <div class="skills-picker">
+                    <button id="countryPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
+                    <div id="countryPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                  </div>
+                  <button type="button" id="workAuthHintBtn" class="hint-btn" title="What is Work auth?" aria-label="What is Work auth?">?</button>
+                </div>
+                <div class="row date-range-row">
+                  <label>Priority</label>
+                  <div class="skills-picker">
+                    <button id="priorityPickerBtn" type="button" class="skills-picker-btn">All priorities</button>
+                    <div id="priorityPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                  </div>
+                </div>
+                <div class="row date-range-row">
+                  <label>Status</label>
+                  <div class="skills-picker">
+                    <button id="statusPickerBtn" type="button" class="skills-picker-btn">All statuses</button>
+                    <div id="statusPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                  </div>
+                </div>
+                <div id="sourceFilterRow" class="row date-range-row" style="display:none" hidden>
+                  <label>Source
+                    <select id="sourceSel">
+                      <option value="">All</option>
+                      <option value="Linkedin">Linkedin</option>
+                      <option value="Indeed">Indeed</option>
+                      <option value="hirehi">hirehi</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="row date-range-row">
+                  <button id="clearFiltersBtn" type="button" class="ghost-btn">Reset filters</button>
+                </div>
+              </div>
+              <div class="row date-range-row apply-priority-row">
+                <button id="syncBtn">Search</button>
+                <span id="syncLoader" class="loader" aria-hidden="true"></span>
+                <button id="analyzeApplyPriorityBtn" type="button" class="ghost-btn" disabled hidden>Analyze apply priority</button>
+                <span id="analyzeApplyPriorityLoader" class="loader" aria-hidden="true" hidden></span>
+                <button id="queueAnalyzeAllClientsBtn" type="button" class="ghost-btn" disabled hidden>Analyze all clients (background)</button>
+                <span id="queueAnalyzeAllClientsLoader" class="loader" aria-hidden="true" hidden></span>
+                <span id="applyPriorityStaleHint" class="apply-priority-stale-hint" hidden>Comment or resume changed — re-analyze</span>
+                <span class="pager">
+                  <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Previous page">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                  </button>
+                  <span id="pageInfo" class="muted pager-summary"></span>
+                  <button id="nextPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Next page">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+                  </button>
+                  <label>Page size
+                    <select id="pageSizeSel">
+                      <option value="50">50</option>
+                      <option value="100" selected>100</option>
+                      <option value="200">200</option>
+                    </select>
+                  </label>
+                </span>
+              </div>
+              <p id="dashMsg" class="muted"></p>
+              <div class="layout-col-body">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Id</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Apply type</th><th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="jobsBody"></tbody>
+                </table>
               </div>
             </div>
-            <div class="row date-range-row">
-              <label>Work auth</label>
-              <div class="skills-picker">
-                <button id="countryPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
-                <div id="countryPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
-              </div>
-              <button type="button" id="workAuthHintBtn" class="hint-btn" title="What is Work auth?" aria-label="What is Work auth?">?</button>
-            </div>
-            <div class="row date-range-row">
-              <label>Priority</label>
-              <div class="skills-picker">
-                <button id="priorityPickerBtn" type="button" class="skills-picker-btn">All priorities</button>
-                <div id="priorityPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
-              </div>
-            </div>
-            <div class="row date-range-row">
-              <label>Status</label>
-              <div class="skills-picker">
-                <button id="statusPickerBtn" type="button" class="skills-picker-btn">All statuses</button>
-                <div id="statusPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
-              </div>
-            </div>
-            <div id="sourceFilterRow" class="row date-range-row" style="display:none" hidden>
-              <label>Source
-                <select id="sourceSel">
-                  <option value="">All</option>
-                  <option value="Linkedin">Linkedin</option>
-                  <option value="Indeed">Indeed</option>
-                  <option value="hirehi">hirehi</option>
-                </select>
-              </label>
-            </div>
-            <div class="row date-range-row">
-              <button id="clearFiltersBtn" type="button" class="ghost-btn">Reset filters</button>
-            </div>
-          </div>
-          <div class="row date-range-row apply-priority-row">
-            <button id="syncBtn">Search</button>
-            <span id="syncLoader" class="loader" aria-hidden="true"></span>
-            <button id="analyzeApplyPriorityBtn" type="button" class="ghost-btn" disabled hidden>Analyze apply priority</button>
-            <span id="analyzeApplyPriorityLoader" class="loader" aria-hidden="true" hidden></span>
-            <button id="queueAnalyzeAllClientsBtn" type="button" class="ghost-btn" disabled hidden>Analyze all clients (background)</button>
-            <span id="queueAnalyzeAllClientsLoader" class="loader" aria-hidden="true" hidden></span>
-            <span id="applyPriorityStaleHint" class="apply-priority-stale-hint" hidden>Comment or resume changed — re-analyze</span>
-            <span class="pager">
-              <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Previous page">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-              </button>
-              <span id="pageInfo" class="muted pager-summary"></span>
-              <button id="nextPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Next page">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-              </button>
-              <label>Page size
-                <select id="pageSizeSel">
-                  <option value="50">50</option>
-                  <option value="100" selected>100</option>
-                  <option value="200">200</option>
-                </select>
-              </label>
-            </span>
-          </div>
-          <p id="dashMsg" class="muted"></p>
-          <div class="layout-col-body">
-            <table>
-              <thead>
-                <tr>
-                  <th>Id</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Apply type</th><th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="jobsBody"></tbody>
-            </table>
           </div>
         </section>
       </div>
@@ -910,7 +937,6 @@
       let jobsSort = { key: 'id', dir: 'desc' };
       let isSyncing = false;
       let isJobBusy = false;
-      let isUserInfoHidden = true;
       let isFiltersHidden = true;
       let isClientsColumnHidden = false;
       let isSkillPickerOpen = false;
@@ -930,7 +956,7 @@
       let isAnalyzingApplyPriority = false;
       let isQueueingApplyPriorityAllClients = false;
       let skipStatusAutoSave = false;
-      let activeUserInfoTab = 'profile';
+      let activeUserInfoTab = 'applications';
       let botUsername = '';
       let miniAppShortName = 'app';
 
@@ -1621,15 +1647,8 @@
         renderScreenshotArtifact();
         if (save) return saveStatus({ force: forceSave });
       }
-      function setUserInfoVisibility(hidden) {
-        isUserInfoHidden = !!hidden;
-        const section = document.getElementById('userInfoSection');
-        const btn = document.getElementById('toggleUserInfoBtn');
-        if (section) section.style.display = isUserInfoHidden ? 'none' : '';
-        if (btn) btn.textContent = isUserInfoHidden ? 'Show user info' : 'Hide user info';
-      }
       function setActiveUserInfoTab(tab) {
-        const next = ['profile', 'resume', 'preferences'].includes(tab) ? tab : 'profile';
+        const next = ['profile', 'resume', 'preferences', 'applications'].includes(tab) ? tab : 'applications';
         activeUserInfoTab = next;
         document.querySelectorAll('.user-info-tab-btn[data-user-tab]').forEach((btn) => {
           const isActive = btn.getAttribute('data-user-tab') === next;
@@ -1643,12 +1662,10 @@
       function syncUserInfoTabsUi(user) {
         const tabs = document.getElementById('userInfoTabs');
         if (!tabs) return;
-        if (!user) {
-          tabs.style.display = 'none';
-          setActiveUserInfoTab('profile');
+        if (!user && !['applications'].includes(activeUserInfoTab)) {
+          setActiveUserInfoTab('applications');
           return;
         }
-        tabs.style.display = '';
         setActiveUserInfoTab(activeUserInfoTab);
       }
       function setFiltersVisibility(hidden) {
@@ -3123,7 +3140,7 @@
 
       async function onUserSelected(userId) {
         if (!userId) return;
-        activeUserInfoTab = 'profile';
+        activeUserInfoTab = 'applications';
         applyPriorityRankings = {};
         applyPriorityCacheMeta = null;
         applyPriorityStale = false;
@@ -3264,7 +3281,7 @@
         if (isBotAdminUser) await loadAgents();
         await Promise.all([loadPendingHumanRequests(), loadClients(), loadSkills()]);
         renderSelectedUserInfo();
-        setUserInfoVisibility(true);
+        setActiveUserInfoTab('applications');
         setFiltersVisibility(true);
         setClientsColumnVisibility(isTruthyQueryParam(q().hideClients), { updateQuery: false });
         const s = q();
@@ -3457,9 +3474,6 @@
       document.getElementById('toggleFiltersBtn').addEventListener('click', () => {
         setFiltersVisibility(!isFiltersHidden);
       });
-      document.getElementById('toggleUserInfoBtn').addEventListener('click', () => {
-        setUserInfoVisibility(!isUserInfoHidden);
-      });
       document.getElementById('agentPickerSel')?.addEventListener('change', () => {
         const agentUserId = document.getElementById('agentPickerSel').value;
         setQ({ agentUserId, seekerId: '', jobId: '', page: 1 });
@@ -3528,7 +3542,7 @@
       });
       document.querySelectorAll('.user-info-tab-btn[data-user-tab]').forEach((btn) => {
         btn.addEventListener('click', () => {
-          setActiveUserInfoTab(btn.getAttribute('data-user-tab') || 'profile');
+          setActiveUserInfoTab(btn.getAttribute('data-user-tab') || 'applications');
         });
       });
       document.getElementById('enqueueClientApplyPriorityBtn').addEventListener('click', () => {
