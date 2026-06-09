@@ -58,7 +58,7 @@
           min-height: calc(100vh - 56px);
         }
         .layout.clients-column-hidden {
-          grid-template-columns: minmax(0, 1fr);
+          grid-template-columns: auto minmax(0, 1fr);
         }
         .layout .card.layout-col {
           min-height: 0;
@@ -381,6 +381,57 @@
         flex-wrap: wrap;
         justify-content: flex-end;
       }
+      .clients-column-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .clients-column-head h2 {
+        margin: 0;
+      }
+      .clients-column-toggle-btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #0f1730;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .clients-column-toggle-btn:hover {
+        color: var(--text);
+        border-color: var(--accent);
+      }
+      .clients-column-expand-rail {
+        display: none;
+        align-self: start;
+        width: 28px;
+        min-height: 72px;
+        padding: 0;
+        align-items: center;
+        justify-content: center;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1;
+      }
+      .clients-column-expand-rail:hover {
+        color: var(--text);
+        border-color: var(--accent);
+      }
+      .layout.clients-column-hidden .clients-column-expand-rail {
+        display: inline-flex;
+      }
       .ghost-btn {
         background: #0f1730;
         border: 1px solid var(--border);
@@ -499,8 +550,24 @@
       </div>
 
       <div id="mainLayout" class="layout">
+        <button
+          id="expandClientsColumnBtn"
+          type="button"
+          class="clients-column-expand-rail clients-column-toggle-btn"
+          aria-label="Show clients panel"
+          title="Show clients"
+        >›</button>
         <section id="clientsColumnSection" class="card layout-col">
-          <h2>Clients</h2>
+          <div class="clients-column-head">
+            <h2>Clients</h2>
+            <button
+              id="collapseClientsColumnBtn"
+              type="button"
+              class="clients-column-toggle-btn"
+              aria-label="Hide clients panel"
+              title="Hide clients"
+            >‹</button>
+          </div>
           <div class="layout-col-body">
             <div id="pendingHumanSection" class="pending-human-block" style="display:none">
               <h3>Pending human assistant</h3>
@@ -515,7 +582,6 @@
           <div class="section-head-row">
             <h2>Client applications</h2>
             <div class="section-head-actions">
-              <button id="toggleClientsColumnBtn" type="button" class="ghost-btn">Hide clients</button>
               <button id="toggleFiltersBtn" type="button" class="ghost-btn">Show filters</button>
               <button id="toggleUserInfoBtn" type="button" class="ghost-btn">Show user info</button>
             </div>
@@ -596,7 +662,9 @@
               </div>
               <div class="preferences-actions">
                 <button id="enqueueClientApplyPriorityBtn" type="button" class="ghost-btn">Run apply priority (background)</button>
+                <button id="enqueueClientApplyPriorityRewriteBtn" type="button" class="ghost-btn">Run apply priority (background) with rewrite, last 7 days</button>
                 <span id="enqueueClientApplyPriorityLoader" class="loader" aria-hidden="true"></span>
+                <span id="enqueueClientApplyPriorityRewriteLoader" class="loader" aria-hidden="true"></span>
               </div>
             </div>
           </div>
@@ -1457,7 +1525,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'clientSkillPickerBtn', 'clientWorkAuthPickerBtn', 'clientSearchModeSel', 'saveClientCommentBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn', 'enqueueClientApplyPriorityBtn'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'clientSkillPickerBtn', 'clientWorkAuthPickerBtn', 'clientSearchModeSel', 'saveClientCommentBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn', 'enqueueClientApplyPriorityBtn', 'enqueueClientApplyPriorityRewriteBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -1609,10 +1677,10 @@
         isClientsColumnHidden = !!hidden;
         const section = document.getElementById('clientsColumnSection');
         const layout = document.getElementById('mainLayout');
-        const btn = document.getElementById('toggleClientsColumnBtn');
+        const expandBtn = document.getElementById('expandClientsColumnBtn');
         if (section) section.style.display = isClientsColumnHidden ? 'none' : '';
         if (layout) layout.classList.toggle('clients-column-hidden', isClientsColumnHidden);
-        if (btn) btn.textContent = isClientsColumnHidden ? 'Show clients' : 'Hide clients';
+        if (expandBtn) expandBtn.setAttribute('aria-expanded', isClientsColumnHidden ? 'false' : 'true');
         renderSelectedClientBar();
         if (updateQuery) {
           setQ({ hideClients: isClientsColumnHidden ? '1' : '' });
@@ -1947,17 +2015,7 @@
         refreshClientResumeFileUi();
       }
 
-      function updateEnqueueClientApplyPriorityUi() {
-        const btn = document.getElementById('enqueueClientApplyPriorityBtn');
-        const loader = document.getElementById('enqueueClientApplyPriorityLoader');
-        if (!btn) return;
-        const user = getSelectedUser();
-        const loaderOn = loader?.classList.contains('on');
-        btn.disabled =
-          !canRunApplyPriorityForUser(user) || !q().seekerId || isSyncing || isUploadingClientResume || loaderOn;
-      }
-
-      async function enqueueClientApplyPriorityFromUi() {
+      function assertCanEnqueueClientApplyPriority() {
         const seekerId = q().seekerId;
         if (!seekerId) throw new Error('Select a client first.');
         const user = getSelectedUser();
@@ -1968,18 +2026,46 @@
         if (!clientHasApplyPrioritySkills(user)) {
           throw new Error('Set client roles/skills before running apply priority.');
         }
+        return seekerId;
+      }
+
+      function updateEnqueueClientApplyPriorityUi() {
         const btn = document.getElementById('enqueueClientApplyPriorityBtn');
-        onLoading('enqueueClientApplyPriorityLoader', true);
+        const rewriteBtn = document.getElementById('enqueueClientApplyPriorityRewriteBtn');
+        const loader = document.getElementById('enqueueClientApplyPriorityLoader');
+        const rewriteLoader = document.getElementById('enqueueClientApplyPriorityRewriteLoader');
+        const user = getSelectedUser();
+        const canRun =
+          canRunApplyPriorityForUser(user) && q().seekerId && !isSyncing && !isUploadingClientResume;
+        const loaderOn = loader?.classList.contains('on');
+        const rewriteLoaderOn = rewriteLoader?.classList.contains('on');
+        const busy = loaderOn || rewriteLoaderOn;
+        if (btn) btn.disabled = !canRun || busy;
+        if (rewriteBtn) rewriteBtn.disabled = !canRun || busy;
+      }
+
+      async function enqueueClientApplyPriorityFromUi({ rewrite = false, days = 7 } = {}) {
+        const seekerId = assertCanEnqueueClientApplyPriority();
+        const loaderId = rewrite ? 'enqueueClientApplyPriorityRewriteLoader' : 'enqueueClientApplyPriorityLoader';
+        const btnId = rewrite ? 'enqueueClientApplyPriorityRewriteBtn' : 'enqueueClientApplyPriorityBtn';
+        const btn = document.getElementById(btnId);
+        onLoading(loaderId, true);
         if (btn) btn.disabled = true;
         try {
           const result = await api(
             `/api/app/admin/clients/${encodeURIComponent(seekerId)}/apply-priority/enqueue-default`,
-            { method: 'POST', body: '{}' }
+            { method: 'POST', body: JSON.stringify({ rewrite: Boolean(rewrite), days }) }
           );
           const enqueued = Number(result?.enqueued || 0);
-          setMsg('dashMsg', `Apply priority enqueued (${enqueued} job${enqueued === 1 ? '' : 's'}).`);
+          const skipped = Number(result?.skippedAlreadyRanked || 0);
+          const suffix = rewrite
+            ? ` (rewrite, last ${Number(result?.defaults?.days || days)} days)`
+            : skipped
+              ? `, skipped ${skipped} already ranked`
+              : '';
+          setMsg('dashMsg', `Apply priority enqueued (${enqueued} job${enqueued === 1 ? '' : 's'})${suffix}.`);
         } finally {
-          onLoading('enqueueClientApplyPriorityLoader', false);
+          onLoading(loaderId, false);
           updateEnqueueClientApplyPriorityUi();
         }
       }
@@ -3362,8 +3448,11 @@
           document.getElementById('workAuthHintModal').classList.remove('on');
         }
       });
-      document.getElementById('toggleClientsColumnBtn').addEventListener('click', () => {
-        setClientsColumnVisibility(!isClientsColumnHidden);
+      document.getElementById('collapseClientsColumnBtn').addEventListener('click', () => {
+        setClientsColumnVisibility(true);
+      });
+      document.getElementById('expandClientsColumnBtn').addEventListener('click', () => {
+        setClientsColumnVisibility(false);
       });
       document.getElementById('toggleFiltersBtn').addEventListener('click', () => {
         setFiltersVisibility(!isFiltersHidden);
@@ -3444,6 +3533,11 @@
       });
       document.getElementById('enqueueClientApplyPriorityBtn').addEventListener('click', () => {
         enqueueClientApplyPriorityFromUi().catch((e) => setMsg('dashMsg', e.message, true));
+      });
+      document.getElementById('enqueueClientApplyPriorityRewriteBtn').addEventListener('click', () => {
+        enqueueClientApplyPriorityFromUi({ rewrite: true, days: 7 }).catch((e) =>
+          setMsg('dashMsg', e.message, true)
+        );
       });
       document.getElementById('viewClientResumeBtn').addEventListener('click', openSelectedUserResume);
       document.getElementById('clientResumeFileInput').addEventListener('change', refreshClientResumeFileUi);

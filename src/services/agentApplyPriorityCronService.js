@@ -22,12 +22,18 @@ function localIsoDate(date) {
   return `${y}-${m}-${day}`;
 }
 
-function getDefaultDateRange() {
+function getDateRangeForDays(days = 7) {
+  const span = Math.min(90, Math.max(1, Number.parseInt(String(days || '7'), 10) || 7));
   const now = new Date();
   const to = localIsoDate(now);
   const fromDate = new Date(now);
-  fromDate.setDate(fromDate.getDate() - 7);
+  fromDate.setDate(fromDate.getDate() - span);
   const from = localIsoDate(fromDate);
+  return { from, to, days: span };
+}
+
+function getDefaultDateRange() {
+  const { from, to } = getDateRangeForDays(7);
   return { from, to };
 }
 
@@ -93,6 +99,7 @@ async function enqueueClientDefaultPages({
   pageSize,
   maxPages,
   requestedBy,
+  rewrite = false,
 }) {
   const skillIds = normalizeSkillIdsCsv(client?.skills);
   const country = parseCountryCsv(client?.WorkAuthorizationCountries);
@@ -125,15 +132,17 @@ async function enqueueClientDefaultPages({
     if (pageJobs.length) pagesWithJobs += 1;
 
     if (pageJobs.length) {
-      const unrankedJobs = await filterUnrankedJobsForClient({
-        clientUserId: Number(client.Id),
-        jobs: pageJobs,
-      });
-      skippedAlreadyRanked += pageJobs.length - unrankedJobs.length;
-      if (unrankedJobs.length) {
+      const jobsToQueue = rewrite
+        ? pageJobs
+        : await filterUnrankedJobsForClient({
+            clientUserId: Number(client.Id),
+            jobs: pageJobs,
+          });
+      skippedAlreadyRanked += rewrite ? 0 : pageJobs.length - jobsToQueue.length;
+      if (jobsToQueue.length) {
         const enqueued = await enqueueApplyPriorityJobsForClients({
           clientUserIds: [Number(client.Id)],
-          jobs: unrankedJobs,
+          jobs: jobsToQueue,
           requestedBy,
         });
         totalQueued += Number(enqueued?.enqueued || 0);
@@ -171,6 +180,7 @@ async function enqueueClientDefaultPages({
       showOnlyHighlyRelevant,
       pageSize,
       maxPages,
+      rewrite: Boolean(rewrite),
     },
   };
 }
@@ -248,6 +258,8 @@ export async function enqueueApplyPriorityDefaultForClient({
   pageSize = config.applyPriorityCronPageSize,
   maxPages = config.applyPriorityCronMaxPages,
   requestedBy = null,
+  rewrite = false,
+  days = 7,
 } = {}) {
   const queueState = getAgentApplyPriorityQueueState();
   if (!queueState.enabled) {
@@ -270,7 +282,7 @@ export async function enqueueApplyPriorityDefaultForClient({
 
   const normalizedPageSize = Math.min(200, Math.max(1, Number.parseInt(String(pageSize || '100'), 10) || 100));
   const normalizedMaxPages = normalizeCronMaxPages(maxPages);
-  const dateRange = getDefaultDateRange();
+  const dateRange = getDateRangeForDays(days);
   const summary = await enqueueClientDefaultPages({
     client,
     from: dateRange.from,
@@ -278,16 +290,20 @@ export async function enqueueApplyPriorityDefaultForClient({
     pageSize: normalizedPageSize,
     maxPages: normalizedMaxPages,
     requestedBy,
+    rewrite: Boolean(rewrite),
   });
 
   return {
     ok: true,
     mode: queueState.mode || 'single',
+    rewrite: Boolean(rewrite),
     defaults: {
       from: dateRange.from,
       to: dateRange.to,
+      days: dateRange.days,
       pageSize: normalizedPageSize,
       maxPages: normalizedMaxPages,
+      rewrite: Boolean(rewrite),
     },
     enqueued: summary.queuedJobs,
     ...summary,

@@ -224,9 +224,14 @@ export function createAgentClientsRouter() {
         const client = await models.Users.findByPk(clientUserId);
         if (!client) return res.status(404).json({ error: 'Client not found' });
 
+        const rewrite = Boolean(req.body?.rewrite);
+        const daysRaw = Number.parseInt(String(req.body?.days ?? '7'), 10);
+        const days = Number.isSafeInteger(daysRaw) && daysRaw > 0 ? daysRaw : 7;
         const payload = await enqueueApplyPriorityDefaultForClient({
           clientUserId,
           requestedBy: `admin:${req.actorUser?.Id ?? 'unknown'}`,
+          rewrite,
+          days,
         });
         return res.json(payload);
       } catch (err) {
