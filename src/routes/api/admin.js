@@ -12,6 +12,7 @@ import {
   processDueScreeningResponses,
 } from '../../services/positionApplyScreeningService.js';
 import { runtimeBot } from '../../bot/state.js';
+import { buildConversionStats } from '../../services/conversionStatsService.js';
 
 export function createAdminRouter() {
   const router = Router();
@@ -571,6 +572,34 @@ export function createAdminRouter() {
     } catch (err) {
       console.error('GET /api/app/admin/publisher-stats:', err);
       return res.status(500).json({ error: 'Failed to load publisher stats' });
+    }
+  });
+
+  router.get('/api/app/admin/conversion-stats', adminMiniAppAuth, async (req, res) => {
+    try {
+      const periodRaw = String(req.query.period || '7').trim();
+      const period = /^\d+$/.test(periodRaw)
+        ? Math.min(365, Math.max(1, Number.parseInt(periodRaw, 10)))
+        : 7;
+      const maxChecksRaw = String(req.query.maxChecks || '500').trim();
+      const maxChecks = /^\d+$/.test(maxChecksRaw)
+        ? Math.min(5000, Math.max(1, Number.parseInt(maxChecksRaw, 10)))
+        : 500;
+      const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
+      const stats = await buildConversionStats({
+        since,
+        telegram: runtimeBot.telegram,
+        maxChecks,
+      });
+      return res.json({
+        success: true,
+        period,
+        since: since.toISOString(),
+        ...stats,
+      });
+    } catch (err) {
+      console.error('GET /api/app/admin/conversion-stats:', err);
+      return res.status(500).json({ error: 'Failed to load conversion stats' });
     }
   });
 

@@ -31,6 +31,7 @@ import {
   parseStartPayload,
   parseStartReferralChatId,
   parseStartApplyPayload,
+  parseStartCampaignRef,
   parseHireHumanStartPayload,
 } from './utils/telegramUtils.js';
 
@@ -72,6 +73,7 @@ import {
   notifyPublisherOfNewSignup,
   recordTrackedPublisherSignup,
 } from './services/publisherSignupService.js';
+import { recordCampaignSignup } from './services/campaignSignupService.js';
 import { upsertPendingHumanAssistantRequest } from './services/humanAssistantRequestService.js';
 import {
   buildOpenJobsReplyMarkup,
@@ -189,6 +191,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const adminNotificationsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/notifications` : '';
   const stat2Url = appBaseUrl ? `${appBaseUrl}/app/stat2` : '';
   const publisherStatsUrl = appBaseUrl ? `${appBaseUrl}/app/publisher-stats` : '';
+  const conversionStatsUrl = appBaseUrl ? `${appBaseUrl}/app/conversion-stats` : '';
   const cvScoreUrl = appBaseUrl ? `${appBaseUrl}/app/cvscore` : '';
   const canUseSeekerJobsWebApp = isValidTelegramWebAppUrl(seekerJobsUrl);
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
@@ -204,6 +207,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseAdminNotificationsWebApp = isValidTelegramWebAppUrl(adminNotificationsUrl);
   const canUseStat2WebApp = isValidTelegramWebAppUrl(stat2Url);
   const canUsePublisherStatsWebApp = isValidTelegramWebAppUrl(publisherStatsUrl);
+  const canUseConversionStatsWebApp = isValidTelegramWebAppUrl(conversionStatsUrl);
   const canUseCvScoreWebApp = isValidTelegramWebAppUrl(cvScoreUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const notSubscribedImagePath = join(__dirname, '..', 'not_subscribed.png');
@@ -747,6 +751,27 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       if (!canProceedHireHuman) return;
       await startHireHumanScenario(ctx, hireHumanSource);
       return;
+    }
+    const campaignRef = parseStartCampaignRef(payload);
+    if (ctx.state.isFirstTimeUser && campaignRef?.campaignSlug) {
+      const chatId = ctx.chat?.id ?? ctx.from?.id;
+      const { user } = await ensureUserByTelegramId(
+        chatId,
+        ctx.from?.username ?? null,
+        ctx.from?.first_name ?? null,
+        ctx.from?.last_name ?? null
+      );
+      if (user) {
+        try {
+          await recordCampaignSignup({
+            user,
+            campaignSlug: campaignRef.campaignSlug,
+            startPayload: payload,
+          });
+        } catch (err) {
+          console.warn('recordCampaignSignup failed:', err?.message || err);
+        }
+      }
     }
     const canProceedToVacancies = await enforceStartRequiredChannelsGate(ctx);
     if (!canProceedToVacancies) return;
@@ -1844,6 +1869,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<code>/stat2</code> [days] — Stat2 dashboard (default 7 days)',
       '<code>/publisher_stats</code> [days] — job poster apply-link efficiency (default 7 days)',
       '<i>Alias:</i> <code>/publisher-stats</code>',
+      '<code>/conversion_stats</code> [days] — channel conversion: publisher vs ref_ ads (default 7 days)',
+      '<i>Alias:</i> <code>/conversion-stats</code>',
       '',
       '<b>Position apply screening</b>',
       'Config <code>PositionApplyScreeningResponseMin</code> (default 4320 = 3 days) — minutes until auto rejection',
@@ -1928,6 +1955,37 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.command('publisher_stats', openPublisherStats);
   bot.hears(/^\/publisher-stats(?:@\w+)?$/, openPublisherStats);
+
+  const openConversionStats = async (ctx) => {
+    const ok = await ensurePrivateAdminForHiddenCommand(ctx, 'This command');
+    if (!ok) return;
+    const text = String(ctx.message?.text || '').trim();
+    const parts = text.split(/\s+/).filter(Boolean);
+    const periodDays = parsePeriodDays(parts[1], 7);
+    const pageUrl = conversionStatsUrl
+      ? `${conversionStatsUrl}?period=${encodeURIComponent(periodDays)}`
+      : '';
+    if (!pageUrl) {
+      await ctx.reply('Conversion stats page URL is not configured.');
+      return;
+    }
+    if (canUseConversionStatsWebApp) {
+      await ctx.reply('Open conversion stats:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Conversion stats', web_app: { url: pageUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Open conversion stats:', {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Conversion stats', url: pageUrl }]],
+      },
+    });
+  };
+
+  bot.command('conversion_stats', openConversionStats);
+  bot.hears(/^\/conversion-stats(?:@\w+)?$/, openConversionStats);
 
   bot.command('removeuser', async (ctx) => {
     if (ctx.chat?.type !== 'private') {

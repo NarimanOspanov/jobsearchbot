@@ -106,6 +106,21 @@ export function parseStartReferralChatId(startPayload) {
   return Number.isSafeInteger(chatId) && chatId > 0 ? chatId : null;
 }
 
+/**
+ * Parse ad/campaign start payload: ref_<slug> (e.g. ref_instagram, ref_tg_aidynoJ).
+ * Does not match pure numeric payloads (user referral) or ref_<digits-only>.
+ * @param {string} startPayload
+ * @returns {{ campaignSlug: string } | null}
+ */
+export function parseStartCampaignRef(startPayload) {
+  const payload = String(startPayload || '').trim();
+  const match = payload.match(/^ref_([A-Za-z0-9_-]{1,50})$/i);
+  if (!match) return null;
+  const campaignSlug = String(match[1] || '').trim().toLowerCase();
+  if (!campaignSlug || !/[a-z]/i.test(campaignSlug)) return null;
+  return { campaignSlug };
+}
+
 const APPLY_POSITION_UUID_RE =
   '([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})';
 

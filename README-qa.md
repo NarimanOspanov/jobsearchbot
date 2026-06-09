@@ -42,6 +42,7 @@ Test each command in a **private chat** with the bot.
 | `/start ref_<chatId>` deeplink | Friend opens bot via your referral link | Referrer receives bonus opens notification |
 | `/start apply_<positionId>` deeplink | Candidate opens apply link | Hire Agent scenario starts for that position |
 | `/start apply_<positionId>_<token>` tracked deeplink (new user) | First-time user opens tracked apply link | `PublisherSignups` row created; publisher receives “New signup” Telegram message; apply scenario starts |
+| `/start ref_<slug>` deeplink (new user) | First-time user opens ad campaign link (e.g. `ref_instagram`, `ref_tg_aidynoJ`) | `CampaignSignups` row created (idempotent per user); normal `/start` flow continues |
 | Position apply — upload resume | Complete apply flow after deeplink | Screening acknowledgment (text only); DB row `Status=pending_screening`, `ScreeningResponseDueAt` set |
 | Position apply — after N minutes | Cron (every 1 min) or `POST /api/app/admin/position-apply-screening/run` | Polite rejection + Open jobs button; `Status=does_not_match`; audit in `UserApplicationOutreach` |
 | `/start buy_silver` deeplink | Payment initiation | Telegram Stars invoice for Silver plan is sent |
@@ -102,6 +103,7 @@ Test each command in a **private chat** with the bot.
 | `/stat` | 7-day stats summary in chat |
 | `/stat2` | Link to stat2 Mini App |
 | `/publisher_stats` | Job poster apply-link efficiency (tracked UserApplications) |
+| `/conversion_stats` [days] | Channel conversion dashboard: publisher vs `ref_` ad cohorts (live required-channel membership) |
 | `/removeuser <telegramId>` | Deletes all user data; replies with counts |
 
 **Position apply screening (config + ops)**
@@ -283,6 +285,7 @@ Open each URL while logged in via Telegram WebApp. Verify the page loads and cor
 | `/app/admin` | Redirects to `/app/agent/clients` |
 | `/app/stat2` | Stats chart renders (admin only) |
 | `/app/publisher-stats` | Publisher/channel application stats (admin only) |
+| `/app/conversion-stats` | Publisher vs ad campaign conversion stats with live channel membership (admin only) |
 
 ---
 

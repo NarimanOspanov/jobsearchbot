@@ -130,6 +130,7 @@ export async function removeUserDataByTelegramChatId(telegramChatId) {
         jobDetailsOpensDeleted: 0,
         userApplicationsDeleted: 0,
         publisherSignupsDeleted: 0,
+        campaignSignupsDeleted: 0,
       };
     }
     const applicationsDeleted = await models.Applications.destroy({ where: { UserId: user.Id }, transaction });
@@ -163,6 +164,9 @@ export async function removeUserDataByTelegramChatId(telegramChatId) {
     const publisherSignupsDeleted = models.PublisherSignups
       ? await models.PublisherSignups.destroy({ where: { UserId: user.Id }, transaction })
       : 0;
+    const campaignSignupsDeleted = models.CampaignSignups
+      ? await models.CampaignSignups.destroy({ where: { UserId: user.Id }, transaction })
+      : 0;
     await user.destroy({ transaction });
     return {
       ok: true,
@@ -177,6 +181,7 @@ export async function removeUserDataByTelegramChatId(telegramChatId) {
       jobDetailsOpensDeleted,
       userApplicationsDeleted,
       publisherSignupsDeleted,
+      campaignSignupsDeleted,
     };
   });
 }

@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Conversion stats</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+        --ok: #22c55e;
+        --bad: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      h1, h2 { margin: 0 0 10px; font-size: 1.1rem; }
+      .muted { color: var(--muted); font-size: 14px; }
+      .bad { color: var(--bad); }
+      .ok { color: var(--ok); }
+      .warn { color: #f59e0b; }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      select, button {
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #0f1730;
+        color: var(--text);
+        padding: 8px 10px;
+        font: inherit;
+      }
+      button {
+        border-color: var(--accent);
+        background: var(--accent);
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+      .metrics {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      }
+      .metric-title { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+      .metric-value { font-size: 24px; font-weight: 700; line-height: 1.1; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th, td {
+        border-bottom: 1px solid var(--border);
+        padding: 8px 6px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th { color: var(--muted); font-weight: 600; }
+      .table-wrap { overflow: auto; }
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .pill-yes { background: rgba(34, 197, 94, 0.15); color: var(--ok); }
+      .pill-no { background: rgba(239, 68, 68, 0.15); color: var(--bad); }
+      .channel-list { margin: 0; padding-left: 18px; }
+      .channel-list li { margin: 4px 0; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Channel conversion</h1>
+        <p class="muted">
+          Compare publisher apply links vs ad campaign links (<code>ref_&lt;slug&gt;</code>).
+          Conversion = live member of all active required channels (Telegram <code>getChatMember</code>).
+        </p>
+        <div class="toolbar" style="margin-top:12px">
+          <label class="muted">Period (days)
+            <select id="periodSel">
+              <option value="1">1</option>
+              <option value="7" selected>7</option>
+              <option value="14">14</option>
+              <option value="30">30</option>
+              <option value="90">90</option>
+            </select>
+          </label>
+          <button id="reloadBtn" type="button">Reload</button>
+        </div>
+        <p id="msg" class="muted" style="margin-top:10px"></p>
+      </div>
+
+      <div class="card">
+        <h2>Summary</h2>
+        <div id="totals" class="metrics"></div>
+      </div>
+
+      <div class="card">
+        <h2>Active required channels</h2>
+        <p id="channelMeta" class="muted"></p>
+        <ul id="channelList" class="channel-list muted"></ul>
+      </div>
+
+      <div class="card">
+        <h2>By publisher</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Publisher</th>
+                <th>Signups</th>
+                <th>Live members</th>
+                <th>Conversion</th>
+              </tr>
+            </thead>
+            <tbody id="byPublisherBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>By campaign (ref slug)</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Campaign</th>
+                <th>Signups</th>
+                <th>Live members</th>
+                <th>Conversion</th>
+              </tr>
+            </thead>
+            <tbody id="byCampaignBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Recent signups (live check)</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>User</th>
+                <th>Source</th>
+                <th>Live member</th>
+              </tr>
+            </thead>
+            <tbody id="recentBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+
+      function esc(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function toInt(value, fallback) {
+        const n = Number.parseInt(String(value), 10);
+        return Number.isSafeInteger(n) && n > 0 ? n : fallback;
+      }
+
+      const periodFromUrl = new URLSearchParams(location.search).get('period');
+
+      async function api(path) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (tg?.initData) headers['x-init-data'] = tg.initData;
+        const res = await fetch(path, { headers });
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+      }
+
+      function formatDt(value) {
+        if (!value) return '—';
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+      }
+
+      function formatRate(value) {
+        const n = Number(value);
+        return Number.isFinite(n) ? `${n}%` : '—';
+      }
+
+      function renderTotals(totals, activeChannelCount) {
+        const items = [
+          ['Publisher signups', Number(totals?.publisherSignups || 0)],
+          ['Publisher live members', Number(totals?.publisherLiveMembers || 0)],
+          ['Publisher conversion', formatRate(totals?.publisherConversionRate)],
+          ['Campaign signups', Number(totals?.campaignSignups || 0)],
+          ['Campaign live members', Number(totals?.campaignLiveMembers || 0)],
+          ['Campaign conversion', formatRate(totals?.campaignConversionRate)],
+          ['Active channels', Number(activeChannelCount || 0)],
+        ];
+        document.getElementById('totals').innerHTML = items
+          .map(
+            ([title, value]) => `
+              <div>
+                <div class="metric-title">${esc(title)}</div>
+                <div class="metric-value">${esc(value)}</div>
+              </div>
+            `
+          )
+          .join('');
+      }
+
+      function renderTableRows(tbodyId, rowsHtml, colspan) {
+        document.getElementById(tbodyId).innerHTML =
+          rowsHtml || `<tr><td colspan="${colspan}" class="muted">No data</td></tr>`;
+      }
+
+      function renderChannels(activeChannels, checkedAt) {
+        const list = Array.isArray(activeChannels) ? activeChannels : [];
+        document.getElementById('channelMeta').textContent =
+          list.length > 0
+            ? `${list.length} channel(s). Live check at ${formatDt(checkedAt)}.`
+            : 'No active required channels configured.';
+        document.getElementById('channelList').innerHTML = list
+          .map(
+            (ch) =>
+              `<li><code>${esc(ch.channelId)}</code>${ch.joinUrl ? ` — <a href="${esc(ch.joinUrl)}" target="_blank" rel="noopener">${esc(ch.joinUrl)}</a>` : ''}</li>`
+          )
+          .join('');
+      }
+
+      let loading = false;
+
+      async function load() {
+        if (loading) return;
+        loading = true;
+        const reloadBtn = document.getElementById('reloadBtn');
+        reloadBtn.disabled = true;
+        const msg = document.getElementById('msg');
+        msg.className = 'muted';
+        msg.textContent = 'Loading… live membership checks may take a moment.';
+        const period = toInt(document.getElementById('periodSel').value, 7);
+        try {
+          const payload = await api(
+            `/api/app/admin/conversion-stats?period=${encodeURIComponent(period)}&maxChecks=500`
+          );
+          renderTotals(payload?.totals || {}, payload?.activeChannelCount);
+          renderChannels(payload?.activeChannels, payload?.checkedAt);
+
+          const byPublisher = Array.isArray(payload?.byPublisher) ? payload.byPublisher : [];
+          renderTableRows(
+            'byPublisherBody',
+            byPublisher
+              .map(
+                (row) => `<tr>
+                  <td>${esc(row.publisherName)} <span class="muted">#${esc(row.publisherUserId)}</span></td>
+                  <td>${esc(row.signups)}</td>
+                  <td>${esc(row.liveMembers)}</td>
+                  <td>${esc(formatRate(row.conversionRate))}</td>
+                </tr>`
+              )
+              .join(''),
+            4
+          );
+
+          const byCampaign = Array.isArray(payload?.byCampaign) ? payload.byCampaign : [];
+          renderTableRows(
+            'byCampaignBody',
+            byCampaign
+              .map(
+                (row) => `<tr>
+                  <td><code>ref_${esc(row.campaignSlug)}</code></td>
+                  <td>${esc(row.signups)}</td>
+                  <td>${esc(row.liveMembers)}</td>
+                  <td>${esc(formatRate(row.conversionRate))}</td>
+                </tr>`
+              )
+              .join(''),
+            4
+          );
+
+          const recent = Array.isArray(payload?.recent) ? payload.recent : [];
+          renderTableRows(
+            'recentBody',
+            recent
+              .map((row) => {
+                const live = row.isLiveMember === true;
+                const source =
+                  row.sourceType === 'campaign'
+                    ? `<code>${esc(row.sourceLabel)}</code>`
+                    : esc(row.sourceLabel);
+                return `<tr>
+                  <td>${esc(formatDt(row.signedUpAt))}</td>
+                  <td>${esc(row.displayName)} <span class="muted">#${esc(row.userId)}</span></td>
+                  <td>${source}</td>
+                  <td><span class="pill ${live ? 'pill-yes' : 'pill-no'}">${live ? 'Yes' : 'No'}</span></td>
+                </tr>`;
+              })
+              .join(''),
+            4
+          );
+
+          let status = `Updated for ${period} day(s), since ${formatDt(payload?.since)}. Checked ${payload?.checkedCount ?? recent.length} signup(s) at ${formatDt(payload?.checkedAt)}.`;
+          if (payload?.truncated) {
+            status += ` Showing newest ${payload?.maxChecks ?? 500} only (truncated).`;
+            msg.className = 'warn';
+          } else {
+            msg.className = 'ok';
+          }
+          msg.textContent = status;
+
+          const current = new URL(window.location.href);
+          current.searchParams.set('period', String(period));
+          window.history.replaceState(null, '', current.toString());
+        } catch (err) {
+          msg.className = 'bad';
+          msg.textContent = `Failed to load: ${err?.message || 'Unknown error'}`;
+        } finally {
+          loading = false;
+          reloadBtn.disabled = false;
+        }
+      }
+
+      document.getElementById('periodSel').value = String(toInt(periodFromUrl, 7));
+      document.getElementById('reloadBtn').addEventListener('click', load);
+      document.getElementById('periodSel').addEventListener('change', load);
+      load();
+    </script>
+  </body>
+</html>

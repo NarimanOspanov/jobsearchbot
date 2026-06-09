@@ -19,6 +19,7 @@ import defineAdminNotificationRun from './AdminNotificationRun.js';
 import defineAgentClient from './AgentClient.js';
 import defineHumanAssistantRequest from './HumanAssistantRequest.js';
 import definePublisherSignup from './PublisherSignup.js';
+import defineCampaignSignup from './CampaignSignup.js';
 
 /**
  * Initialize only the User model for empty bot runtime.
@@ -45,6 +46,7 @@ export function initModels(sequelize) {
   const AgentClient = defineAgentClient(sequelize);
   const HumanAssistantRequest = defineHumanAssistantRequest(sequelize);
   const PublisherSignup = definePublisherSignup(sequelize);
+  const CampaignSignup = defineCampaignSignup(sequelize);
 
   User.hasMany(Application, { foreignKey: 'UserId' });
   Application.belongsTo(User, { foreignKey: 'UserId' });
@@ -86,6 +88,8 @@ export function initModels(sequelize) {
   PublisherSignup.belongsTo(User, { foreignKey: 'UserId' });
   Position.hasMany(PublisherSignup, { foreignKey: 'PositionId' });
   PublisherSignup.belongsTo(Position, { foreignKey: 'PositionId' });
+  User.hasOne(CampaignSignup, { foreignKey: 'UserId' });
+  CampaignSignup.belongsTo(User, { foreignKey: 'UserId' });
   return {
     User,
     Application,
@@ -129,5 +133,7 @@ export function initModels(sequelize) {
     HumanAssistantRequests: HumanAssistantRequest,
     PublisherSignup,
     PublisherSignups: PublisherSignup,
+    CampaignSignup,
+    CampaignSignups: CampaignSignup,
   };
 }
