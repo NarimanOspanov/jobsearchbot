@@ -631,12 +631,12 @@
           <p id="selectedClientBar" class="selected-client-bar" style="display:none"></p>
           <div id="userInfoSection">
             <div id="userInfoTabs" class="user-info-tabs" role="tablist" aria-label="Client details">
-              <button type="button" class="user-info-tab-btn" data-user-tab="profile" role="tab" aria-selected="false">Main user info</button>
+              <button type="button" class="user-info-tab-btn is-active" data-user-tab="profile" role="tab" aria-selected="true">Main user info</button>
               <button type="button" class="user-info-tab-btn" data-user-tab="resume" role="tab" aria-selected="false">Resume</button>
               <button type="button" class="user-info-tab-btn" data-user-tab="preferences" role="tab" aria-selected="false">Preferences</button>
-              <button type="button" class="user-info-tab-btn is-active" data-user-tab="applications" role="tab" aria-selected="true">Applications</button>
+              <button type="button" class="user-info-tab-btn" data-user-tab="applications" role="tab" aria-selected="false">Applications</button>
             </div>
-            <div id="userInfoTabProfile" class="user-info-tab-panel is-hidden" data-user-tab-panel="profile" role="tabpanel">
+            <div id="userInfoTabProfile" class="user-info-tab-panel" data-user-tab-panel="profile" role="tabpanel">
               <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
             </div>
             <div id="userInfoTabResume" class="user-info-tab-panel is-hidden" data-user-tab-panel="resume" role="tabpanel">
@@ -710,7 +710,7 @@
                 <span id="enqueueClientApplyPriorityRewriteLoader" class="loader" aria-hidden="true"></span>
               </div>
             </div>
-            <div id="userInfoTabApplications" class="user-info-tab-panel" data-user-tab-panel="applications" role="tabpanel">
+            <div id="userInfoTabApplications" class="user-info-tab-panel is-hidden" data-user-tab-panel="applications" role="tabpanel">
               <div class="applications-filters-row">
                 <button id="toggleFiltersBtn" type="button" class="ghost-btn">Show filters</button>
               </div>
@@ -977,7 +977,9 @@
       let isAnalyzingApplyPriority = false;
       let isQueueingApplyPriorityAllClients = false;
       let skipStatusAutoSave = false;
-      let activeUserInfoTab = 'applications';
+      let activeUserInfoTab = 'profile';
+      const applyPriorityDefaultEnqueueInFlight = new Set();
+      const applyPriorityRewriteEnqueueInFlight = new Set();
       let botUsername = '';
       let miniAppShortName = 'app';
 
@@ -1668,8 +1670,9 @@
         renderScreenshotArtifact();
         if (save) return saveStatus({ force: forceSave });
       }
-      function setActiveUserInfoTab(tab) {
-        const next = ['profile', 'resume', 'preferences', 'applications'].includes(tab) ? tab : 'applications';
+      function setActiveUserInfoTab(tab, { autoSearch = false } = {}) {
+        const prev = activeUserInfoTab;
+        const next = ['profile', 'resume', 'preferences', 'applications'].includes(tab) ? tab : 'profile';
         activeUserInfoTab = next;
         document.querySelectorAll('.user-info-tab-btn[data-user-tab]').forEach((btn) => {
           const isActive = btn.getAttribute('data-user-tab') === next;
@@ -1679,12 +1682,15 @@
         document.querySelectorAll('.user-info-tab-panel[data-user-tab-panel]').forEach((panel) => {
           panel.classList.toggle('is-hidden', panel.getAttribute('data-user-tab-panel') !== next);
         });
+        if (autoSearch && next === 'applications' && prev !== 'applications' && q().seekerId) {
+          syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+        }
       }
       function syncUserInfoTabsUi(user) {
         const tabs = document.getElementById('userInfoTabs');
         if (!tabs) return;
-        if (!user && !['applications'].includes(activeUserInfoTab)) {
-          setActiveUserInfoTab('applications');
+        if (!user && activeUserInfoTab !== 'profile') {
+          setActiveUserInfoTab('profile');
           return;
         }
         setActiveUserInfoTab(activeUserInfoTab);
@@ -2095,22 +2101,23 @@
         const loader = document.getElementById('enqueueClientApplyPriorityLoader');
         const rewriteLoader = document.getElementById('enqueueClientApplyPriorityRewriteLoader');
         const user = getSelectedUser();
+        const seekerId = String(q().seekerId || '');
         const canRun =
-          canRunApplyPriorityForUser(user) && q().seekerId && !isSyncing && !isUploadingClientResume;
-        const loaderOn = loader?.classList.contains('on');
-        const rewriteLoaderOn = rewriteLoader?.classList.contains('on');
-        const busy = loaderOn || rewriteLoaderOn;
-        if (btn) btn.disabled = !canRun || busy;
-        if (rewriteBtn) rewriteBtn.disabled = !canRun || busy;
+          canRunApplyPriorityForUser(user) && seekerId && !isSyncing && !isUploadingClientResume;
+        const defaultBusy = seekerId && applyPriorityDefaultEnqueueInFlight.has(seekerId);
+        const rewriteBusy = seekerId && applyPriorityRewriteEnqueueInFlight.has(seekerId);
+        if (loader) loader.classList.toggle('on', Boolean(defaultBusy));
+        if (rewriteLoader) rewriteLoader.classList.toggle('on', Boolean(rewriteBusy));
+        if (btn) btn.disabled = !canRun || defaultBusy;
+        if (rewriteBtn) rewriteBtn.disabled = !canRun || rewriteBusy;
       }
 
       async function enqueueClientApplyPriorityFromUi({ rewrite = false, days = 7 } = {}) {
-        const seekerId = assertCanEnqueueClientApplyPriority();
-        const loaderId = rewrite ? 'enqueueClientApplyPriorityRewriteLoader' : 'enqueueClientApplyPriorityLoader';
-        const btnId = rewrite ? 'enqueueClientApplyPriorityRewriteBtn' : 'enqueueClientApplyPriorityBtn';
-        const btn = document.getElementById(btnId);
-        onLoading(loaderId, true);
-        if (btn) btn.disabled = true;
+        const seekerId = String(assertCanEnqueueClientApplyPriority());
+        const inFlightSet = rewrite ? applyPriorityRewriteEnqueueInFlight : applyPriorityDefaultEnqueueInFlight;
+        if (inFlightSet.has(seekerId)) return;
+        inFlightSet.add(seekerId);
+        updateEnqueueClientApplyPriorityUi();
         try {
           const result = await api(
             `/api/app/admin/clients/${encodeURIComponent(seekerId)}/apply-priority/enqueue-default`,
@@ -2123,9 +2130,11 @@
             : skipped
               ? `, skipped ${skipped} already ranked`
               : '';
-          setMsg('dashMsg', `Apply priority enqueued (${enqueued} job${enqueued === 1 ? '' : 's'})${suffix}.`);
+          if (String(q().seekerId || '') === seekerId) {
+            setMsg('dashMsg', `Apply priority enqueued (${enqueued} job${enqueued === 1 ? '' : 's'})${suffix}.`);
+          }
         } finally {
-          onLoading(loaderId, false);
+          inFlightSet.delete(seekerId);
           updateEnqueueClientApplyPriorityUi();
         }
       }
@@ -3183,7 +3192,7 @@
 
       async function onUserSelected(userId) {
         if (!userId) return;
-        activeUserInfoTab = 'applications';
+        activeUserInfoTab = 'profile';
         applyPriorityRankings = {};
         applyPriorityCacheMeta = null;
         applyPriorityStale = false;
@@ -3195,11 +3204,7 @@
         renderUsers();
         renderSelectedUserInfo();
         renderSelectedClientBar();
-        try {
-          await syncJobs();
-        } catch (err) {
-          setMsg('dashMsg', err.message, true);
-        }
+        updateEnqueueClientApplyPriorityUi();
       }
 
       function openSelectedUserResume() {
@@ -3323,11 +3328,11 @@
         renderClientWorkAuthPickerOptions();
         if (isBotAdminUser) await loadAgents();
         await Promise.all([loadPendingHumanRequests(), loadClients(), loadSkills()]);
+        const s = q();
         renderSelectedUserInfo();
-        setActiveUserInfoTab('applications');
+        setActiveUserInfoTab(s.jobId ? 'applications' : 'profile');
         setFiltersVisibility(true);
         setClientsColumnVisibility(isTruthyQueryParam(q().hideClients), { updateQuery: false });
-        const s = q();
         applySelectedApplyTypesCsv(s.applyTypes || '');
         applySelectedCountriesCsv(s.country || '');
         applySelectedPrioritiesCsv(s.priorities || '');
@@ -3349,8 +3354,10 @@
         updatePagerUi();
         if (s.seekerId) {
           hydrateStateToInputs();
-          await syncJobs();
-          if (s.jobId) openJobById(Number(s.jobId));
+          if (s.jobId) {
+            await syncJobs();
+            openJobById(Number(s.jobId));
+          }
         }
       }
 
@@ -3585,7 +3592,7 @@
       });
       document.querySelectorAll('.user-info-tab-btn[data-user-tab]').forEach((btn) => {
         btn.addEventListener('click', () => {
-          setActiveUserInfoTab(btn.getAttribute('data-user-tab') || 'applications');
+          setActiveUserInfoTab(btn.getAttribute('data-user-tab') || 'profile', { autoSearch: true });
         });
       });
       document.getElementById('enqueueClientApplyPriorityBtn').addEventListener('click', () => {
