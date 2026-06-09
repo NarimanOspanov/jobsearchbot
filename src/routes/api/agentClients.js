@@ -3,7 +3,12 @@ import express from 'express';
 import { Sequelize } from 'sequelize';
 import { adminMiniAppAuth, agentMiniAppAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
-import { buildAdminUserContactProjection, isSupportedResumeMimeType, saveUserResumeFromBuffer } from '../../services/userService.js';
+import {
+  buildAdminUserContactProjection,
+  isSupportedResumeMimeType,
+  normalizeSkillIds,
+  saveUserResumeFromBuffer,
+} from '../../services/userService.js';
 import {
   assertCanAccessClient,
   mapUserToAgentClientPayload,
@@ -16,7 +21,11 @@ import {
   listHumanAssistantRequests,
   markHumanAssistantRequestAssigned,
 } from '../../services/humanAssistantRequestService.js';
-import { toSearchModeOrUndefined, toWorkAuthCountriesOrNullOrUndefined } from '../../utils/validators.js';
+import {
+  toSearchModeOrUndefined,
+  toSkillIdsOrNullOrUndefined,
+  toWorkAuthCountriesOrNullOrUndefined,
+} from '../../utils/validators.js';
 
 function displayNameFromUser(u, projection) {
   const fromResume = [
@@ -425,6 +434,13 @@ export function createAgentClientsRouter() {
           }
           updates.WorkAuthorizationCountries = workAuthorizationCountries;
         }
+        if ('skills' in req.body) {
+          const skillIds = toSkillIdsOrNullOrUndefined(req.body.skills, normalizeSkillIds);
+          if (skillIds === undefined) {
+            return res.status(400).json({ error: 'Invalid skills' });
+          }
+          updates.skills = skillIds;
+        }
         if (!Object.keys(updates).length) {
           return res.status(400).json({ error: 'No valid fields to update' });
         }
@@ -437,6 +453,7 @@ export function createAgentClientsRouter() {
           comment: client.Comment ?? null,
           searchMode: client.SearchMode || 'not_urgent',
           workAuthorizationCountries: client.WorkAuthorizationCountries || '',
+          skills: Array.isArray(client.skills) ? client.skills : [],
         });
       } catch (err) {
         console.error('PATCH /api/app/agent/clients/:clientUserId/settings:', err);
@@ -506,6 +523,8 @@ export function createAgentClientsRouter() {
       const clientUserIds = assignments
         .map((row) => row.Client)
         .filter((u) => u && String(u.ResumeURL || '').trim())
+        .filter((u) => String(u.Comment || '').trim())
+        .filter((u) => normalizeSkillIds(u.skills).length > 0)
         .map((u) => Number(u.Id));
 
       const queued = await enqueueApplyPriorityJobsForClients({
@@ -566,7 +585,12 @@ export function createAgentClientsRouter() {
       return res.json({ ok: true, ...result, persisted });
     } catch (err) {
       const message = String(err?.message || err);
-      if (message.includes('Upload client resume') || message.includes('Resume text is empty')) {
+      if (
+        message.includes('Upload client resume') ||
+        message.includes('Resume text is empty') ||
+        message.includes('Fill in client comment') ||
+        message.includes('Set client roles/skills')
+      ) {
         return res.status(400).json({ error: message });
       }
       console.error('POST /api/app/agent/clients/:clientUserId/apply-priority:', err);

@@ -565,6 +565,13 @@
                   </select>
                 </div>
                 <div>
+                  <label>Roles</label>
+                  <div class="skills-picker">
+                    <button id="clientSkillPickerBtn" type="button" class="skills-picker-btn">No roles selected</button>
+                    <div id="clientSkillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                  </div>
+                </div>
+                <div>
                   <label>Work authorization</label>
                   <div class="skills-picker">
                     <button id="clientWorkAuthPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
@@ -844,6 +851,7 @@
       let isPriorityPickerOpen = false;
       let isStatusPickerOpen = false;
       let isClientWorkAuthPickerOpen = false;
+      let isClientSkillPickerOpen = false;
       let applicationsPeriodMode = false;
       let isUploadingClientResume = false;
       let useRemotePositionsApi = false;
@@ -1131,11 +1139,28 @@
           .sort((a, b) => a - b)
           .join(',');
       }
+      function clientHasApplyPrioritySkills(user) {
+        return (Array.isArray(user?.skills) ? user.skills : [])
+          .map((id) => Number.parseInt(String(id), 10))
+          .some((id) => Number.isSafeInteger(id) && id > 0);
+      }
+      function canRunApplyPriorityForUser(user) {
+        return Boolean(
+          user?.resumeUrl &&
+            String(user?.comment || '').trim() &&
+            clientHasApplyPrioritySkills(user)
+        );
+      }
       function buildClientApplyPriorityContextKey(user) {
         const searchMode = String(user?.searchMode || 'not_urgent');
         const comment = String(user?.comment || '');
         const resumeUrl = String(user?.resumeUrl || '');
-        return `${searchMode}|${comment}|${resumeUrl}`;
+        const skillIds = (Array.isArray(user?.skills) ? user.skills : [])
+          .map((id) => Number.parseInt(String(id), 10))
+          .filter((id) => Number.isSafeInteger(id) && id > 0)
+          .sort((a, b) => a - b)
+          .join(',');
+        return `${searchMode}|${comment}|${resumeUrl}|${skillIds}`;
       }
       function buildApplyPriorityContextKey(user, jobs) {
         return `${buildClientApplyPriorityContextKey(user)}|${hashJobIds(jobs)}`;
@@ -1289,6 +1314,7 @@
           applyPriorityCacheMeta = null;
         }
         updateApplyPriorityUi();
+        updateEnqueueClientApplyPriorityUi();
         renderJobs();
       }
       function updateApplyPriorityUi() {
@@ -1298,7 +1324,7 @@
         const queueLoader = document.getElementById('queueAnalyzeAllClientsLoader');
         const staleHint = document.getElementById('applyPriorityStaleHint');
         const user = getSelectedUser();
-        const canAnalyze = Boolean(user?.resumeUrl && q().seekerId && positions.length && !isSyncing);
+        const canAnalyze = Boolean(canRunApplyPriorityForUser(user) && q().seekerId && positions.length && !isSyncing);
         if (btn) btn.disabled = !canAnalyze || isAnalyzingApplyPriority;
         if (loader) loader.className = isAnalyzingApplyPriority ? 'loader on' : 'loader';
         const canQueueAll = Boolean(positions.length && !isSyncing && (isBotAdminUser || isCareerAgentUser));
@@ -1308,6 +1334,7 @@
           const showStale = applyPriorityStale && hasApplyPriorityData();
           staleHint.style.display = showStale ? '' : 'none';
         }
+        updateEnqueueClientApplyPriorityUi();
       }
 
       async function queueAnalyzeApplyPriorityAllClients() {
@@ -1335,6 +1362,12 @@
         const user = getSelectedUser();
         if (!seekerId || !user) throw new Error('Select a client first.');
         if (!user.resumeUrl) throw new Error('Upload client resume before analyzing priority');
+        if (!String(user.comment || '').trim()) {
+          throw new Error('Fill in "Do not apply to (companies)" before analyzing priority');
+        }
+        if (!clientHasApplyPrioritySkills(user)) {
+          throw new Error('Set client roles/skills before analyzing priority');
+        }
         if (!positions.length) throw new Error('Load jobs first.');
 
         isAnalyzingApplyPriority = true;
@@ -1424,7 +1457,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'clientWorkAuthPickerBtn', 'clientSearchModeSel', 'saveClientCommentBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn', 'enqueueClientApplyPriorityBtn'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'clientSkillPickerBtn', 'clientWorkAuthPickerBtn', 'clientSearchModeSel', 'saveClientCommentBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn', 'enqueueClientApplyPriorityBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -1920,7 +1953,8 @@
         if (!btn) return;
         const user = getSelectedUser();
         const loaderOn = loader?.classList.contains('on');
-        btn.disabled = !user?.resumeUrl || !q().seekerId || isSyncing || isUploadingClientResume || loaderOn;
+        btn.disabled =
+          !canRunApplyPriorityForUser(user) || !q().seekerId || isSyncing || isUploadingClientResume || loaderOn;
       }
 
       async function enqueueClientApplyPriorityFromUi() {
@@ -1928,6 +1962,12 @@
         if (!seekerId) throw new Error('Select a client first.');
         const user = getSelectedUser();
         if (!user?.resumeUrl) throw new Error('Upload client resume before running apply priority.');
+        if (!String(user.comment || '').trim()) {
+          throw new Error('Fill in "Do not apply to (companies)" before running apply priority.');
+        }
+        if (!clientHasApplyPrioritySkills(user)) {
+          throw new Error('Set client roles/skills before running apply priority.');
+        }
         const btn = document.getElementById('enqueueClientApplyPriorityBtn');
         onLoading('enqueueClientApplyPriorityLoader', true);
         if (btn) btn.disabled = true;
@@ -1985,12 +2025,43 @@
       }
 
       function syncClientSettingsUi(user) {
-        if (!user) return;
+        if (!user) {
+          applyClientSkillIdsCsv('');
+          return;
+        }
         const searchModeSel = document.getElementById('clientSearchModeSel');
         if (searchModeSel) {
           searchModeSel.value = String(user.searchMode || '').trim() === 'urgent' ? 'urgent' : 'not_urgent';
         }
+        applyClientSkillIdsCsv(userSkillIdsCsv(user));
         applyClientWorkAuthCsv(user.workAuthorizationCountries || '');
+      }
+
+      function getClientSkillIds() {
+        const checked = document.querySelectorAll('#clientSkillPickerMenu input[type="checkbox"]:checked');
+        return [...checked]
+          .map((opt) => Number.parseInt(String(opt.value || ''), 10))
+          .filter((id) => Number.isSafeInteger(id) && id > 0);
+      }
+
+      function applyClientSkillIdsCsv(csv) {
+        const selected = new Set(
+          String(csv || '')
+            .split(',')
+            .map((v) => v.trim())
+            .filter(Boolean)
+        );
+        document.querySelectorAll('#clientSkillPickerMenu input[type="checkbox"]').forEach((opt) => {
+          opt.checked = selected.has(String(opt.value));
+        });
+        renderClientSkillPickerSummary();
+      }
+
+      function renderClientSkillPickerSummary() {
+        const ids = getClientSkillIds();
+        const btn = document.getElementById('clientSkillPickerBtn');
+        if (!btn) return;
+        btn.textContent = ids.length ? `${ids.length} role(s) selected` : 'No roles selected';
       }
 
       function refreshClientResumeFileUi() {
@@ -2096,6 +2167,7 @@
           comment: raw || null,
           searchMode: searchModeSel?.value || 'not_urgent',
           workAuthorizationCountries: getClientWorkAuthCsv() || null,
+          skills: getClientSkillIds(),
         };
         if (isBotAdminUser) {
           const aid = String(q().agentUserId || '').trim();
@@ -2110,6 +2182,7 @@
           const savedComment = payload?.comment ?? null;
           const savedSearchMode = payload?.searchMode || 'not_urgent';
           const savedWorkAuth = payload?.workAuthorizationCountries || '';
+          const savedSkills = Array.isArray(payload?.skills) ? payload.skills : getClientSkillIds();
           const idx = users.findIndex((u) => String(u.id) === String(seekerId));
           if (idx >= 0) {
             users[idx] = {
@@ -2117,11 +2190,14 @@
               comment: savedComment,
               searchMode: savedSearchMode,
               workAuthorizationCountries: savedWorkAuth,
+              skills: savedSkills,
             };
           }
           if (textarea) textarea.value = String(savedComment || '');
           if (searchModeSel) searchModeSel.value = savedSearchMode === 'urgent' ? 'urgent' : 'not_urgent';
+          applyClientSkillIdsCsv(userSkillIdsCsv(users[idx] || { skills: savedSkills }));
           applyClientWorkAuthCsv(savedWorkAuth);
+          applyUserSkillsToFilters(users[idx] || getSelectedUser(), { force: true });
           invalidateApplyPriorityCache();
           setMsg('clientCommentMsg', 'Saved.');
         } finally {
@@ -2129,10 +2205,7 @@
         }
       }
 
-      async function loadSkills() {
-        const payload = await api(SKILLS_URL);
-        skills = payload.skills || payload || [];
-        const menu = document.getElementById('skillPickerMenu');
+      function buildSkillPickerMenuHtml() {
         const grouped = new Map();
         for (const s of skills) {
           const roleName = String(s.roleName || s.RoleName || '').trim() || 'Other';
@@ -2141,15 +2214,37 @@
           grouped.get(roleName).push({ id: s.id, name: skillName });
         }
         const sortedGroups = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
-        menu.innerHTML = sortedGroups.map(([roleName, items]) => {
-          const optionsHtml = items
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((item) =>
-              `<label class="skill-check"><input type="checkbox" value="${item.id}" />${esc(item.name)}</label>`
-            )
-            .join('');
-          return `<div class="skills-group"><div class="skills-group-title">${esc(roleName)}</div>${optionsHtml}</div>`;
-        }).join('');
+        return sortedGroups
+          .map(([roleName, items]) => {
+            const optionsHtml = items
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(
+                (item) =>
+                  `<label class="skill-check"><input type="checkbox" value="${item.id}" />${esc(item.name)}</label>`
+              )
+              .join('');
+            return `<div class="skills-group"><div class="skills-group-title">${esc(roleName)}</div>${optionsHtml}</div>`;
+          })
+          .join('');
+      }
+
+      function renderSkillPickerMenus() {
+        const html = buildSkillPickerMenuHtml();
+        const filterMenu = document.getElementById('skillPickerMenu');
+        const clientMenu = document.getElementById('clientSkillPickerMenu');
+        const filterCsv = getSelectedSkillIdsCsv();
+        const clientCsv = userSkillIdsCsv(getSelectedUser());
+        if (filterMenu) filterMenu.innerHTML = html;
+        if (clientMenu) clientMenu.innerHTML = html;
+        if (filterCsv) applySelectedSkillIdsCsv(filterCsv);
+        if (clientCsv) applyClientSkillIdsCsv(clientCsv);
+        else renderClientSkillPickerSummary();
+      }
+
+      async function loadSkills() {
+        const payload = await api(SKILLS_URL);
+        skills = payload.skills || payload || [];
+        renderSkillPickerMenus();
       }
 
       function getSelectedSkillIdsCsv() {
@@ -3209,6 +3304,18 @@
         if (isStatusPickerOpen && statusBtn && statusMenu && !statusBtn.contains(event.target) && !statusMenu.contains(event.target)) {
           closeStatusPicker();
         }
+        const clientSkillBtn = document.getElementById('clientSkillPickerBtn');
+        const clientSkillMenu = document.getElementById('clientSkillPickerMenu');
+        if (
+          isClientSkillPickerOpen &&
+          clientSkillBtn &&
+          clientSkillMenu &&
+          !clientSkillBtn.contains(event.target) &&
+          !clientSkillMenu.contains(event.target)
+        ) {
+          clientSkillMenu.classList.remove('open');
+          isClientSkillPickerOpen = false;
+        }
         const clientWorkAuthBtn = document.getElementById('clientWorkAuthPickerBtn');
         const clientWorkAuthMenu = document.getElementById('clientWorkAuthPickerMenu');
         if (
@@ -3298,11 +3405,27 @@
       });
       document.getElementById('notesText').addEventListener('blur', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
       document.getElementById('genBtn').addEventListener('click', () => generateMaterials().catch((e) => setMsg('jobMsg', e.message, true)));
+      document.getElementById('clientSkillPickerBtn').addEventListener('click', () => {
+        if (isClientSkillPickerOpen) {
+          document.getElementById('clientSkillPickerMenu')?.classList.remove('open');
+          isClientSkillPickerOpen = false;
+        } else {
+          document.getElementById('clientWorkAuthPickerMenu')?.classList.remove('open');
+          isClientWorkAuthPickerOpen = false;
+          document.getElementById('clientSkillPickerMenu')?.classList.add('open');
+          isClientSkillPickerOpen = true;
+        }
+      });
+      document.getElementById('clientSkillPickerMenu').addEventListener('change', () => {
+        renderClientSkillPickerSummary();
+      });
       document.getElementById('clientWorkAuthPickerBtn').addEventListener('click', () => {
         if (isClientWorkAuthPickerOpen) {
           document.getElementById('clientWorkAuthPickerMenu')?.classList.remove('open');
           isClientWorkAuthPickerOpen = false;
         } else {
+          document.getElementById('clientSkillPickerMenu')?.classList.remove('open');
+          isClientSkillPickerOpen = false;
           document.getElementById('clientWorkAuthPickerMenu')?.classList.add('open');
           isClientWorkAuthPickerOpen = true;
         }

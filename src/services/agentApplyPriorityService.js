@@ -1,10 +1,23 @@
 import { rankJobsForAgentApplyBatchWithAI } from './aiService.js';
 import { buildJobRequirementsText, getSeekerResumeTextForTailoring } from './tailoredCvService.js';
+import { normalizeSkillIds } from './userService.js';
 
 const CHUNK_SIZE = 20;
 const MAX_JOBS = 200;
 const CHUNK_CONCURRENCY = 3;
 const CHUNK_RETRY_COUNT = 1;
+
+export function clientHasApplyPriorityComment(clientUser) {
+  return Boolean(String(clientUser?.Comment || '').trim());
+}
+
+export function clientHasApplyPrioritySkills(clientUser) {
+  return normalizeSkillIds(clientUser?.skills).length > 0;
+}
+
+export function clientIsReadyForApplyPriority(clientUser) {
+  return clientHasApplyPriorityComment(clientUser) && clientHasApplyPrioritySkills(clientUser);
+}
 
 function normalizeIncomingJobs(jobs) {
   if (!Array.isArray(jobs)) return [];
@@ -143,6 +156,12 @@ export async function rankJobsForAgentApply({ clientUser, jobs }) {
 
   const searchMode = String(clientUser?.SearchMode || 'not_urgent').trim() === 'urgent' ? 'urgent' : 'not_urgent';
   const agentComment = String(clientUser?.Comment || '').trim();
+  if (!agentComment) {
+    throw new Error('Fill in client comment (companies to skip) before analyzing apply priority');
+  }
+  if (!clientHasApplyPrioritySkills(clientUser)) {
+    throw new Error('Set client roles/skills before analyzing apply priority');
+  }
 
   const chunks = chunkArray(normalizedJobs, CHUNK_SIZE);
   const { mergedRows, chunkTimings } = await processChunksInPool({

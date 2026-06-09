@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { models } from '../db.js';
 import { buildAnyhiresPositionsSearchParams } from '../utils/positionUpstreamQuery.js';
 import { getPendingHumanAssistantUserIds } from './humanAssistantRequestService.js';
+import { clientIsReadyForApplyPriority } from './agentApplyPriorityService.js';
 import { enqueueApplyPriorityJobsForClients, getAgentApplyPriorityQueueState } from './agentApplyPriorityQueueService.js';
 
 /** Hard stop when maxPages is unlimited (hasMore loop). */
@@ -200,6 +201,7 @@ export async function enqueueApplyPriorityForDefaultClientSearches({
   const clients = assignments
     .map((row) => row.Client)
     .filter((client) => client && String(client.ResumeURL || '').trim())
+    .filter((client) => clientIsReadyForApplyPriority(client))
     .filter((client) => !pendingHumanAssistantUserIds.has(Number(client.Id)));
 
   const dateRange = getDefaultDateRange();
@@ -261,6 +263,9 @@ export async function enqueueApplyPriorityDefaultForClient({
   if (!client) throw new Error(`Client ${normalizedClientUserId} not found`);
   if (!String(client.ResumeURL || '').trim()) {
     throw new Error('Client has no resume uploaded');
+  }
+  if (!clientIsReadyForApplyPriority(client)) {
+    throw new Error('Set client roles/skills and comment (companies to skip) before running apply priority');
   }
 
   const normalizedPageSize = Math.min(200, Math.max(1, Number.parseInt(String(pageSize || '100'), 10) || 100));
