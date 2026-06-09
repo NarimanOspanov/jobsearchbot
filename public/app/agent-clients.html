@@ -308,6 +308,51 @@
         font-size: 12px;
         margin-bottom: 4px;
       }
+      .user-info-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+      .user-info-tab-btn {
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #0f1730;
+        color: var(--muted);
+        padding: 6px 12px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .user-info-tab-btn.is-active {
+        color: var(--text);
+        border-color: var(--accent);
+        background: rgba(79, 124, 255, 0.14);
+      }
+      .user-info-tab-panel { display: block; }
+      .user-info-tab-panel.is-hidden { display: none; }
+      .client-resume-preview {
+        margin-top: 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        background: #0a1020;
+        min-height: 420px;
+      }
+      .client-resume-preview iframe {
+        width: 100%;
+        height: 420px;
+        border: 0;
+        background: #fff;
+      }
+      .preferences-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-top: 12px;
+      }
       .date-range {
         display: inline-flex;
         align-items: center;
@@ -477,59 +522,76 @@
           </div>
           <p id="selectedClientBar" class="selected-client-bar" style="display:none"></p>
           <div id="userInfoSection" style="display:none">
-            <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
-            <div id="clientSettingsBlock" class="client-settings-block" style="display:none">
-              <div>
-                <label for="clientSearchModeSel">Search mode</label>
-                <select id="clientSearchModeSel">
-                  <option value="not_urgent">Not urgent</option>
-                  <option value="urgent">Urgent</option>
-                </select>
-              </div>
-              <div>
-                <label>Work authorization</label>
-                <div class="skills-picker">
-                  <button id="clientWorkAuthPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
-                  <div id="clientWorkAuthPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+            <div id="userInfoTabs" class="user-info-tabs" style="display:none" role="tablist" aria-label="Client details">
+              <button type="button" class="user-info-tab-btn is-active" data-user-tab="profile" role="tab" aria-selected="true">Main user info</button>
+              <button type="button" class="user-info-tab-btn" data-user-tab="resume" role="tab" aria-selected="false">Resume</button>
+              <button type="button" class="user-info-tab-btn" data-user-tab="preferences" role="tab" aria-selected="false">Preferences</button>
+            </div>
+            <div id="userInfoTabProfile" class="user-info-tab-panel" data-user-tab-panel="profile" role="tabpanel">
+              <div id="selectedUserInfo" class="muted">Select a user to view user information.</div>
+            </div>
+            <div id="userInfoTabResume" class="user-info-tab-panel is-hidden" data-user-tab-panel="resume" role="tabpanel">
+              <div id="clientResumeBlock" class="client-resume-block">
+                <span class="k">Resume</span>
+                <p id="clientResumeStatus" class="muted">No resume uploaded yet.</p>
+                <p id="clientResumeOpenLink" class="resume-open-link" style="display:none">
+                  <a id="clientResumeOpenAnchor" href="#" target="_blank" rel="noopener noreferrer">Open resume in browser</a>
+                </p>
+                <div class="resume-actions">
+                  <button id="viewClientResumeBtn" type="button">Open full screen</button>
                 </div>
+                <div id="clientResumePreviewWrap" class="client-resume-preview" style="display:none">
+                  <iframe id="clientResumePreviewFrame" title="Resume preview"></iframe>
+                </div>
+                <input id="clientResumeFileInput" class="resume-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
+                <label for="clientResumeFileInput" id="clientResumeFilePickerLabel" class="resume-file-picker">
+                  <div>
+                    <div id="clientResumePickerTitle">Tap to choose a file</div>
+                    <div class="resume-file-picker-name">PDF/JPG/PNG/WEBP — up to 15 MB</div>
+                  </div>
+                </label>
+                <button id="uploadClientResumeBtn" type="button" disabled style="width:100%;margin-top:10px">Upload resume</button>
+                <span id="uploadClientResumeLoader" class="loader" aria-hidden="true"></span>
+                <p id="clientResumeUploadMsg" class="bad" style="display:none;margin-top:8px" role="alert"></p>
               </div>
             </div>
-            <div id="clientCommentBlock" class="client-comment-block" style="display:none">
-              <label class="client-comment-label">
-                <span class="k">Do not apply to (companies)</span>
-                <textarea
-                  id="clientCommentText"
-                  rows="4"
-                  placeholder="Current employer: Acme Inc. Other companies to skip: ..."
-                  aria-label="Do not apply to companies"
-                ></textarea>
-              </label>
-              <div class="row">
-                <button id="saveClientCommentBtn" type="button">Save client settings</button>
-                <span id="clientCommentMsg" class="muted"></span>
-              </div>
-            </div>
-            <div id="clientResumeBlock" class="client-resume-block" style="display:none">
-              <span class="k">Resume</span>
-              <p id="clientResumeStatus" class="muted">No resume uploaded yet.</p>
-              <p id="clientResumeOpenLink" class="resume-open-link" style="display:none">
-                <a id="clientResumeOpenAnchor" href="#" target="_blank" rel="noopener noreferrer">Open resume in browser</a>
-              </p>
-              <div class="resume-actions">
-                <button id="viewClientResumeBtn" type="button">View resume</button>
-              </div>
-              <input id="clientResumeFileInput" class="resume-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
-              <label for="clientResumeFileInput" id="clientResumeFilePickerLabel" class="resume-file-picker">
+            <div id="userInfoTabPreferences" class="user-info-tab-panel is-hidden" data-user-tab-panel="preferences" role="tabpanel">
+              <div id="clientSettingsBlock" class="client-settings-block">
                 <div>
-                  <div id="clientResumePickerTitle">Tap to choose a file</div>
-                  <div class="resume-file-picker-name">PDF/JPG/PNG/WEBP — up to 15 MB</div>
+                  <label for="clientSearchModeSel">Search mode</label>
+                  <select id="clientSearchModeSel">
+                    <option value="not_urgent">Not urgent</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
                 </div>
-              </label>
-              <button id="uploadClientResumeBtn" type="button" disabled style="width:100%;margin-top:10px">Upload resume</button>
-              <span id="uploadClientResumeLoader" class="loader" aria-hidden="true"></span>
-              <p id="clientResumeUploadMsg" class="bad" style="display:none;margin-top:8px" role="alert"></p>
+                <div>
+                  <label>Work authorization</label>
+                  <div class="skills-picker">
+                    <button id="clientWorkAuthPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
+                    <div id="clientWorkAuthPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                  </div>
+                </div>
+              </div>
+              <div id="clientCommentBlock" class="client-comment-block">
+                <label class="client-comment-label">
+                  <span class="k">Do not apply to (companies)</span>
+                  <textarea
+                    id="clientCommentText"
+                    rows="4"
+                    placeholder="Current employer: Acme Inc. Other companies to skip: ..."
+                    aria-label="Do not apply to companies"
+                  ></textarea>
+                </label>
+                <div class="row">
+                  <button id="saveClientCommentBtn" type="button">Save client settings</button>
+                  <span id="clientCommentMsg" class="muted"></span>
+                </div>
+              </div>
+              <div class="preferences-actions">
+                <button id="enqueueClientApplyPriorityBtn" type="button" class="ghost-btn">Run apply priority (background)</button>
+                <span id="enqueueClientApplyPriorityLoader" class="loader" aria-hidden="true"></span>
+              </div>
             </div>
-            <hr class="section-separator" />
           </div>
           <div id="filtersSection" style="display:none">
             <div class="row date-range-row">
@@ -792,6 +854,7 @@
       let isAnalyzingApplyPriority = false;
       let isQueueingApplyPriorityAllClients = false;
       let skipStatusAutoSave = false;
+      let activeUserInfoTab = 'profile';
       let botUsername = '';
       let miniAppShortName = 'app';
 
@@ -1361,7 +1424,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'clientWorkAuthPickerBtn', 'clientSearchModeSel', 'saveClientCommentBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'clientWorkAuthPickerBtn', 'clientSearchModeSel', 'saveClientCommentBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn', 'enqueueClientApplyPriorityBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -1369,6 +1432,7 @@
         updatePriorityPickerUi();
         renderClientResumeUi();
         updateApplyPriorityUi();
+        updateEnqueueClientApplyPriorityUi();
       }
       function hasSelectedSkills() {
         return Boolean(getSelectedSkillIdsCsv().trim());
@@ -1462,6 +1526,29 @@
         const btn = document.getElementById('toggleUserInfoBtn');
         if (section) section.style.display = isUserInfoHidden ? 'none' : '';
         if (btn) btn.textContent = isUserInfoHidden ? 'Show user info' : 'Hide user info';
+      }
+      function setActiveUserInfoTab(tab) {
+        const next = ['profile', 'resume', 'preferences'].includes(tab) ? tab : 'profile';
+        activeUserInfoTab = next;
+        document.querySelectorAll('.user-info-tab-btn[data-user-tab]').forEach((btn) => {
+          const isActive = btn.getAttribute('data-user-tab') === next;
+          btn.classList.toggle('is-active', isActive);
+          btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        document.querySelectorAll('.user-info-tab-panel[data-user-tab-panel]').forEach((panel) => {
+          panel.classList.toggle('is-hidden', panel.getAttribute('data-user-tab-panel') !== next);
+        });
+      }
+      function syncUserInfoTabsUi(user) {
+        const tabs = document.getElementById('userInfoTabs');
+        if (!tabs) return;
+        if (!user) {
+          tabs.style.display = 'none';
+          setActiveUserInfoTab('profile');
+          return;
+        }
+        tabs.style.display = '';
+        setActiveUserInfoTab(activeUserInfoTab);
       }
       function setFiltersVisibility(hidden) {
         isFiltersHidden = !!hidden;
@@ -1709,8 +1796,10 @@
         if (!u) {
           el.className = 'muted';
           el.innerHTML = 'Select a user to view user information.';
+          syncUserInfoTabsUi(null);
           syncClientCommentUi(null);
           syncClientResumeUi(null);
+          syncClientSettingsUi(null);
           return;
         }
         const username = String(u.telegramUserName || '').trim();
@@ -1755,6 +1844,7 @@
             </div>
           </div>
         `;
+        syncUserInfoTabsUi(u);
         syncClientCommentUi(u);
         syncClientSettingsUi(u);
         syncClientResumeUi(u);
@@ -1775,17 +1865,19 @@
       }
 
       function syncClientResumeUi(user) {
-        const block = document.getElementById('clientResumeBlock');
         const input = document.getElementById('clientResumeFileInput');
-        if (!block) return;
+        const previewFrame = document.getElementById('clientResumePreviewFrame');
+        const previewWrap = document.getElementById('clientResumePreviewWrap');
         if (!user) {
-          block.style.display = 'none';
           if (input) input.value = '';
+          if (previewFrame) previewFrame.src = 'about:blank';
+          if (previewWrap) previewWrap.style.display = 'none';
           setClientResumeMsg('');
+          updateEnqueueClientApplyPriorityUi();
           return;
         }
-        block.style.display = '';
         renderClientResumeUi(user);
+        updateEnqueueClientApplyPriorityUi();
       }
 
       function renderClientResumeUi(user) {
@@ -1794,6 +1886,8 @@
         const viewBtn = document.getElementById('viewClientResumeBtn');
         const openLink = document.getElementById('clientResumeOpenLink');
         const openAnchor = document.getElementById('clientResumeOpenAnchor');
+        const previewFrame = document.getElementById('clientResumePreviewFrame');
+        const previewWrap = document.getElementById('clientResumePreviewWrap');
         const resumeUrl = String(u?.resumeUrl || '').trim();
         if (status) {
           status.textContent = resumeUrl ? 'Resume on file' : 'No resume uploaded yet.';
@@ -1807,8 +1901,47 @@
             openLink.style.display = 'none';
           }
         }
+        if (previewWrap && previewFrame) {
+          if (resumeUrl) {
+            previewFrame.src = resumeUrl;
+            previewWrap.style.display = '';
+          } else {
+            previewFrame.src = 'about:blank';
+            previewWrap.style.display = 'none';
+          }
+        }
         if (viewBtn) viewBtn.disabled = !resumeUrl || isUploadingClientResume || isSyncing;
         refreshClientResumeFileUi();
+      }
+
+      function updateEnqueueClientApplyPriorityUi() {
+        const btn = document.getElementById('enqueueClientApplyPriorityBtn');
+        const loader = document.getElementById('enqueueClientApplyPriorityLoader');
+        if (!btn) return;
+        const user = getSelectedUser();
+        const loaderOn = loader?.classList.contains('on');
+        btn.disabled = !user?.resumeUrl || !q().seekerId || isSyncing || isUploadingClientResume || loaderOn;
+      }
+
+      async function enqueueClientApplyPriorityFromUi() {
+        const seekerId = q().seekerId;
+        if (!seekerId) throw new Error('Select a client first.');
+        const user = getSelectedUser();
+        if (!user?.resumeUrl) throw new Error('Upload client resume before running apply priority.');
+        const btn = document.getElementById('enqueueClientApplyPriorityBtn');
+        onLoading('enqueueClientApplyPriorityLoader', true);
+        if (btn) btn.disabled = true;
+        try {
+          const result = await api(
+            `/api/app/admin/clients/${encodeURIComponent(seekerId)}/apply-priority/enqueue-default`,
+            { method: 'POST', body: '{}' }
+          );
+          const enqueued = Number(result?.enqueued || 0);
+          setMsg('dashMsg', `Apply priority enqueued (${enqueued} job${enqueued === 1 ? '' : 's'}).`);
+        } finally {
+          onLoading('enqueueClientApplyPriorityLoader', false);
+          updateEnqueueClientApplyPriorityUi();
+        }
       }
 
       function getClientWorkAuthCsv() {
@@ -1852,13 +1985,7 @@
       }
 
       function syncClientSettingsUi(user) {
-        const block = document.getElementById('clientSettingsBlock');
-        if (!block) return;
-        if (!user) {
-          block.style.display = 'none';
-          return;
-        }
-        block.style.display = '';
+        if (!user) return;
         const searchModeSel = document.getElementById('clientSearchModeSel');
         if (searchModeSel) {
           searchModeSel.value = String(user.searchMode || '').trim() === 'urgent' ? 'urgent' : 'not_urgent';
@@ -1947,16 +2074,13 @@
       }
 
       function syncClientCommentUi(user) {
-        const block = document.getElementById('clientCommentBlock');
         const textarea = document.getElementById('clientCommentText');
-        if (!block || !textarea) return;
+        if (!textarea) return;
         if (!user) {
-          block.style.display = 'none';
           textarea.value = '';
           setMsg('clientCommentMsg', '');
           return;
         }
-        block.style.display = '';
         textarea.value = String(user.comment || '');
         setMsg('clientCommentMsg', '');
       }
@@ -2818,6 +2942,7 @@
 
       async function onUserSelected(userId) {
         if (!userId) return;
+        activeUserInfoTab = 'profile';
         applyPriorityRankings = {};
         applyPriorityCacheMeta = null;
         applyPriorityStale = false;
@@ -3188,6 +3313,14 @@
       document.getElementById('clientResumeOpenAnchor')?.addEventListener('click', openSelectedUserResumeExternal);
       document.getElementById('saveClientCommentBtn').addEventListener('click', () => {
         saveClientComment().catch((e) => setMsg('clientCommentMsg', e.message, true));
+      });
+      document.querySelectorAll('.user-info-tab-btn[data-user-tab]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          setActiveUserInfoTab(btn.getAttribute('data-user-tab') || 'profile');
+        });
+      });
+      document.getElementById('enqueueClientApplyPriorityBtn').addEventListener('click', () => {
+        enqueueClientApplyPriorityFromUi().catch((e) => setMsg('dashMsg', e.message, true));
       });
       document.getElementById('viewClientResumeBtn').addEventListener('click', openSelectedUserResume);
       document.getElementById('clientResumeFileInput').addEventListener('change', refreshClientResumeFileUi);
