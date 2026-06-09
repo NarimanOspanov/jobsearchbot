@@ -106,19 +106,32 @@ export function parseStartReferralChatId(startPayload) {
   return Number.isSafeInteger(chatId) && chatId > 0 ? chatId : null;
 }
 
+function normalizeCampaignSlug(raw) {
+  const campaignSlug = String(raw || '').trim().toLowerCase();
+  if (!campaignSlug || !/[a-z]/i.test(campaignSlug)) return null;
+  return campaignSlug;
+}
+
 /**
  * Parse ad/campaign start payload: ref_<slug> (e.g. ref_instagram, ref_tg_aidynoJ).
+ * Also supports combined payloads such as hire_human_ref_instagram.
  * Does not match pure numeric payloads (user referral) or ref_<digits-only>.
  * @param {string} startPayload
  * @returns {{ campaignSlug: string } | null}
  */
 export function parseStartCampaignRef(startPayload) {
   const payload = String(startPayload || '').trim();
-  const match = payload.match(/^ref_([A-Za-z0-9_-]{1,50})$/i);
-  if (!match) return null;
-  const campaignSlug = String(match[1] || '').trim().toLowerCase();
-  if (!campaignSlug || !/[a-z]/i.test(campaignSlug)) return null;
-  return { campaignSlug };
+  const directMatch = payload.match(/^ref_([A-Za-z0-9_-]{1,50})$/i);
+  if (directMatch) {
+    const campaignSlug = normalizeCampaignSlug(directMatch[1]);
+    return campaignSlug ? { campaignSlug } : null;
+  }
+  const suffixMatch = payload.match(/(?:^|_)ref_([A-Za-z0-9_-]{1,50})$/i);
+  if (suffixMatch) {
+    const campaignSlug = normalizeCampaignSlug(suffixMatch[1]);
+    return campaignSlug ? { campaignSlug } : null;
+  }
+  return null;
 }
 
 const APPLY_POSITION_UUID_RE =

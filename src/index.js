@@ -700,6 +700,27 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.start(async (ctx) => {
     const payload = parseStartPayload(ctx);
+    const campaignRef = parseStartCampaignRef(payload);
+    if (ctx.state.isFirstTimeUser && campaignRef?.campaignSlug) {
+      const chatId = ctx.chat?.id ?? ctx.from?.id;
+      const { user } = await ensureUserByTelegramId(
+        chatId,
+        ctx.from?.username ?? null,
+        ctx.from?.first_name ?? null,
+        ctx.from?.last_name ?? null
+      );
+      if (user) {
+        try {
+          await recordCampaignSignup({
+            user,
+            campaignSlug: campaignRef.campaignSlug,
+            startPayload: payload,
+          });
+        } catch (err) {
+          console.warn('recordCampaignSignup failed:', err?.message || err);
+        }
+      }
+    }
     const applyFromStart = parseStartApplyPayload(payload);
     if (applyFromStart?.positionId) {
       const chatId = ctx.chat?.id ?? ctx.from?.id;
@@ -751,27 +772,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       if (!canProceedHireHuman) return;
       await startHireHumanScenario(ctx, hireHumanSource);
       return;
-    }
-    const campaignRef = parseStartCampaignRef(payload);
-    if (ctx.state.isFirstTimeUser && campaignRef?.campaignSlug) {
-      const chatId = ctx.chat?.id ?? ctx.from?.id;
-      const { user } = await ensureUserByTelegramId(
-        chatId,
-        ctx.from?.username ?? null,
-        ctx.from?.first_name ?? null,
-        ctx.from?.last_name ?? null
-      );
-      if (user) {
-        try {
-          await recordCampaignSignup({
-            user,
-            campaignSlug: campaignRef.campaignSlug,
-            startPayload: payload,
-          });
-        } catch (err) {
-          console.warn('recordCampaignSignup failed:', err?.message || err);
-        }
-      }
     }
     const canProceedToVacancies = await enforceStartRequiredChannelsGate(ctx);
     if (!canProceedToVacancies) return;
