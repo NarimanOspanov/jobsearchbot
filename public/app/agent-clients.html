@@ -627,7 +627,7 @@
         </section>
 
         <section class="card layout-col">
-          <h2>Client</h2>
+          <h2 id="clientPanelTitle">Client</h2>
           <p id="selectedClientBar" class="selected-client-bar" style="display:none"></p>
           <div id="userInfoSection">
             <div id="userInfoTabs" class="user-info-tabs" role="tablist" aria-label="Client details">
@@ -1696,6 +1696,28 @@
         if (section) section.style.display = isFiltersHidden ? 'none' : '';
         if (btn) btn.textContent = isFiltersHidden ? 'Show filters' : 'Hide filters';
       }
+      function getClientDisplayLabel(user) {
+        if (!user) return '';
+        const name =
+          [String(user.displayFirstName || '').trim(), String(user.displayLastName || '').trim()]
+            .filter(Boolean)
+            .join(' ') ||
+          [String(user.firstName || '').trim(), String(user.lastName || '').trim()].filter(Boolean).join(' ') ||
+          String(user.displayName || '').trim() ||
+          String(user.telegramUserName || '').trim();
+        return name ? `#${user.id} ${name}` : `#${user.id}`;
+      }
+      function renderClientPanelTitle() {
+        const title = document.getElementById('clientPanelTitle');
+        if (!title) return;
+        const user = getSelectedUser();
+        const seekerId = q().seekerId;
+        if (user) {
+          title.textContent = getClientDisplayLabel(user);
+          return;
+        }
+        title.textContent = seekerId ? `Client #${seekerId}` : 'Client';
+      }
       function renderSelectedClientBar() {
         const bar = document.getElementById('selectedClientBar');
         if (!bar) return;
@@ -1705,9 +1727,7 @@
           return;
         }
         const user = getSelectedUser();
-        const label = user
-          ? `#${user.id} ${String(user.displayName || user.telegramUserName || '').trim()}`.trim()
-          : `Client #${q().seekerId}`;
+        const label = user ? getClientDisplayLabel(user) : `Client #${q().seekerId}`;
         bar.style.display = '';
         bar.textContent = `Viewing: ${label}`;
       }
@@ -1928,10 +1948,12 @@
           });
         });
         renderSelectedClientBar();
+        renderClientPanelTitle();
       }
       function renderSelectedUserInfo() {
         const el = document.getElementById('selectedUserInfo');
         const u = getSelectedUser();
+        renderClientPanelTitle();
         if (!u) {
           el.className = 'muted';
           el.innerHTML = 'Select a user to view user information.';
