@@ -439,6 +439,23 @@
       .clients-column-head h2 {
         margin: 0;
       }
+      .clients-column-agent-picker {
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .clients-column-agent-picker label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--muted);
+        width: 100%;
+      }
+      .clients-column-agent-picker select {
+        width: 100%;
+        min-width: 0;
+      }
       .clients-column-toggle-btn {
         width: 28px;
         height: 28px;
@@ -591,11 +608,6 @@
   <body>
     <div class="wrap">
       <p id="globalMsg" class="muted"></p>
-      <div id="agentPickerRow" class="row date-range-row" style="display:none">
-        <label>View as agent
-          <select id="agentPickerSel" style="min-width:240px"></select>
-        </label>
-      </div>
 
       <div id="mainLayout" class="layout">
         <button
@@ -615,6 +627,11 @@
               aria-label="Hide clients panel"
               title="Hide clients"
             >‹</button>
+          </div>
+          <div id="agentPickerRow" class="clients-column-agent-picker" style="display:none">
+            <label>View as agent
+              <select id="agentPickerSel"></select>
+            </label>
           </div>
           <div class="layout-col-body">
             <div id="pendingHumanSection" class="pending-human-block" style="display:none">
