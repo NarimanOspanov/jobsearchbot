@@ -369,10 +369,72 @@
       .user-info-tab-panel[data-user-tab-panel="applications"].is-hidden {
         display: none;
       }
-      .user-info-tab-panel[data-user-tab-panel="applications"] .layout-col-body {
+      .user-info-tab-panel[data-user-tab-panel="applications"] .jobs-table-shell {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .user-info-tab-panel[data-user-tab-panel="applications"] .jobs-table-scroll {
         flex: 1;
         min-height: 0;
         overflow: auto;
+      }
+      .jobs-table-shell {
+        position: relative;
+      }
+      .jobs-table-expand-btn {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        z-index: 6;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #0f1730;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .jobs-table-expand-btn:hover {
+        color: var(--text);
+        border-color: var(--accent);
+      }
+      .jobs-table-expand-btn svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+      }
+      .jobs-table-shell.is-fullscreen {
+        position: fixed;
+        inset: 0;
+        z-index: 2500;
+        background: var(--bg);
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+      }
+      .jobs-table-shell.is-fullscreen .jobs-table-scroll {
+        flex: 1;
+        min-height: 0;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--card);
+        padding: 8px;
+      }
+      .jobs-table-shell.is-fullscreen table thead th {
+        position: sticky;
+        top: 0;
+        background: var(--card);
+        z-index: 2;
+        box-shadow: 0 1px 0 var(--border);
+      }
+      body.jobs-table-fullscreen-open {
+        overflow: hidden;
       }
       .applications-filters-row {
         display: flex;
@@ -818,15 +880,28 @@
                 </span>
               </div>
               <p id="dashMsg" class="muted"></p>
-              <div class="layout-col-body">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Id</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Apply type</th><th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="jobsBody"></tbody>
-                </table>
+              <div id="jobsTableShell" class="jobs-table-shell">
+                <button
+                  id="expandJobsTableBtn"
+                  type="button"
+                  class="jobs-table-expand-btn ghost-btn"
+                  aria-label="Expand table fullscreen"
+                  title="Expand table"
+                >
+                  <svg id="expandJobsTableIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                  </svg>
+                </button>
+                <div class="layout-col-body jobs-table-scroll">
+                  <table id="jobsTable">
+                    <thead>
+                      <tr>
+                        <th>Id</th><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Apply type</th><th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="jobsBody"></tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -985,6 +1060,7 @@
       let isClientWorkAuthPickerOpen = false;
       let isClientSkillPickerOpen = false;
       let applicationsPeriodMode = false;
+      let jobsTableFullscreen = false;
       let isUploadingClientResume = false;
       let useRemotePositionsApi = false;
       let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
@@ -1687,9 +1763,33 @@
         renderScreenshotArtifact();
         if (save) return saveStatus({ force: forceSave });
       }
+      function setJobsTableFullscreen(expanded) {
+        jobsTableFullscreen = Boolean(expanded);
+        const shell = document.getElementById('jobsTableShell');
+        const btn = document.getElementById('expandJobsTableBtn');
+        const icon = document.getElementById('expandJobsTableIcon');
+        if (!shell || !btn) return;
+        shell.classList.toggle('is-fullscreen', jobsTableFullscreen);
+        document.body.classList.toggle('jobs-table-fullscreen-open', jobsTableFullscreen);
+        btn.setAttribute('aria-label', jobsTableFullscreen ? 'Exit fullscreen table' : 'Expand table fullscreen');
+        btn.setAttribute('title', jobsTableFullscreen ? 'Exit fullscreen' : 'Expand table');
+        if (icon) {
+          icon.innerHTML = jobsTableFullscreen
+            ? '<path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>'
+            : '<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>';
+        }
+      }
+
+      function toggleJobsTableFullscreen() {
+        setJobsTableFullscreen(!jobsTableFullscreen);
+      }
+
       function setActiveUserInfoTab(tab, { autoSearch = false } = {}) {
         const prev = activeUserInfoTab;
         const next = ['profile', 'resume', 'preferences', 'applications'].includes(tab) ? tab : 'profile';
+        if (next !== 'applications' && jobsTableFullscreen) {
+          setJobsTableFullscreen(false);
+        }
         activeUserInfoTab = next;
         document.querySelectorAll('.user-info-tab-btn[data-user-tab]').forEach((btn) => {
           const isActive = btn.getAttribute('data-user-tab') === next;
@@ -2828,7 +2928,7 @@
 
       function renderJobs() {
         const body = document.getElementById('jobsBody');
-        const headRow = document.querySelector('table thead tr');
+        const headRow = document.querySelector('#jobsTable thead tr');
         const showPriority = hasApplyPriorityData();
         const priorityHeaders = showPriority
           ? `<th><button type="button" data-sort="apply_priority">Apply #${sortArrow('apply_priority')}</button></th>` +
@@ -3620,6 +3720,10 @@
           setMsg('dashMsg', e.message, true)
         );
       });
+      document.getElementById('expandJobsTableBtn')?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleJobsTableFullscreen();
+      });
       document.getElementById('viewClientResumeBtn').addEventListener('click', openSelectedUserResume);
       document.getElementById('clientResumeFileInput').addEventListener('change', refreshClientResumeFileUi);
       document.getElementById('uploadClientResumeBtn').addEventListener('click', () => {
@@ -3642,6 +3746,10 @@
       });
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
+          if (jobsTableFullscreen) {
+            setJobsTableFullscreen(false);
+            return;
+          }
           closeCvModal();
           closeJobModal();
           hideInsight();
