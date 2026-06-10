@@ -75,6 +75,7 @@ async function loadPublisherCohortRows(since) {
       ? [
           {
             model: models.Users,
+            as: 'User',
             attributes: ['Id', 'TelegramChatId', 'FirstName', 'LastName', 'TelegramUserName'],
             required: true,
           },
@@ -92,6 +93,7 @@ async function loadCampaignCohortRows(since) {
       ? [
           {
             model: models.Users,
+            as: 'User',
             attributes: ['Id', 'TelegramChatId', 'FirstName', 'LastName', 'TelegramUserName'],
             required: true,
           },

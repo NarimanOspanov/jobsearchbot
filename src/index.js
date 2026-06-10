@@ -1953,39 +1953,42 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     });
   };
 
-  bot.command('publisher_stats', openPublisherStats);
-  bot.hears(/^\/publisher-stats(?:@\w+)?$/, openPublisherStats);
+  bot.hears(/^\/publisher[_-]stats(?:@\w+)?(?:\s+.*)?$/i, openPublisherStats);
 
   const openConversionStats = async (ctx) => {
-    const ok = await ensurePrivateAdminForHiddenCommand(ctx, 'This command');
-    if (!ok) return;
-    const text = String(ctx.message?.text || '').trim();
-    const parts = text.split(/\s+/).filter(Boolean);
-    const periodDays = parsePeriodDays(parts[1], 7);
-    const pageUrl = conversionStatsUrl
-      ? `${conversionStatsUrl}?period=${encodeURIComponent(periodDays)}`
-      : '';
-    if (!pageUrl) {
-      await ctx.reply('Conversion stats page URL is not configured.');
-      return;
-    }
-    if (canUseConversionStatsWebApp) {
+    try {
+      const ok = await ensurePrivateAdminForHiddenCommand(ctx, '/conversion_stats');
+      if (!ok) return;
+      const text = String(ctx.message?.text || '').trim();
+      const parts = text.split(/\s+/).filter(Boolean);
+      const periodDays = parsePeriodDays(parts[1], 7);
+      const pageUrl = conversionStatsUrl
+        ? `${conversionStatsUrl}?period=${encodeURIComponent(periodDays)}`
+        : '';
+      if (!pageUrl) {
+        await ctx.reply('Conversion stats page URL is not configured (set ADMIN_APP_URL or WEBHOOK_URL).');
+        return;
+      }
+      if (canUseConversionStatsWebApp) {
+        await ctx.reply('Open conversion stats:', {
+          reply_markup: {
+            inline_keyboard: [[{ text: 'Conversion stats', web_app: { url: pageUrl } }]],
+          },
+        });
+        return;
+      }
       await ctx.reply('Open conversion stats:', {
         reply_markup: {
-          inline_keyboard: [[{ text: 'Conversion stats', web_app: { url: pageUrl } }]],
+          inline_keyboard: [[{ text: 'Conversion stats', url: pageUrl }]],
         },
       });
-      return;
+    } catch (err) {
+      console.error('conversion_stats command failed:', err);
+      await ctx.reply('Failed to open conversion stats. Check server logs.');
     }
-    await ctx.reply('Open conversion stats:', {
-      reply_markup: {
-        inline_keyboard: [[{ text: 'Conversion stats', url: pageUrl }]],
-      },
-    });
   };
 
-  bot.command('conversion_stats', openConversionStats);
-  bot.hears(/^\/conversion-stats(?:@\w+)?$/, openConversionStats);
+  bot.hears(/^\/conversion[_-]stats(?:@\w+)?(?:\s+.*)?$/i, openConversionStats);
 
   bot.command('removeuser', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
