@@ -7,12 +7,12 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root {
-        --bg: #0d1222;
-        --card: #151b30;
-        --text: #eaf0ff;
-        --muted: #9eb0d1;
-        --accent: #4f7cff;
-        --border: #273357;
+        --bg: #111111;
+        --card: #1a1a1a;
+        --text: #f0f0f0;
+        --muted: #888888;
+        --accent: #e0e0e0;
+        --border: #2e2e2e;
       }
       * { box-sizing: border-box; }
       body {
@@ -34,13 +34,13 @@
       .bad { color: #ef4444; }
       .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
       input, select, button, textarea {
-        border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 8px; font: inherit;
+        border-radius: 8px; border: 1px solid var(--border); background: #161616; color: var(--text); padding: 8px; font: inherit;
       }
       input[type="date"]::-webkit-calendar-picker-indicator {
         filter: invert(1) brightness(1.4);
         opacity: 1;
       }
-      button { cursor: pointer; background: var(--accent); border-color: var(--accent); }
+      button { cursor: pointer; background: var(--accent); border-color: var(--accent); color: #111111; }
       .layout { display: grid; gap: 12px; grid-template-columns: 1fr; align-items: stretch; }
       @media (max-width: 768px) {
         .layout { gap: 6px; }
@@ -68,12 +68,12 @@
       .job-card {
         border: 1px solid var(--border);
         border-radius: 10px;
-        background: #10182d;
+        background: #161616;
         padding: 10px;
         cursor: pointer;
       }
       .job-card:active { transform: scale(0.998); }
-      .job-card:hover { border-color: var(--accent); }
+      .job-card:hover { border-color: #555555; }
       .job-card.is-opening { opacity: 0.75; pointer-events: none; }
       .job-card-loader.loader { flex-shrink: 0; margin-top: 2px; }
       .job-card-head {
@@ -98,14 +98,14 @@
         height: 20px;
         fill: currentColor;
       }
-      .artifacts a { color: #8ab4ff; display: inline-block; margin-right: 10px; text-decoration: underline; font-weight: 600; }
-      a { color: #9ec5ff; text-decoration: underline; font-weight: 600; }
-      a:hover { color: #c7ddff; }
+      .artifacts a { color: #cccccc; display: inline-block; margin-right: 10px; text-decoration: underline; font-weight: 600; }
+      a { color: #cccccc; text-decoration: underline; font-weight: 600; }
+      a:hover { color: #eeeeee; }
       .loader {
         display: none;
         width: 16px;
         height: 16px;
-        border: 2px solid rgba(158, 176, 209, 0.45);
+        border: 2px solid rgba(150, 150, 150, 0.3);
         border-top-color: var(--accent);
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
@@ -125,19 +125,19 @@
         margin: 2px 6px 2px 0;
         padding: 3px 8px;
         border-radius: 6px;
-        background: #1a2540;
+        background: #222222;
         border: 1px solid var(--border);
         font-size: 12px;
         cursor: help;
         line-height: 1.35;
       }
       .skill-tag[data-justification] { cursor: pointer; }
-      .skill-tag.primary { border-color: #3b82f6; background: #152038; }
+      .skill-tag.primary { border-color: #555555; background: #1e1e1e; }
       .remote-reason-btn { margin-top: 6px; }
       .date-range { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
       .date-range-row { margin-top: 8px; }
       .pager { display: inline-flex; align-items: center; gap: 8px; }
-      .ghost-btn { background: #0f1730; border: 1px solid var(--border); }
+      .ghost-btn { background: #161616; border: 1px solid var(--border); color: var(--text); }
       .advanced-search-footer {
         position: fixed;
         left: 0;
@@ -145,7 +145,7 @@
         bottom: calc(58px + env(safe-area-inset-bottom, 0px));
         z-index: 1200;
         padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
-        background: linear-gradient(180deg, rgba(13, 18, 34, 0) 0%, rgba(13, 18, 34, 0.92) 28%, var(--bg) 100%);
+        background: linear-gradient(180deg, rgba(17, 17, 17, 0) 0%, rgba(17, 17, 17, 0.92) 28%, var(--bg) 100%);
         pointer-events: none;
       }
       #advancedSearchBtn {
@@ -159,7 +159,7 @@
         margin: 0 auto;
         padding: 14px 18px;
         border-radius: 14px;
-        background: #10182d;
+        background: #161616;
         border: 1px solid var(--border);
         color: var(--text);
         font-size: 15px;
@@ -167,8 +167,8 @@
         line-height: 1.2;
       }
       #advancedSearchBtn:hover {
-        border-color: var(--accent);
-        background: #121c36;
+        border-color: #555555;
+        background: #1e1e1e;
       }
       #advancedSearchBtn:active {
         transform: scale(0.99);
@@ -185,7 +185,7 @@
       .secondary-cta-box {
         margin-top: 12px;
         padding-top: 10px;
-        border-top: 1px solid rgba(39, 51, 87, 0.8);
+        border-top: 1px solid rgba(60, 60, 60, 0.8);
       }
       .secondary-cta-title {
         color: var(--muted);
@@ -254,19 +254,19 @@
       }
       .resume-file-picker {
         margin-top: 10px;
-        border: 1px dashed rgba(158, 176, 209, 0.45);
+        border: 1px dashed rgba(150, 150, 150, 0.35);
         border-radius: 10px;
         min-height: 86px;
         padding: 12px;
         display: grid;
         place-items: center;
         text-align: center;
-        background: #10182d;
+        background: #161616;
         color: var(--muted);
         cursor: pointer;
       }
       .resume-file-picker:hover {
-        border-color: rgba(158, 176, 209, 0.7);
+        border-color: rgba(150, 150, 150, 0.6);
         color: var(--text);
       }
       .resume-file-picker-name {
@@ -335,8 +335,8 @@
       .paywall-card {
         margin-top: 0;
         border-radius: 12px;
-        border: 1px solid rgba(79, 124, 255, 0.55);
-        background: #101a33;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: #161616;
       }
       .paywall-top {
         display: flex;
@@ -357,9 +357,9 @@
       }
       .paywall-badge {
         border-radius: 999px;
-        background: rgba(79, 124, 255, 0.22);
-        color: #cfe0ff;
-        border: 1px solid rgba(79, 124, 255, 0.55);
+        background: rgba(255, 255, 255, 0.08);
+        color: #e0e0e0;
+        border: 1px solid rgba(255, 255, 255, 0.18);
         padding: 3px 10px;
         font-size: 12px;
         font-weight: 700;
@@ -382,9 +382,9 @@
         width: 100%;
         padding: 11px 12px;
         font-weight: 700;
-        background: #4f7cff;
-        border-color: #4f7cff;
-        color: #ffffff;
+        background: #e0e0e0;
+        border-color: #e0e0e0;
+        color: #111111;
       }
       .paywall-secondary-stack {
         margin-top: 10px;
@@ -418,8 +418,9 @@
       .skills-picker-btn {
         width: 100%;
         text-align: left;
-        background: #0f1730;
+        background: #161616;
         border: 1px solid var(--border);
+        color: var(--text);
       }
       .skills-picker-menu {
         position: absolute;
@@ -431,7 +432,7 @@
         z-index: 30;
         border: 1px solid var(--border);
         border-radius: 10px;
-        background: #10182d;
+        background: #161616;
         padding: 8px;
         display: none;
       }
@@ -439,7 +440,7 @@
       .skills-group {
         margin-bottom: 8px;
         padding-bottom: 6px;
-        border-bottom: 1px solid rgba(39, 51, 87, 0.45);
+        border-bottom: 1px solid rgba(60, 60, 60, 0.45);
       }
       .skills-group:last-child {
         margin-bottom: 0;
@@ -498,7 +499,7 @@
         border: 1px solid var(--border);
         border-radius: 8px;
         padding: 10px;
-        background: #10182d;
+        background: #161616;
       }
       .insight-box h4 {
         margin: 0 0 8px;
@@ -510,7 +511,7 @@
         border-radius: 8px;
         padding: 10px;
         margin-top: 12px;
-        background: #10182d;
+        background: #161616;
       }
       .resume-upload-box input[type="file"] {
         width: 100%;
@@ -532,7 +533,7 @@
         font-weight: 700;
         line-height: 1;
         flex-shrink: 0;
-        background: #0f1730;
+        background: #161616;
         border: 1px solid var(--border);
         color: var(--muted);
         cursor: pointer;
@@ -598,7 +599,7 @@
       }
       .search-filters-panel.is-expanded .search-filters-chevron {
         transform: rotate(180deg);
-        border-color: rgba(79, 124, 255, 0.45);
+        border-color: rgba(200, 200, 200, 0.3);
         color: var(--text);
       }
       .search-filters-panel.is-expanded .search-filters-summary {
@@ -618,7 +619,7 @@
         padding: 10px 18px;
         border-radius: 10px;
         background: var(--accent);
-        color: #fff;
+        color: #111111;
         font-weight: 700;
         font-size: 15px;
         text-decoration: none;
@@ -626,8 +627,8 @@
         transition: background 0.15s, transform 0.1s;
       }
       .apply-cta:hover {
-        background: #3a68ff;
-        color: #fff;
+        background: #f5f5f5;
+        color: #111111;
         text-decoration: none;
         transform: translateY(-1px);
       }
