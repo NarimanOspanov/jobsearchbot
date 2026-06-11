@@ -7,12 +7,12 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root {
-        --bg: #0d1222;
-        --card: #151b30;
-        --text: #eaf0ff;
-        --muted: #9eb0d1;
-        --accent: #4f7cff;
-        --border: #273357;
+        --bg: #111111;
+        --card: #1a1a1a;
+        --text: #f0f0f0;
+        --muted: #888888;
+        --accent: #e0e0e0;
+        --border: #2e2e2e;
       }
       * { box-sizing: border-box; }
       body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
@@ -37,7 +37,7 @@
         border: none;
         padding: 0;
         border-radius: 999px;
-        background: #273357;
+        background: #333333;
         cursor: pointer;
         transition: background 0.2s;
       }
@@ -49,11 +49,11 @@
         width: 22px;
         height: 22px;
         border-radius: 50%;
-        background: #eaf0ff;
+        background: #888888;
         transition: transform 0.2s;
       }
-      .toggle.on { background: var(--accent); }
-      .toggle.on::after { transform: translateX(20px); }
+      .toggle.on { background: #3a3a3a; }
+      .toggle.on::after { transform: translateX(20px); background: #f0f0f0; }
       .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
       .field { display: grid; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
       .field:last-of-type { border-bottom: none; }
@@ -61,18 +61,19 @@
       .field-hint { font-size: 13px; color: var(--muted); line-height: 1.4; margin: 0; }
       select {
         width: 100%;
-        background: #10182d;
+        background: #161616;
         border: 1px solid var(--border);
         color: var(--text);
         border-radius: 8px;
         padding: 10px 12px;
         font: inherit;
       }
+      select:focus { outline: 1px solid #444444; border-color: #444444; }
       .skills-picker { position: relative; width: 100%; }
       .skills-picker-btn {
         width: 100%;
         text-align: left;
-        background: #10182d;
+        background: #161616;
         border: 1px solid var(--border);
         color: var(--text);
         border-radius: 8px;
@@ -88,7 +89,7 @@
         margin-top: 6px;
         max-height: 240px;
         overflow: auto;
-        background: #10182d;
+        background: #161616;
         border: 1px solid var(--border);
         border-radius: 8px;
         padding: 8px;
@@ -111,6 +112,18 @@
         cursor: pointer;
       }
       .ok { color: #22c55e; font-size: 13px; margin-top: 8px; }
+      button {
+        cursor: pointer;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #111111;
+        padding: 8px 12px;
+        font: inherit;
+      }
+      button:focus-visible { outline: 1px solid #444444; }
+      input[type="checkbox"], input[type="radio"] { accent-color: #888888; }
       .ghost-btn {
         background: transparent;
         border: 1px solid var(--border);
@@ -119,16 +132,16 @@
       .resume-file-input { display: none; }
       .resume-file-picker {
         display: block;
-        border: 1px dashed var(--border);
+        border: 1px dashed #444444;
         border-radius: 10px;
         min-height: 72px;
         padding: 12px;
         text-align: center;
-        background: #10182d;
+        background: #161616;
         color: var(--muted);
         cursor: pointer;
       }
-      .resume-file-picker:hover { border-color: rgba(158, 176, 209, 0.7); color: var(--text); }
+      .resume-file-picker:hover { border-color: #666666; color: var(--text); }
       .resume-file-picker-name { margin-top: 6px; font-size: 12px; }
       .resume-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
       .resume-actions button { flex: 1; min-width: 120px; }
@@ -138,7 +151,7 @@
       }
       .modal-backdrop.on { display: flex; }
       .modal-card {
-        width: min(1100px, 95vw); height: min(85vh, 900px); background: #0a1020;
+        width: min(1100px, 95vw); height: min(85vh, 900px); background: #111111;
         border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: grid;
         grid-template-rows: auto 1fr;
       }
@@ -152,8 +165,8 @@
         width: 16px;
         height: 16px;
         margin-top: 8px;
-        border: 2px solid rgba(158, 176, 209, 0.45);
-        border-top-color: var(--accent);
+        border: 2px solid rgba(150, 150, 150, 0.3);
+        border-top-color: #888888;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
       }
