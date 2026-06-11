@@ -576,7 +576,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       ? t(lang, 'btn_apply_external', { company: companyName })
       : t(lang, 'btn_apply_external_generic');
     const openOtherJobsButton = canUseSeekerJobsWebApp
-      ? { text: t(lang, 'btn_open_other_jobs'), web_app: { url: seekerJobsUrl } }
+      ? { text: t(lang, 'btn_open_other_jobs'), web_app: { url: `${seekerJobsUrl}?autoSearch=1` } }
       : { text: t(lang, 'btn_open_other_jobs'), callback_data: 'start_open_jobsearch' };
     const lines = [
       t(lang, 'position_header', { title: position.Title, company: position.CompanyName }),

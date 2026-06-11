@@ -1153,7 +1153,8 @@
           Boolean(String(state?.country || '').trim()) ||
           Boolean(String(state?.jobId || '').trim()) ||
           isTruthyQueryParam(state?.showOnlyHighlyRelevant);
-        return hasDeepLinkPayload || hasFilterOverrides || hasResolvedStateFilters;
+        const hasAutoSearch = isTruthyQueryParam(initialParams.get('autoSearch'));
+        return hasDeepLinkPayload || hasFilterOverrides || hasResolvedStateFilters || hasAutoSearch;
       }
       function normalizeSourceToken(value) {
         const v = String(value || '').trim().toLowerCase();
