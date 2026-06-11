@@ -65,6 +65,29 @@
         display: grid;
         gap: 10px;
       }
+      .skeleton-card {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #161616;
+        padding: 10px;
+      }
+      .skeleton-line {
+        background: #222222;
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+      }
+      .skeleton-line::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
+        animation: shimmer 1.5s infinite;
+      }
+      @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+      }
       .job-card {
         border: 1px solid var(--border);
         border-radius: 10px;
@@ -1289,9 +1312,26 @@
         const loader = row.querySelector('.job-card-loader');
         if (loader) loader.classList.toggle('on', on);
       }
+      const SKELETON_CARD = `
+        <div class="skeleton-card">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+            <div style="flex:1;min-width:0">
+              <div class="skeleton-line" style="height:15px;width:68%;margin-bottom:8px"></div>
+              <div class="skeleton-line" style="height:12px;width:42%;margin-bottom:10px"></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <div class="skeleton-line" style="height:10px;width:55px"></div>
+            <div class="skeleton-line" style="height:10px;width:40px"></div>
+          </div>
+        </div>`;
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
+        if (on) {
+          const jobsList = document.getElementById('jobsList');
+          if (jobsList) jobsList.innerHTML = Array(6).fill(SKELETON_CARD).join('');
+        }
         ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'sourceSel', 'prevPageBtn', 'nextPageBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
