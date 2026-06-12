@@ -1167,6 +1167,12 @@
         const aid = String(q().agentUserId || '').trim();
         return aid ? `?agentUserId=${encodeURIComponent(aid)}` : '';
       }
+      function impersonatedAgentPayload() {
+        if (!isBotAdminUser) return {};
+        const aid = Number.parseInt(String(q().agentUserId || ''), 10);
+        if (!Number.isSafeInteger(aid) || aid <= 0) return {};
+        return { agentUserId: aid };
+      }
       function setQ(next) {
         const p = new URLSearchParams(location.search);
         Object.entries(next).forEach(([k, v]) => {
@@ -3025,6 +3031,7 @@
               shortSummary: job.shortSummary || null,
               applyType: job.applyType || null,
             },
+            ...impersonatedAgentPayload(),
           }),
         });
         await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
@@ -3234,6 +3241,7 @@
               status: document.getElementById('statusSel').value,
               notes: document.getElementById('notesText').value,
               ...artifacts,
+              ...impersonatedAgentPayload(),
             }),
           });
           selectedApplication = updated;

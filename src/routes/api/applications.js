@@ -4,6 +4,10 @@ import { miniAppAuth, miniAppActorAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
 import { ensureUserByTelegramId } from '../../services/userService.js';
 import { assertCanAccessClient } from '../../services/agentAccessService.js';
+import {
+  applyAgentUserIdForAppliedStatus,
+  resolveApplyingAgentUserId,
+} from '../../services/applicationAgentAttribution.js';
 import { resumeStorage } from '../../services/resumeStorage.js';
 import {
   toIntOrNullOrUndefined,
@@ -249,7 +253,7 @@ export function createApplicationsRouter() {
         return res.status(200).json(existing);
       }
 
-      const row = await models.Applications.create({
+      const createPayload = {
         UserId: user.Id,
         VacancyTitle: (snapshot.VacancyTitle || `Screenly #${screenlyJobId}`).slice(0, 255),
         ScreenlyJobId: screenlyJobId,
@@ -259,7 +263,12 @@ export function createApplicationsRouter() {
         MetaJson: snapshot.MetaJson,
         Status: 'applied',
         AppliedAt: snapshot.AppliedAt,
-      });
+      };
+      const applyingAgentUserId = resolveApplyingAgentUserId(req, user.Id);
+      if (applyingAgentUserId) {
+        createPayload.AgentUserId = applyingAgentUserId;
+      }
+      const row = await models.Applications.create(createPayload);
       return res.status(201).json(row);
     } catch (err) {
       console.error('POST /api/app/applications:', err);
@@ -345,6 +354,7 @@ export function createApplicationsRouter() {
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
+      applyAgentUserIdForAppliedStatus(updates, req, row);
       await row.update(updates);
       res.json(row);
     } catch (err) {

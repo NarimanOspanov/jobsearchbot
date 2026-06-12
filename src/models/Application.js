@@ -14,6 +14,10 @@ export default function defineApplication(sequelize) {
         type: DataTypes.INTEGER,
         allowNull: false,
       },
+      AgentUserId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
       VacancyTitle: {
         type: DataTypes.STRING(255),
         allowNull: false,
@@ -75,7 +79,10 @@ export default function defineApplication(sequelize) {
       tableName: 'Applications',
       schema: 'dbo',
       timestamps: false,
-      indexes: [{ fields: ['UserId', 'AppliedAt'] }],
+      indexes: [
+        { fields: ['UserId', 'AppliedAt'] },
+        { fields: ['AgentUserId', 'AppliedAt'] },
+      ],
     }
   );
 
