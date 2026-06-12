@@ -2255,7 +2255,7 @@ async function main() {
     return;
   }
 
-  // Queue is initialized when routes mount; start hourly cron before Telegram (cron must not depend on bot).
+  // Queue is initialized when routes mount; start apply-priority cron before Telegram (cron must not depend on bot).
   const applyPriorityCronEarly = startApplyPriorityHourlyCronIfNeeded();
   if (!applyPriorityCronEarly.started) {
     if (applyPriorityCronEarly.reason === 'queue_disabled') {

@@ -129,7 +129,7 @@ export const screeningCronHealthState = {
 
 export const applyPriorityCronHealthState = {
   enabled: false,
-  intervalMs: 60 * 60 * 1000,
+  intervalMs: 10 * 60 * 1000,
   startupDelayMs: 2 * 60 * 1000,
   running: false,
   runCount: 0,

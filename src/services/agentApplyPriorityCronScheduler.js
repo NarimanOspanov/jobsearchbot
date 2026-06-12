@@ -7,7 +7,7 @@ let schedulerStarted = false;
 let applyPriorityCronRunning = false;
 
 /**
- * Start in-process hourly enqueue-default cron (idempotent).
+ * Start in-process enqueue-default cron (idempotent; interval from config).
  * Call after Redis queue is enabled — does not depend on Telegram bot startup.
  */
 export function startApplyPriorityHourlyCronIfNeeded() {
@@ -30,7 +30,7 @@ export function startApplyPriorityHourlyCronIfNeeded() {
     applyPriorityCronHealthState.lastStartedAt = new Date().toISOString();
     try {
       const result = await enqueueApplyPriorityForDefaultClientSearches({
-        requestedBy: 'cron-hourly',
+        requestedBy: 'cron-scheduled',
         pageSize: config.applyPriorityCronPageSize,
         maxPages: config.applyPriorityCronMaxPages,
       });

@@ -73,11 +73,11 @@ export const config = {
   applyPriorityCronSecret: getEnv('APPLY_PRIORITY_CRON_SECRET') || getEnv('SCREENING_CRON_SECRET'),
   /** Run in-process enqueue-default cron (requires REDIS_URL). Set false to disable. */
   applyPriorityCronEnabled: String(process.env.APPLY_PRIORITY_CRON_ENABLED || 'true').toLowerCase() !== 'false',
-  /** Interval for apply-priority default enqueue cron (default 1 hour). */
+  /** Interval for apply-priority default enqueue cron (default 10 minutes). */
   applyPriorityCronIntervalMs: Math.max(
     60_000,
-    Number.parseInt(process.env.APPLY_PRIORITY_CRON_INTERVAL_MS || String(60 * 60 * 1000), 10) ||
-      60 * 60 * 1000
+    Number.parseInt(process.env.APPLY_PRIORITY_CRON_INTERVAL_MS || String(10 * 60 * 1000), 10) ||
+      10 * 60 * 1000
   ),
   /** Jobs per Anyhires page when cron enqueues apply-priority (default 100, max 200). */
   applyPriorityCronPageSize: Math.min(
