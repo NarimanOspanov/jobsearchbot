@@ -172,6 +172,8 @@
       .client-comment-label .k { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
       .client-comment-block textarea { min-height: 88px; }
       .client-resume-block { margin: 12px 0; }
+      .client-resume-reupload { margin-top: 12px; margin-bottom: 12px; }
+      .tma-bottom-spacer { height: 30px; flex-shrink: 0; }
       .client-resume-block .k { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
       .client-settings-block { margin: 12px 0; display: grid; gap: 10px; }
       .client-settings-block label { display: block; font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
@@ -725,13 +727,7 @@
                 <p id="clientResumeOpenLink" class="resume-open-link" style="display:none">
                   <a id="clientResumeOpenAnchor" href="#" target="_blank" rel="noopener noreferrer">Open resume in browser</a>
                 </p>
-                <div class="resume-actions">
-                  <button id="viewClientResumeBtn" type="button">Open full screen</button>
-                </div>
-                <div id="clientResumePreviewWrap" class="client-resume-preview" style="display:none">
-                  <iframe id="clientResumePreviewFrame" title="Resume preview"></iframe>
-                </div>
-                <div id="clientResumeReuploadBlock" class="client-resume-reupload" style="margin-top:12px">
+                <div id="clientResumeReuploadBlock" class="client-resume-reupload">
                   <span id="clientResumeReuploadLabel" class="k">Upload resume</span>
                   <p class="muted" style="margin:0 0 8px;font-size:13px">AI will parse contacts, roles/skills, and work authorization into the client profile.</p>
                   <input id="clientResumeFileInput" class="resume-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
@@ -742,9 +738,16 @@
                     </div>
                   </label>
                   <button id="uploadClientResumeBtn" type="button" disabled style="width:100%;margin-top:10px">Upload resume</button>
+                  <span id="uploadClientResumeLoader" class="loader" aria-hidden="true"></span>
+                  <p id="clientResumeUploadMsg" class="bad" style="display:none;margin-top:8px" role="alert"></p>
                 </div>
-                <span id="uploadClientResumeLoader" class="loader" aria-hidden="true"></span>
-                <p id="clientResumeUploadMsg" class="bad" style="display:none;margin-top:8px" role="alert"></p>
+                <div class="resume-actions">
+                  <button id="viewClientResumeBtn" type="button">Open full screen</button>
+                  <button id="triggerClientResumeReuploadBtn" type="button" class="ghost-btn">Choose new file</button>
+                </div>
+                <div id="clientResumePreviewWrap" class="client-resume-preview" style="display:none">
+                  <iframe id="clientResumePreviewFrame" title="Resume preview"></iframe>
+                </div>
               </div>
             </div>
             <div id="userInfoTabPreferences" class="user-info-tab-panel is-hidden" data-user-tab-panel="preferences" role="tabpanel">
@@ -1687,7 +1690,7 @@
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
-        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'clientSkillPickerBtn', 'clientWorkAuthPickerBtn', 'clientSearchModeSel', 'saveClientCommentBtn', 'sourceSel', 'viewClientResumeBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn', 'enqueueClientApplyPriorityBtn', 'enqueueClientApplyPriorityRewriteBtn'].forEach((id) => {
+        ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'clientSkillPickerBtn', 'clientWorkAuthPickerBtn', 'clientSearchModeSel', 'saveClientCommentBtn', 'sourceSel', 'viewClientResumeBtn', 'triggerClientResumeReuploadBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn', 'enqueueClientApplyPriorityBtn', 'enqueueClientApplyPriorityRewriteBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
         });
@@ -2262,6 +2265,10 @@
           }
         }
         if (viewBtn) viewBtn.disabled = !resumeUrl || isUploadingClientResume || isSyncing;
+        const triggerReuploadBtn = document.getElementById('triggerClientResumeReuploadBtn');
+        if (triggerReuploadBtn) {
+          triggerReuploadBtn.disabled = isUploadingClientResume || isSyncing || !u;
+        }
         const reuploadLabel = document.getElementById('clientResumeReuploadLabel');
         const uploadBtn = document.getElementById('uploadClientResumeBtn');
         if (reuploadLabel) {
@@ -3821,6 +3828,9 @@
       });
       document.getElementById('viewClientResumeBtn').addEventListener('click', openSelectedUserResume);
       document.getElementById('clientResumeFileInput').addEventListener('change', refreshClientResumeFileUi);
+      document.getElementById('triggerClientResumeReuploadBtn')?.addEventListener('click', () => {
+        document.getElementById('clientResumeFileInput')?.click();
+      });
       document.getElementById('uploadClientResumeBtn').addEventListener('click', () => {
         uploadClientResumeFromUi().catch((err) => setClientResumeMsg(err.message));
       });
@@ -3849,5 +3859,6 @@
         setMsg('globalMsg', `Failed to initialize admin panel: ${err.message}`, true);
       });
     </script>
+    <div class="tma-bottom-spacer" aria-hidden="true"></div>
   </body>
 </html>
