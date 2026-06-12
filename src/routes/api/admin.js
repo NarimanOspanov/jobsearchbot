@@ -13,6 +13,7 @@ import {
 } from '../../services/positionApplyScreeningService.js';
 import { runtimeBot } from '../../bot/state.js';
 import { buildConversionStats } from '../../services/conversionStatsService.js';
+import { buildAgentPerformanceStats } from '../../services/agentPerformanceStatsService.js';
 
 export function createAdminRouter() {
   const router = Router();
@@ -600,6 +601,26 @@ export function createAdminRouter() {
     } catch (err) {
       console.error('GET /api/app/admin/conversion-stats:', err);
       return res.status(500).json({ error: 'Failed to load conversion stats' });
+    }
+  });
+
+  router.get('/api/app/admin/agent-performance', adminMiniAppAuth, async (req, res) => {
+    try {
+      const periodRaw = String(req.query.period || '7').trim();
+      const period = /^\d+$/.test(periodRaw)
+        ? Math.min(365, Math.max(1, Number.parseInt(periodRaw, 10)))
+        : 7;
+      const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
+      const stats = await buildAgentPerformanceStats({ since });
+      return res.json({
+        success: true,
+        period,
+        since: since.toISOString(),
+        ...stats,
+      });
+    } catch (err) {
+      console.error('GET /api/app/admin/agent-performance:', err);
+      return res.status(500).json({ error: 'Failed to load agent performance stats' });
     }
   });
 

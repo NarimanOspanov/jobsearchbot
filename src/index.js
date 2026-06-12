@@ -192,6 +192,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const stat2Url = appBaseUrl ? `${appBaseUrl}/app/stat2` : '';
   const publisherStatsUrl = appBaseUrl ? `${appBaseUrl}/app/publisher-stats` : '';
   const conversionStatsUrl = appBaseUrl ? `${appBaseUrl}/app/conversion-stats` : '';
+  const agentPerformanceUrl = appBaseUrl ? `${appBaseUrl}/app/agent-performance` : '';
   const cvScoreUrl = appBaseUrl ? `${appBaseUrl}/app/cvscore` : '';
   const canUseSeekerJobsWebApp = isValidTelegramWebAppUrl(seekerJobsUrl);
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
@@ -208,6 +209,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseStat2WebApp = isValidTelegramWebAppUrl(stat2Url);
   const canUsePublisherStatsWebApp = isValidTelegramWebAppUrl(publisherStatsUrl);
   const canUseConversionStatsWebApp = isValidTelegramWebAppUrl(conversionStatsUrl);
+  const canUseAgentPerformanceWebApp = isValidTelegramWebAppUrl(agentPerformanceUrl);
   const canUseCvScoreWebApp = isValidTelegramWebAppUrl(cvScoreUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const notSubscribedImagePath = join(__dirname, '..', 'not_subscribed.png');
@@ -1871,6 +1873,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<i>Alias:</i> <code>/publisher-stats</code>',
       '<code>/conversion_stats</code> [days] — channel conversion: publisher vs ref_ ads (default 7 days)',
       '<i>Alias:</i> <code>/conversion-stats</code>',
+      '<code>/agent_performance</code> [days] — career agent applied jobs report (default 7 days)',
+      '<i>Alias:</i> <code>/agent-performance</code>',
       '',
       '<b>Position apply screening</b>',
       'Config <code>PositionApplyScreeningResponseMin</code> (default 4320 = 3 days) — minutes until auto rejection',
@@ -1989,6 +1993,41 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   };
 
   bot.hears(/^\/conversion[_-]stats(?:@\w+)?(?:\s+.*)?$/i, openConversionStats);
+
+  const openAgentPerformance = async (ctx) => {
+    try {
+      const ok = await ensurePrivateAdminForHiddenCommand(ctx, '/agent_performance');
+      if (!ok) return;
+      const text = String(ctx.message?.text || '').trim();
+      const parts = text.split(/\s+/).filter(Boolean);
+      const periodDays = parsePeriodDays(parts[1], 7);
+      const pageUrl = agentPerformanceUrl
+        ? `${agentPerformanceUrl}?period=${encodeURIComponent(periodDays)}`
+        : '';
+      if (!pageUrl) {
+        await ctx.reply('Agent performance page URL is not configured (set ADMIN_APP_URL or WEBHOOK_URL).');
+        return;
+      }
+      if (canUseAgentPerformanceWebApp) {
+        await ctx.reply('Open agent performance:', {
+          reply_markup: {
+            inline_keyboard: [[{ text: 'Agent performance', web_app: { url: pageUrl } }]],
+          },
+        });
+        return;
+      }
+      await ctx.reply('Open agent performance:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Agent performance', url: pageUrl }]],
+        },
+      });
+    } catch (err) {
+      console.error('agent_performance command failed:', err);
+      await ctx.reply('Failed to open agent performance. Check server logs.');
+    }
+  };
+
+  bot.hears(/^\/agent[_-]performance(?:@\w+)?(?:\s+.*)?$/i, openAgentPerformance);
 
   bot.command('removeuser', async (ctx) => {
     if (ctx.chat?.type !== 'private') {

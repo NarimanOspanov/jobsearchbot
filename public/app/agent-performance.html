@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent performance</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+        --ok: #22c55e;
+        --bad: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      h1, h2 { margin: 0 0 10px; font-size: 1.1rem; }
+      .muted { color: var(--muted); font-size: 14px; }
+      .bad { color: var(--bad); }
+      .ok { color: var(--ok); }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      select, button {
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #0f1730;
+        color: var(--text);
+        padding: 8px 10px;
+        font: inherit;
+      }
+      button {
+        border-color: var(--accent);
+        background: var(--accent);
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:disabled { opacity: 0.6; cursor: wait; }
+      .metrics {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      }
+      .metric-title { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+      .metric-value { font-size: 24px; font-weight: 700; line-height: 1.1; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th, td {
+        border-bottom: 1px solid var(--border);
+        padding: 8px 6px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th { color: var(--muted); font-weight: 600; }
+      .table-wrap { overflow: auto; }
+      .chart-wrap {
+        min-height: 260px;
+        position: relative;
+      }
+      .chart-wrap canvas { width: 100%; max-height: 320px; }
+      .status-list { margin: 0; padding-left: 16px; font-size: 12px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Agent performance</h1>
+        <p class="muted">
+          Jobs marked <strong>applied</strong> for assigned clients (<code>Applications</code> table, by <code>AppliedAt</code>).
+        </p>
+        <div class="toolbar" style="margin-top:12px">
+          <label class="muted">Period (days)
+            <select id="periodSel">
+              <option value="1">1</option>
+              <option value="7" selected>7</option>
+              <option value="14">14</option>
+              <option value="30">30</option>
+              <option value="90">90</option>
+            </select>
+          </label>
+          <button id="reloadBtn" type="button">Reload</button>
+        </div>
+        <p id="msg" class="muted" style="margin-top:10px"></p>
+      </div>
+
+      <div class="card">
+        <h2>Summary</h2>
+        <div id="totals" class="metrics"></div>
+      </div>
+
+      <div class="card">
+        <h2>Applied per day</h2>
+        <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
+      </div>
+
+      <div class="card">
+        <h2>By agent</h2>
+        <div class="chart-wrap"><canvas id="agentChart"></canvas></div>
+        <div class="table-wrap" style="margin-top:12px">
+          <table>
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Clients</th>
+                <th>Applied</th>
+                <th>All activity</th>
+                <th>Statuses</th>
+              </tr>
+            </thead>
+            <tbody id="byAgentBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>By agent and client</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Client</th>
+                <th>Applied</th>
+                <th>All activity</th>
+              </tr>
+            </thead>
+            <tbody id="byAgentClientBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>By source (applied)</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Source</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody id="bySourceBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>By apply type (applied)</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Apply type</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody id="byApplyTypeBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Recent applied</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Agent</th>
+                <th>Client</th>
+                <th>Title</th>
+                <th>Company</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="recentBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+
+      const chartInstances = {};
+      const chartScale = {
+        x: { ticks: { color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' } },
+        y: { beginAtZero: true, ticks: { precision: 0, color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' } },
+      };
+
+      function esc(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function toInt(value, fallback) {
+        const n = Number.parseInt(String(value), 10);
+        return Number.isSafeInteger(n) && n > 0 ? n : fallback;
+      }
+
+      function formatDt(value) {
+        if (!value) return '—';
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+      }
+
+      function destroyChart(id) {
+        if (chartInstances[id]) {
+          chartInstances[id].destroy();
+          delete chartInstances[id];
+        }
+      }
+
+      function renderTableRows(tbodyId, rowsHtml, colspan) {
+        document.getElementById(tbodyId).innerHTML =
+          rowsHtml || `<tr><td colspan="${colspan}" class="muted">No data</td></tr>`;
+      }
+
+      function renderTotals(totals) {
+        const items = [
+          ['Agents', Number(totals?.agents || 0)],
+          ['Assigned clients', Number(totals?.assignedClients || 0)],
+          ['Applied jobs', Number(totals?.appliedCount || 0)],
+          ['All activity', Number(totals?.activityCount || 0)],
+        ];
+        document.getElementById('totals').innerHTML = items
+          .map(
+            ([title, value]) => `
+              <div>
+                <div class="metric-title">${esc(title)}</div>
+                <div class="metric-value">${esc(value)}</div>
+              </div>
+            `
+          )
+          .join('');
+      }
+
+      function renderCharts({ byAgent = [], dailyApplied = [] }) {
+        destroyChart('daily');
+        destroyChart('agent');
+
+        const dailyCanvas = document.getElementById('dailyChart');
+        if (dailyCanvas && window.Chart) {
+          chartInstances.daily = new Chart(dailyCanvas, {
+            type: 'line',
+            data: {
+              labels: dailyApplied.map((row) => String(row.date || '').slice(5)),
+              datasets: [{
+                label: 'Applied',
+                data: dailyApplied.map((row) => Number(row.appliedCount || 0)),
+                borderColor: '#22c55e',
+                backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                tension: 0.2,
+                fill: true,
+              }],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { labels: { color: '#eaf0ff' } } },
+              scales: chartScale,
+            },
+          });
+        }
+
+        const topAgents = [...byAgent].sort((a, b) => b.appliedCount - a.appliedCount).slice(0, 12);
+        const agentCanvas = document.getElementById('agentChart');
+        if (agentCanvas && window.Chart) {
+          chartInstances.agent = new Chart(agentCanvas, {
+            type: 'bar',
+            data: {
+              labels: topAgents.map((row) => {
+                const name = String(row.agentName || '');
+                return name.length > 18 ? `${name.slice(0, 17)}…` : name;
+              }),
+              datasets: [{
+                label: 'Applied',
+                data: topAgents.map((row) => Number(row.appliedCount || 0)),
+                backgroundColor: 'rgba(79, 124, 255, 0.75)',
+                borderRadius: 6,
+              }],
+            },
+            options: {
+              indexAxis: 'y',
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { labels: { color: '#eaf0ff' } } },
+              scales: chartScale,
+            },
+          });
+        }
+      }
+
+      async function api(path) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (tg?.initData) headers['x-init-data'] = tg.initData;
+        const res = await fetch(path, { headers });
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+      }
+
+      let loading = false;
+
+      async function load() {
+        if (loading) return;
+        loading = true;
+        document.getElementById('reloadBtn').disabled = true;
+        const msg = document.getElementById('msg');
+        msg.className = 'muted';
+        msg.textContent = 'Loading...';
+        const period = toInt(document.getElementById('periodSel').value, 7);
+        try {
+          const payload = await api(`/api/app/admin/agent-performance?period=${encodeURIComponent(period)}`);
+          renderTotals(payload?.totals || {});
+          renderCharts({
+            byAgent: Array.isArray(payload?.byAgent) ? payload.byAgent : [],
+            dailyApplied: Array.isArray(payload?.dailyApplied) ? payload.dailyApplied : [],
+          });
+
+          const byAgent = Array.isArray(payload?.byAgent) ? payload.byAgent : [];
+          renderTableRows(
+            'byAgentBody',
+            byAgent
+              .map((row) => {
+                const statuses = Array.isArray(row.statuses) ? row.statuses : [];
+                const statusHtml = statuses.length
+                  ? `<ul class="status-list">${statuses.map((s) => `<li>${esc(s.status)}: ${esc(s.count)}</li>`).join('')}</ul>`
+                  : '<span class="muted">—</span>';
+                return `<tr>
+                  <td>${esc(row.agentName)} <span class="muted">#${esc(row.agentUserId)}</span></td>
+                  <td>${esc(row.assignedClients)}</td>
+                  <td>${esc(row.appliedCount)}</td>
+                  <td>${esc(row.activityCount)}</td>
+                  <td>${statusHtml}</td>
+                </tr>`;
+              })
+              .join(''),
+            5
+          );
+
+          const byAgentClient = Array.isArray(payload?.byAgentClient) ? payload.byAgentClient : [];
+          renderTableRows(
+            'byAgentClientBody',
+            byAgentClient
+              .map(
+                (row) => `<tr>
+                  <td>${esc(row.agentName)}</td>
+                  <td>${esc(row.clientName)} <span class="muted">#${esc(row.clientUserId)}</span></td>
+                  <td>${esc(row.appliedCount)}</td>
+                  <td>${esc(row.activityCount)}</td>
+                </tr>`
+              )
+              .join(''),
+            4
+          );
+
+          const bySource = Array.isArray(payload?.bySource) ? payload.bySource : [];
+          renderTableRows(
+            'bySourceBody',
+            bySource
+              .map(
+                (row) => `<tr>
+                  <td>${esc(row.agentName)}</td>
+                  <td>${esc(row.source)}</td>
+                  <td>${esc(row.count)}</td>
+                </tr>`
+              )
+              .join(''),
+            3
+          );
+
+          const byApplyType = Array.isArray(payload?.byApplyType) ? payload.byApplyType : [];
+          renderTableRows(
+            'byApplyTypeBody',
+            byApplyType
+              .map(
+                (row) => `<tr>
+                  <td>${esc(row.agentName)}</td>
+                  <td>${esc(row.applyType)}</td>
+                  <td>${esc(row.count)}</td>
+                </tr>`
+              )
+              .join(''),
+            3
+          );
+
+          const recent = Array.isArray(payload?.recent) ? payload.recent : [];
+          renderTableRows(
+            'recentBody',
+            recent
+              .map(
+                (row) => `<tr>
+                  <td>${esc(formatDt(row.appliedAt))}</td>
+                  <td>${esc(row.agentName)}</td>
+                  <td>${esc(row.clientName)}</td>
+                  <td>${esc(row.vacancyTitle || '—')}</td>
+                  <td>${esc(row.companyName || '—')}</td>
+                  <td>${esc(row.source || '—')}</td>
+                </tr>`
+              )
+              .join(''),
+            6
+          );
+
+          msg.className = 'ok';
+          msg.textContent = `Updated for ${period} day(s), since ${formatDt(payload?.since)}.`;
+          const current = new URL(window.location.href);
+          current.searchParams.set('period', String(period));
+          window.history.replaceState(null, '', current.toString());
+        } catch (err) {
+          msg.className = 'bad';
+          msg.textContent = `Failed to load: ${err?.message || 'Unknown error'}`;
+        } finally {
+          loading = false;
+          document.getElementById('reloadBtn').disabled = false;
+        }
+      }
+
+      document.getElementById('periodSel').value = String(
+        toInt(new URLSearchParams(location.search).get('period'), 7)
+      );
+      document.getElementById('reloadBtn').addEventListener('click', load);
+      document.getElementById('periodSel').addEventListener('change', load);
+      load();
+    </script>
+  </body>
+</html>

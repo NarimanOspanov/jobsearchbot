@@ -58,6 +58,7 @@ export function createStaticRouter() {
   router.get('/app/stat2', (_req, res) => res.sendFile(join(publicApp, 'stat2.html')));
   router.get('/app/publisher-stats', (_req, res) => res.sendFile(join(publicApp, 'publisher-stats.html')));
   router.get('/app/conversion-stats', (_req, res) => res.sendFile(join(publicApp, 'conversion-stats.html')));
+  router.get('/app/agent-performance', (_req, res) => res.sendFile(join(publicApp, 'agent-performance.html')));
   router.get('/app/cvscore', (_req, res) => res.sendFile(join(publicApp, 'cvscore.html')));
 
   return router;

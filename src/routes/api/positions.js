@@ -15,9 +15,24 @@ import {
   parsePositionsListQuery,
   sendPositionsListPayload,
 } from '../../utils/positionUpstreamQuery.js';
+import { checkAnyhiresHealth } from '../../services/anyhiresHealthService.js';
 
 export function createPositionsRouter() {
   const router = Router();
+
+  router.get('/api/health/anyhires', async (_req, res) => {
+    try {
+      const report = await checkAnyhiresHealth();
+      return res.status(report.ok ? 200 : 503).json(report);
+    } catch (err) {
+      console.error('GET /api/health/anyhires:', err);
+      return res.status(500).json({
+        ok: false,
+        checkedAt: new Date().toISOString(),
+        error: err?.message || 'Health check failed',
+      });
+    }
+  });
 
   router.get('/api/admin/skills', async (_req, res) => {
     try {
