@@ -1901,7 +1901,16 @@
           btn.textContent = sj('allRoles');
         } else {
           const ids = [...new Set(effectiveCsv.split(',').map((id) => id.trim()).filter(Boolean))];
-          btn.textContent = sj('rolesSelected', { count: ids.length });
+          const idSet = new Set(ids);
+          const selectedSkills = skills.filter((s) => idSet.has(String(s.id)));
+          const names = selectedSkills.map((s) => String(s.name || s.Name || '').trim()).filter(Boolean);
+          if (!names.length) {
+            btn.textContent = sj('rolesSelected', { count: ids.length });
+          } else if (names.length <= 3) {
+            btn.textContent = names.join(', ');
+          } else {
+            btn.textContent = `${names.slice(0, 3).join(', ')} +${names.length - 3}`;
+          }
         }
         renderSyncButtonLabel();
         renderSearchTitleSkill(effectiveCsv);
