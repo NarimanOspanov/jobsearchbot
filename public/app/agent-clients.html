@@ -1898,6 +1898,53 @@
         document.getElementById('insightModalText').textContent = '';
         document.getElementById('insightModal').classList.remove('on');
       }
+      function isModalOpen(id) {
+        return Boolean(document.getElementById(id)?.classList.contains('on'));
+      }
+      function isPickerMenuOpen(id) {
+        return Boolean(document.getElementById(id)?.classList.contains('open'));
+      }
+      function handleEscapeKey() {
+        if (isModalOpen('insightModal')) {
+          hideInsight();
+          return true;
+        }
+        if (isModalOpen('jobModal')) {
+          closeJobModal();
+          return true;
+        }
+        if (isModalOpen('cvModal')) {
+          closeCvModal();
+          return true;
+        }
+        if (isModalOpen('highlyRelevantHintModal')) {
+          document.getElementById('highlyRelevantHintModal').classList.remove('on');
+          return true;
+        }
+        if (isModalOpen('workAuthHintModal')) {
+          document.getElementById('workAuthHintModal').classList.remove('on');
+          return true;
+        }
+        const pickerMenus = [
+          'skillPickerMenu',
+          'sourcePickerMenu',
+          'countryPickerMenu',
+          'priorityPickerMenu',
+          'statusPickerMenu',
+          'clientSkillPickerMenu',
+          'clientWorkAuthPickerMenu',
+        ];
+        for (const menuId of pickerMenus) {
+          if (!isPickerMenuOpen(menuId)) continue;
+          document.getElementById(menuId)?.classList.remove('open');
+          return true;
+        }
+        if (jobsTableFullscreen) {
+          setJobsTableFullscreen(false);
+          return true;
+        }
+        return false;
+      }
       function bindJobDetailInteractions(job) {
         document.querySelectorAll('.skill-tag[data-justification]').forEach((el) => {
           el.addEventListener('click', () => {
@@ -3754,18 +3801,7 @@
       });
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
-          if (jobsTableFullscreen) {
-            setJobsTableFullscreen(false);
-            return;
-          }
-          closeCvModal();
-          closeJobModal();
-          hideInsight();
-          closeSkillPicker();
-          closeSourcePicker();
-          closeCountryPicker();
-          document.getElementById('highlyRelevantHintModal').classList.remove('on');
-          document.getElementById('workAuthHintModal').classList.remove('on');
+          handleEscapeKey();
         }
       });
 
