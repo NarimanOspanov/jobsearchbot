@@ -13,6 +13,7 @@ import { cvScoreResultByUserId } from '../../bot/state.js';
 import {
   resolveJobRequirementsFromBody,
   tailorResumeForSeeker,
+  generateCoverLetterPdf,
 } from '../../services/tailoredCvService.js';
 import { extractMiniAppInitData, verifyInitData } from '../../utils/telegramUtils.js';
 import { getRequiredChannelsState, serializeRequiredChannels } from '../../services/channelService.js';
@@ -194,7 +195,14 @@ export function createResumeRouter() {
         });
       }
       const coverLetter = await generateCoverLetterText({ jobTitle, jobDescription, mainResumeText });
-      return res.status(200).json({ coverLetter });
+      let coverLetterUrl = null;
+      try {
+        const { url } = await generateCoverLetterPdf({ coverLetterText: coverLetter });
+        coverLetterUrl = url;
+      } catch (pdfErr) {
+        console.error('POST /api/cover-letter: PDF generation failed (non-fatal):', pdfErr);
+      }
+      return res.status(200).json({ coverLetter, coverLetterUrl });
     } catch (err) {
       console.error('POST /api/cover-letter:', err);
       return res.status(500).json({ error: 'Failed to generate cover letter' });

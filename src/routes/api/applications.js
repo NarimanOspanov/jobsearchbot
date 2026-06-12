@@ -335,6 +335,9 @@ export function createApplicationsRouter() {
       if (req.body.coverLetter !== undefined) {
         updates.CoverLetter = req.body.coverLetter == null ? null : String(req.body.coverLetter);
       }
+      if (req.body.coverLetterUrl !== undefined) {
+        updates.CoverLetterUrl = toStringOrUndefined(req.body.coverLetterUrl, 2048) ?? null;
+      }
       if (req.body.screenshotArtifactUrl !== undefined) {
         updates.ScreenshotArtifactURL =
           toStringOrUndefined(req.body.screenshotArtifactUrl, 2048) ?? null;

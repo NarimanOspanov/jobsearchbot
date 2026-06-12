@@ -66,6 +66,10 @@ export default function defineApplication(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      CoverLetterUrl: {
+        type: DataTypes.STRING(2048),
+        allowNull: true,
+      },
       ScreenshotArtifactURL: {
         type: DataTypes.STRING(2048),
         allowNull: true,
