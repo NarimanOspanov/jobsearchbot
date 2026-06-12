@@ -731,14 +731,18 @@
                 <div id="clientResumePreviewWrap" class="client-resume-preview" style="display:none">
                   <iframe id="clientResumePreviewFrame" title="Resume preview"></iframe>
                 </div>
-                <input id="clientResumeFileInput" class="resume-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
-                <label for="clientResumeFileInput" id="clientResumeFilePickerLabel" class="resume-file-picker">
-                  <div>
-                    <div id="clientResumePickerTitle">Tap to choose a file</div>
-                    <div class="resume-file-picker-name">PDF/JPG/PNG/WEBP — up to 15 MB</div>
-                  </div>
-                </label>
-                <button id="uploadClientResumeBtn" type="button" disabled style="width:100%;margin-top:10px">Upload resume</button>
+                <div id="clientResumeReuploadBlock" class="client-resume-reupload" style="margin-top:12px">
+                  <span id="clientResumeReuploadLabel" class="k">Upload resume</span>
+                  <p class="muted" style="margin:0 0 8px;font-size:13px">AI will parse contacts, roles/skills, and work authorization into the client profile.</p>
+                  <input id="clientResumeFileInput" class="resume-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
+                  <label for="clientResumeFileInput" id="clientResumeFilePickerLabel" class="resume-file-picker">
+                    <div>
+                      <div id="clientResumePickerTitle">Tap to choose a file</div>
+                      <div class="resume-file-picker-name">PDF/JPG/PNG/WEBP — up to 15 MB</div>
+                    </div>
+                  </label>
+                  <button id="uploadClientResumeBtn" type="button" disabled style="width:100%;margin-top:10px">Upload resume</button>
+                </div>
                 <span id="uploadClientResumeLoader" class="loader" aria-hidden="true"></span>
                 <p id="clientResumeUploadMsg" class="bad" style="display:none;margin-top:8px" role="alert"></p>
               </div>
@@ -2258,6 +2262,14 @@
           }
         }
         if (viewBtn) viewBtn.disabled = !resumeUrl || isUploadingClientResume || isSyncing;
+        const reuploadLabel = document.getElementById('clientResumeReuploadLabel');
+        const uploadBtn = document.getElementById('uploadClientResumeBtn');
+        if (reuploadLabel) {
+          reuploadLabel.textContent = resumeUrl ? 'Reupload resume' : 'Upload resume';
+        }
+        if (uploadBtn && !isUploadingClientResume) {
+          uploadBtn.textContent = resumeUrl ? 'Reupload and parse with AI' : 'Upload and parse with AI';
+        }
         refreshClientResumeFileUi();
       }
 
@@ -2417,7 +2429,10 @@
           }
           return;
         }
-        if (uploadBtn) uploadBtn.disabled = isUploadingClientResume || isSyncing;
+        if (uploadBtn) {
+          uploadBtn.disabled = isUploadingClientResume || isSyncing;
+          if (isUploadingClientResume) uploadBtn.textContent = 'Uploading and parsing with AI...';
+        }
         if (picker) {
           picker.innerHTML = `<div><div>File selected</div><div class="resume-file-picker-name">${esc(file.name)}</div></div>`;
         }
@@ -2464,13 +2479,24 @@
           }
           const resumeUrl = String(payload?.resumeUrl || '').trim();
           if (!resumeUrl) throw new Error('Failed to upload resume');
+          const updatedClient = payload?.client && typeof payload.client === 'object' ? payload.client : null;
           const idx = users.findIndex((row) => String(row.id) === String(seekerId));
-          if (idx >= 0) users[idx] = { ...users[idx], resumeUrl };
+          if (idx >= 0) {
+            users[idx] = updatedClient ? { ...users[idx], ...updatedClient } : { ...users[idx], resumeUrl };
+          }
           if (fileInput) fileInput.value = '';
           invalidateApplyPriorityCache();
-          renderClientResumeUi(getSelectedUser());
-          setClientResumeMsg('Resume updated', true);
-          setTimeout(() => setClientResumeMsg(''), 2000);
+          const user = getSelectedUser();
+          renderSelectedUserInfo();
+          renderClientResumeUi(user);
+          const skillCount = Array.isArray(user?.skills) ? user.skills.length : 0;
+          setClientResumeMsg(
+            resumeUrl
+              ? `Resume saved. AI updated profile fields${skillCount ? ` (${skillCount} role(s))` : ''}.`
+              : 'Resume updated',
+            true
+          );
+          setTimeout(() => setClientResumeMsg(''), 4000);
         } finally {
           isUploadingClientResume = false;
           onLoading('uploadClientResumeLoader', false);

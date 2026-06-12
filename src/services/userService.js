@@ -24,6 +24,8 @@ export async function saveUserResumeFromBuffer({
   mimeType,
   fileIdPrefix = 'webapp',
   runEnrichment = true,
+  awaitEnrichment = false,
+  forceEnrichmentRefresh = false,
 }) {
   const resumeUrl = await resumeStorage.uploadResumeBuffer({
     chatId: user.TelegramChatId,
@@ -44,7 +46,18 @@ export async function saveUserResumeFromBuffer({
 
   await user.update({ ResumeURL: resumeUrl, ResumeContactsJson: resumeContactsJson });
   if (runEnrichment) {
-    runResumeEnrichmentInBackground({ userId: user.Id, resumeUrl, includeSkills: true });
+    const enrichmentOpts = {
+      userId: user.Id,
+      resumeUrl,
+      includeSkills: true,
+      forceWorkAuthRefresh: forceEnrichmentRefresh,
+    };
+    if (awaitEnrichment) {
+      await runResumeEnrichment(enrichmentOpts);
+      await user.reload();
+    } else {
+      runResumeEnrichmentInBackground(enrichmentOpts);
+    }
   }
   return resumeUrl;
 }
@@ -186,53 +199,69 @@ export async function removeUserDataByTelegramChatId(telegramChatId) {
   });
 }
 
-export function runResumeEnrichmentInBackground({ userId, resumeUrl, includeSkills = false }) {
-  setTimeout(async () => {
-    try {
-      console.info('[resume-enrichment] started', { userId, includeSkills });
-      const user = await models.Users.findByPk(userId);
-      if (!user) return;
-      const resumeText = await extractResumeTextFromUrl(resumeUrl);
-      const shouldFillWorkAuth = !String(user.WorkAuthorizationCountries || '').trim();
-      const contactsPromise = extractResumeContactsWithAI(resumeText);
-      const skillsPromise = includeSkills
-        ? fetchScreenlySkillsCatalog()
-            .then((skillsCatalog) => extractResumeSkillIdsWithAI(resumeText, skillsCatalog))
-            .catch((skillsErr) => {
-              console.warn('Resume skills enrichment failed:', skillsErr?.message || skillsErr);
-              return [];
-            })
-        : Promise.resolve([]);
-      const workAuthPromise = shouldFillWorkAuth
-        ? extractResumeWorkAuthCountriesWithAI(resumeText).catch((workAuthErr) => {
-            console.warn('Resume work auth enrichment failed:', workAuthErr?.message || workAuthErr);
-            return [];
-          })
-        : Promise.resolve([]);
-      const [resumeContacts, resumeSkillIds, resumeWorkAuthCountries] = await Promise.all([
-        contactsPromise,
-        skillsPromise,
-        workAuthPromise,
-      ]);
-      const updates = {};
-      if (resumeContacts) updates.ResumeContactsJson = JSON.stringify(resumeContacts);
-      if (includeSkills && Array.isArray(resumeSkillIds)) updates.skills = resumeSkillIds;
-      if (shouldFillWorkAuth && Array.isArray(resumeWorkAuthCountries) && resumeWorkAuthCountries.length > 0) {
-        updates.WorkAuthorizationCountries = normalizeWorkAuthCountries(resumeWorkAuthCountries).join(',');
-      }
-      if (Object.keys(updates).length > 0) {
-        await user.update(updates);
-        console.info('[resume-enrichment] saved', {
-          userId,
-          hasContacts: Boolean(updates.ResumeContactsJson),
-          skillsCount: Array.isArray(updates.skills) ? updates.skills.length : 0,
-          workAuthCountries: updates.WorkAuthorizationCountries || null,
-        });
-      } else {
-        console.warn('[resume-enrichment] no parsed data to save', { userId });
-      }
-    } catch (parseErr) {
+export async function runResumeEnrichment({
+  userId,
+  resumeUrl,
+  includeSkills = false,
+  forceWorkAuthRefresh = false,
+} = {}) {
+  console.info('[resume-enrichment] started', { userId, includeSkills, forceWorkAuthRefresh });
+  const user = await models.Users.findByPk(userId);
+  if (!user) {
+    return { ok: false, hasContacts: false, skillsCount: 0, workAuthCountries: null };
+  }
+  const resumeText = await extractResumeTextFromUrl(resumeUrl);
+  const shouldFillWorkAuth =
+    forceWorkAuthRefresh || !String(user.WorkAuthorizationCountries || '').trim();
+  const contactsPromise = extractResumeContactsWithAI(resumeText);
+  const skillsPromise = includeSkills
+    ? fetchScreenlySkillsCatalog()
+        .then((skillsCatalog) => extractResumeSkillIdsWithAI(resumeText, skillsCatalog))
+        .catch((skillsErr) => {
+          console.warn('Resume skills enrichment failed:', skillsErr?.message || skillsErr);
+          return [];
+        })
+    : Promise.resolve([]);
+  const workAuthPromise = shouldFillWorkAuth
+    ? extractResumeWorkAuthCountriesWithAI(resumeText).catch((workAuthErr) => {
+        console.warn('Resume work auth enrichment failed:', workAuthErr?.message || workAuthErr);
+        return [];
+      })
+    : Promise.resolve([]);
+  const [resumeContacts, resumeSkillIds, resumeWorkAuthCountries] = await Promise.all([
+    contactsPromise,
+    skillsPromise,
+    workAuthPromise,
+  ]);
+  const updates = {};
+  if (resumeContacts) updates.ResumeContactsJson = JSON.stringify(resumeContacts);
+  if (includeSkills && Array.isArray(resumeSkillIds)) updates.skills = resumeSkillIds;
+  if (shouldFillWorkAuth && Array.isArray(resumeWorkAuthCountries) && resumeWorkAuthCountries.length > 0) {
+    updates.WorkAuthorizationCountries = normalizeWorkAuthCountries(resumeWorkAuthCountries).join(',');
+  }
+  if (Object.keys(updates).length > 0) {
+    await user.update(updates);
+    console.info('[resume-enrichment] saved', {
+      userId,
+      hasContacts: Boolean(updates.ResumeContactsJson),
+      skillsCount: Array.isArray(updates.skills) ? updates.skills.length : 0,
+      workAuthCountries: updates.WorkAuthorizationCountries || null,
+    });
+    return {
+      ok: true,
+      hasContacts: Boolean(updates.ResumeContactsJson),
+      skillsCount: Array.isArray(updates.skills) ? updates.skills.length : 0,
+      workAuthCountries: updates.WorkAuthorizationCountries || null,
+    };
+  }
+  console.warn('[resume-enrichment] no parsed data to save', { userId });
+  return { ok: true, hasContacts: false, skillsCount: 0, workAuthCountries: null };
+}
+
+export function runResumeEnrichmentInBackground(opts) {
+  setTimeout(() => {
+    runResumeEnrichment(opts).catch((parseErr) => {
       console.warn('Background resume enrichment failed:', parseErr?.message || parseErr);
-    }
+    });
   }, 0);
 }

@@ -526,8 +526,15 @@ export function createAgentClientsRouter() {
           fileName,
           mimeType,
           fileIdPrefix: `agent-${req.actorUser.Id}`,
+          awaitEnrichment: true,
+          forceEnrichmentRefresh: true,
         });
-        return res.json({ ok: true, resumeUrl });
+        await client.reload();
+        return res.json({
+          ok: true,
+          resumeUrl,
+          client: mapUserToAgentClientPayload(client),
+        });
       } catch (err) {
         console.error('POST /api/app/agent/clients/:clientUserId/resume-upload:', err);
         return res.status(500).json({ error: 'Failed to upload client resume' });
