@@ -34,7 +34,39 @@
         outline: 1px solid #444444;
         border-color: #444444;
       }
-      input[type="checkbox"], input[type="radio"] { accent-color: #888888; }
+      input[type="radio"] { accent-color: #e0e0e0; }
+      input[type="checkbox"] {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 15px;
+        height: 15px;
+        min-width: 15px;
+        border: 1.5px solid #666666;
+        border-radius: 3px;
+        background: #1e1e1e;
+        cursor: pointer;
+        position: relative;
+        vertical-align: middle;
+        flex-shrink: 0;
+        transition: border-color 0.15s, background 0.15s;
+      }
+      input[type="checkbox"]:hover { border-color: #aaaaaa; }
+      input[type="checkbox"]:checked {
+        background: #e0e0e0;
+        border-color: #e0e0e0;
+      }
+      input[type="checkbox"]:checked::after {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 1px;
+        width: 4px;
+        height: 8px;
+        border: 2px solid #111111;
+        border-top: none;
+        border-left: none;
+        transform: rotate(45deg);
+      }
       input[type="date"]::-webkit-calendar-picker-indicator {
         filter: invert(1) brightness(1.4);
         opacity: 1;
