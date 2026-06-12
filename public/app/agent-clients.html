@@ -1089,6 +1089,7 @@
         { value: 'low', label: PRIORITY_LABELS.low },
         { value: 'skip', label: PRIORITY_LABELS.skip },
       ];
+      const DEFAULT_PRIORITY_FILTER_CSV = 'apply_first,good';
 
       const PRIORITY_SORT_ORDER = {
         apply_first: 0,
@@ -1098,9 +1099,12 @@
       };
 
       const STATUS_FILTER_OPTIONS = [
+        { value: 'new', label: 'New' },
         { value: 'applied', label: 'Applied' },
         { value: 'skipped', label: 'Skipped' },
       ];
+      const DEFAULT_STATUS_FILTER_CSV = 'new';
+      const APPLICATION_PERIOD_STATUSES = new Set(['applied', 'skipped']);
 
       const COUNTRY_AUTH_OPTIONS = [
         { value: 'kazakhstan', label: 'Kazakhstan' },
@@ -1148,14 +1152,21 @@
           source: p.get('source') || '',
           showOnlyHighlyRelevant: p.get('showOnlyHighlyRelevant') || '',
           country: p.get('country') || '',
-          priorities: p.get('priorities') || '',
-          statuses: p.get('statuses') || '',
+          priorities: p.has('priorities') ? (p.get('priorities') || '') : DEFAULT_PRIORITY_FILTER_CSV,
+          statuses: p.has('statuses') ? (p.get('statuses') || '') : DEFAULT_STATUS_FILTER_CSV,
           hideClients: p.get('hideClients') || '',
           jobId: p.get('jobId') || '',
           agentUserId: p.get('agentUserId') || '',
           page: p.get('page') || '1',
           pageSize: p.get('pageSize') || '100',
         };
+      }
+      function ensureDefaultFilterQueryParams() {
+        const p = new URLSearchParams(location.search);
+        const patch = {};
+        if (!p.has('priorities')) patch.priorities = DEFAULT_PRIORITY_FILTER_CSV;
+        if (!p.has('statuses')) patch.statuses = DEFAULT_STATUS_FILTER_CSV;
+        if (Object.keys(patch).length) setQ(patch);
       }
       function agentQuerySuffix() {
         if (!isBotAdminUser) return '';
@@ -1485,8 +1496,7 @@
       function jobMatchesStatusFilter(jobId) {
         const selected = getSelectedStatuses();
         if (!selected.length) return true;
-        const status = getJobApplicationStatus(jobId);
-        if (!status) return false;
+        const status = getJobApplicationStatus(jobId) || 'new';
         return selected.includes(status);
       }
       function jobMatchesClientFilters(jobId) {
@@ -2815,8 +2825,8 @@
         applySelectedSkillIdsCsv('');
         applySelectedApplyTypesCsv('');
         applySelectedCountriesCsv('');
-        applySelectedPrioritiesCsv('');
-        applySelectedStatusesCsv('');
+        applySelectedPrioritiesCsv(DEFAULT_PRIORITY_FILTER_CSV);
+        applySelectedStatusesCsv(DEFAULT_STATUS_FILTER_CSV);
         document.getElementById('sourceSel').value = '';
         document.getElementById('showOnlyHighlyRelevant').checked = false;
         setQ({
@@ -2826,8 +2836,8 @@
           applyTypes: '',
           source: '',
           country: '',
-          priorities: '',
-          statuses: '',
+          priorities: DEFAULT_PRIORITY_FILTER_CSV,
+          statuses: DEFAULT_STATUS_FILTER_CSV,
           showOnlyHighlyRelevant: '',
           page: '1',
           jobId: '',
@@ -2923,7 +2933,10 @@
         setSyncBusy(true);
         try {
           const selectedStatuses = getSelectedStatuses();
-          if (selectedStatuses.length) {
+          const usesApplicationPeriodQuery =
+            selectedStatuses.length > 0 &&
+            selectedStatuses.every((status) => APPLICATION_PERIOD_STATUSES.has(status));
+          if (usesApplicationPeriodQuery) {
             applicationsPeriodMode = true;
             await loadApplicationsByUser(seekerId, {
               appliedFrom: from,
@@ -3493,6 +3506,7 @@
           throw new Error('You are not assigned as a career agent. Ask an admin to assign clients to you.');
         }
         hydrateStateToInputs();
+        ensureDefaultFilterQueryParams();
         renderSourcePickerOptions();
         renderCountryPickerOptions();
         renderPriorityPickerOptions();
@@ -3507,8 +3521,8 @@
         setClientsColumnVisibility(isTruthyQueryParam(q().hideClients), { updateQuery: false });
         applySelectedApplyTypesCsv(s.applyTypes || '');
         applySelectedCountriesCsv(s.country || '');
-        applySelectedPrioritiesCsv(s.priorities || '');
-        applySelectedStatusesCsv(s.statuses || '');
+        applySelectedPrioritiesCsv(s.priorities);
+        applySelectedStatusesCsv(s.statuses);
         const bootUser = s.seekerId ? getSelectedUser() : null;
         if (s.skillIds) {
           applySelectedSkillIdsCsv(s.skillIds);
