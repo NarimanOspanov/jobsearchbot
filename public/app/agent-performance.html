@@ -99,6 +99,11 @@
           Credit uses stored <code>AgentUserId</code> at apply time (survives client reassignment).
         </p>
         <div class="toolbar" style="margin-top:12px">
+          <label id="agentPickerWrap" class="muted" hidden>Agent
+            <select id="agentPickerSel">
+              <option value="">All agents</option>
+            </select>
+          </label>
           <label class="muted">Period (days)
             <select id="periodSel">
               <option value="1">1</option>
@@ -216,6 +221,8 @@
       if (tg) tg.ready();
 
       const chartInstances = {};
+      let isBotAdminUser = false;
+      let isCareerAgentUser = false;
       const chartScale = {
         x: { ticks: { color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' } },
         y: { beginAtZero: true, ticks: { precision: 0, color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' } },
@@ -336,6 +343,48 @@
 
       let loading = false;
 
+      function selectedAgentUserId() {
+        if (!isBotAdminUser) return '';
+        return String(document.getElementById('agentPickerSel')?.value || '').trim();
+      }
+
+      function buildPerformanceApiUrl(period) {
+        const params = new URLSearchParams({ period: String(period) });
+        const agentUserId = selectedAgentUserId();
+        if (agentUserId) params.set('agentUserId', agentUserId);
+        return `/api/app/agent/performance?${params.toString()}`;
+      }
+
+      function syncUrlParams(period) {
+        const current = new URL(window.location.href);
+        current.searchParams.set('period', String(period));
+        const agentUserId = selectedAgentUserId();
+        if (agentUserId) current.searchParams.set('agentUserId', agentUserId);
+        else current.searchParams.delete('agentUserId');
+        window.history.replaceState(null, '', current.toString());
+      }
+
+      async function loadAgents() {
+        if (!isBotAdminUser) return;
+        const agents = await api('/api/app/admin/agents');
+        const wrap = document.getElementById('agentPickerWrap');
+        const sel = document.getElementById('agentPickerSel');
+        if (!wrap || !sel) return;
+        wrap.hidden = false;
+        const current = new URLSearchParams(location.search).get('agentUserId') || '';
+        sel.innerHTML =
+          '<option value="">All agents</option>' +
+          (Array.isArray(agents) ? agents : [])
+            .map(
+              (agent) =>
+                `<option value="${esc(agent.id)}">${esc(agent.displayName || `#${agent.id}`)} (${esc(agent.telegramChatId)})</option>`
+            )
+            .join('');
+        if (current && [...sel.options].some((opt) => opt.value === current)) {
+          sel.value = current;
+        }
+      }
+
       async function load() {
         if (loading) return;
         loading = true;
@@ -345,7 +394,7 @@
         msg.textContent = 'Loading...';
         const period = toInt(document.getElementById('periodSel').value, 7);
         try {
-          const payload = await api(`/api/app/admin/agent-performance?period=${encodeURIComponent(period)}`);
+          const payload = await api(buildPerformanceApiUrl(period));
           renderTotals(payload?.totals || {});
           renderCharts({
             byAgent: Array.isArray(payload?.byAgent) ? payload.byAgent : [],
@@ -438,10 +487,13 @@
           );
 
           msg.className = 'ok';
-          msg.textContent = `Updated for ${period} day(s), since ${formatDt(payload?.since)}.`;
-          const current = new URL(window.location.href);
-          current.searchParams.set('period', String(period));
-          window.history.replaceState(null, '', current.toString());
+          const scopeNote = payload?.agentUserId
+            ? ' (single agent)'
+            : isBotAdminUser
+              ? ' (all agents)'
+              : '';
+          msg.textContent = `Updated for ${period} day(s), since ${formatDt(payload?.since)}${scopeNote}.`;
+          syncUrlParams(period);
         } catch (err) {
           msg.className = 'bad';
           msg.textContent = `Failed to load: ${err?.message || 'Unknown error'}`;
@@ -451,12 +503,28 @@
         }
       }
 
-      document.getElementById('periodSel').value = String(
-        toInt(new URLSearchParams(location.search).get('period'), 7)
-      );
+      async function boot() {
+        const profile = await api('/api/app/profile');
+        isBotAdminUser = !!profile?.isBotAdmin;
+        isCareerAgentUser = !!profile?.isCareerAgent;
+        if (!isBotAdminUser && !isCareerAgentUser) {
+          throw new Error('You are not assigned as a career agent. Ask an admin to assign clients to you.');
+        }
+        document.getElementById('periodSel').value = String(
+          toInt(new URLSearchParams(location.search).get('period'), 7)
+        );
+        await loadAgents();
+        await load();
+      }
+
       document.getElementById('reloadBtn').addEventListener('click', load);
       document.getElementById('periodSel').addEventListener('change', load);
-      load();
+      document.getElementById('agentPickerSel')?.addEventListener('change', load);
+      boot().catch((err) => {
+        const msg = document.getElementById('msg');
+        msg.className = 'bad';
+        msg.textContent = err?.message || 'Failed to initialize';
+      });
     </script>
   </body>
 </html>

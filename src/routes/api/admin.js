@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Sequelize } from 'sequelize';
-import { adminMiniAppAuth, miniAppAuth } from '../../middleware/auth.js';
+import { adminMiniAppAuth, agentMiniAppAuth, miniAppAuth } from '../../middleware/auth.js';
 import { config } from '../../config.js';
 import { models, sequelize } from '../../db.js';
 import { buildAdminUserContactProjection } from '../../services/userService.js';
@@ -13,7 +13,11 @@ import {
 } from '../../services/positionApplyScreeningService.js';
 import { runtimeBot } from '../../bot/state.js';
 import { buildConversionStats } from '../../services/conversionStatsService.js';
-import { buildAgentPerformanceStats } from '../../services/agentPerformanceStatsService.js';
+import {
+  buildAgentPerformanceStats,
+  parseAgentPerformancePeriod,
+  resolvePerformanceAgentUserId,
+} from '../../services/agentPerformanceStatsService.js';
 
 export function createAdminRouter() {
   const router = Router();
@@ -604,18 +608,18 @@ export function createAdminRouter() {
     }
   });
 
-  router.get('/api/app/admin/agent-performance', adminMiniAppAuth, async (req, res) => {
+  router.get('/api/app/admin/agent-performance', agentMiniAppAuth, async (req, res) => {
     try {
-      const periodRaw = String(req.query.period || '7').trim();
-      const period = /^\d+$/.test(periodRaw)
-        ? Math.min(365, Math.max(1, Number.parseInt(periodRaw, 10)))
-        : 7;
+      const agentUserId = resolvePerformanceAgentUserId(req);
+      if (agentUserId === undefined) return res.status(403).json({ error: 'Forbidden' });
+      const period = parseAgentPerformancePeriod(req.query.period, 7);
       const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
-      const stats = await buildAgentPerformanceStats({ since });
+      const stats = await buildAgentPerformanceStats({ since, agentUserId });
       return res.json({
         success: true,
         period,
         since: since.toISOString(),
+        agentUserId,
         ...stats,
       });
     } catch (err) {

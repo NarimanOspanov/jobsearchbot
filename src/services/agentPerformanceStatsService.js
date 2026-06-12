@@ -18,8 +18,35 @@ function buildUserLabel(user) {
   return `User #${user.Id ?? '-'}`;
 }
 
-export async function buildAgentPerformanceStats({ since } = {}) {
+export function parseAgentPerformancePeriod(raw, fallback = 7) {
+  const periodRaw = String(raw ?? fallback).trim();
+  if (!/^\d+$/.test(periodRaw)) return fallback;
+  return Math.min(365, Math.max(1, Number.parseInt(periodRaw, 10)));
+}
+
+/** Admin: optional filter (null = all agents). Career agent: own user id only. */
+export function resolvePerformanceAgentUserId(req) {
+  if (req.isBotAdmin) {
+    const id = Number.parseInt(String(req.query.agentUserId || ''), 10);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  }
+  if (req.isCareerAgent) {
+    const id = Number(req.actorUser?.Id);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  }
+  return undefined;
+}
+
+export async function buildAgentPerformanceStats({ since, agentUserId } = {}) {
   const sinceDate = since instanceof Date ? since : new Date(since);
+  const scopedAgentId = Number(agentUserId);
+  const hasAgentScope = Number.isSafeInteger(scopedAgentId) && scopedAgentId > 0;
+  const queryReplacements = { since: sinceDate };
+  if (hasAgentScope) queryReplacements.agentUserId = scopedAgentId;
+  const applicationScopeSql = hasAgentScope
+    ? `a.AppliedAt >= :since AND ${EFFECTIVE_AGENT_SQL} = :agentUserId`
+    : `a.AppliedAt >= :since AND ${EFFECTIVE_AGENT_SQL} IS NOT NULL`;
+  const assignmentScopeSql = hasAgentScope ? 'WHERE ac.AgentUserId = :agentUserId' : '';
   const empty = {
     totals: {
       agents: 0,
@@ -40,15 +67,14 @@ export async function buildAgentPerformanceStats({ since } = {}) {
     return empty;
   }
 
-  const agentFilter = `${EFFECTIVE_AGENT_SQL} IS NOT NULL`;
-
   const [assignmentRows, byAgentActivityRows, byAgentClientRows, statusRows, sourceRows, applyTypeRows, dailyRows, recentRows] =
     await Promise.all([
       sequelize.query(
         `SELECT ac.AgentUserId AS agentUserId, COUNT(*) AS assignedClients
          FROM dbo.AgentClients AS ac
+         ${assignmentScopeSql}
          GROUP BY ac.AgentUserId`,
-        { type: Sequelize.QueryTypes.SELECT }
+        { replacements: queryReplacements, type: Sequelize.QueryTypes.SELECT }
       ),
       sequelize.query(
         `SELECT
@@ -57,9 +83,9 @@ export async function buildAgentPerformanceStats({ since } = {}) {
            SUM(CASE WHEN LOWER(LTRIM(RTRIM(a.Status))) = 'applied' THEN 1 ELSE 0 END) AS appliedCount
          FROM dbo.Applications AS a
          LEFT JOIN dbo.AgentClients AS ac ON ac.ClientUserId = a.UserId
-         WHERE a.AppliedAt >= :since AND ${agentFilter}
+         WHERE ${applicationScopeSql}
          GROUP BY ${EFFECTIVE_AGENT_SQL}`,
-        { replacements: { since: sinceDate }, type: Sequelize.QueryTypes.SELECT }
+        { replacements: queryReplacements, type: Sequelize.QueryTypes.SELECT }
       ),
       sequelize.query(
         `SELECT
@@ -69,10 +95,10 @@ export async function buildAgentPerformanceStats({ since } = {}) {
            SUM(CASE WHEN LOWER(LTRIM(RTRIM(a.Status))) = 'applied' THEN 1 ELSE 0 END) AS appliedCount
          FROM dbo.Applications AS a
          LEFT JOIN dbo.AgentClients AS ac ON ac.ClientUserId = a.UserId
-         WHERE a.AppliedAt >= :since AND ${agentFilter}
+         WHERE ${applicationScopeSql}
          GROUP BY ${EFFECTIVE_AGENT_SQL}, a.UserId
          HAVING COUNT(a.Id) > 0`,
-        { replacements: { since: sinceDate }, type: Sequelize.QueryTypes.SELECT }
+        { replacements: queryReplacements, type: Sequelize.QueryTypes.SELECT }
       ),
       sequelize.query(
         `SELECT
@@ -81,9 +107,9 @@ export async function buildAgentPerformanceStats({ since } = {}) {
            COUNT(*) AS cnt
          FROM dbo.Applications AS a
          LEFT JOIN dbo.AgentClients AS ac ON ac.ClientUserId = a.UserId
-         WHERE a.AppliedAt >= :since AND ${agentFilter}
+         WHERE ${applicationScopeSql}
          GROUP BY ${EFFECTIVE_AGENT_SQL}, LOWER(LTRIM(RTRIM(a.Status)))`,
-        { replacements: { since: sinceDate }, type: Sequelize.QueryTypes.SELECT }
+        { replacements: queryReplacements, type: Sequelize.QueryTypes.SELECT }
       ),
       sequelize.query(
         `SELECT
@@ -92,11 +118,10 @@ export async function buildAgentPerformanceStats({ since } = {}) {
            COUNT(*) AS cnt
          FROM dbo.Applications AS a
          LEFT JOIN dbo.AgentClients AS ac ON ac.ClientUserId = a.UserId
-         WHERE a.AppliedAt >= :since
+         WHERE ${applicationScopeSql}
            AND LOWER(LTRIM(RTRIM(a.Status))) = 'applied'
-           AND ${agentFilter}
          GROUP BY ${EFFECTIVE_AGENT_SQL}, COALESCE(NULLIF(LTRIM(RTRIM(a.Source)), ''), '—')`,
-        { replacements: { since: sinceDate }, type: Sequelize.QueryTypes.SELECT }
+        { replacements: queryReplacements, type: Sequelize.QueryTypes.SELECT }
       ),
       sequelize.query(
         `SELECT
@@ -105,11 +130,10 @@ export async function buildAgentPerformanceStats({ since } = {}) {
            COUNT(*) AS cnt
          FROM dbo.Applications AS a
          LEFT JOIN dbo.AgentClients AS ac ON ac.ClientUserId = a.UserId
-         WHERE a.AppliedAt >= :since
+         WHERE ${applicationScopeSql}
            AND LOWER(LTRIM(RTRIM(a.Status))) = 'applied'
-           AND ${agentFilter}
          GROUP BY ${EFFECTIVE_AGENT_SQL}, COALESCE(NULLIF(LTRIM(RTRIM(a.ApplyType)), ''), '—')`,
-        { replacements: { since: sinceDate }, type: Sequelize.QueryTypes.SELECT }
+        { replacements: queryReplacements, type: Sequelize.QueryTypes.SELECT }
       ),
       sequelize.query(
         `SELECT
@@ -117,12 +141,11 @@ export async function buildAgentPerformanceStats({ since } = {}) {
            COUNT(*) AS appliedCount
          FROM dbo.Applications AS a
          LEFT JOIN dbo.AgentClients AS ac ON ac.ClientUserId = a.UserId
-         WHERE a.AppliedAt >= :since
+         WHERE ${applicationScopeSql}
            AND LOWER(LTRIM(RTRIM(a.Status))) = 'applied'
-           AND ${agentFilter}
          GROUP BY CAST(a.AppliedAt AS DATE)
          ORDER BY CAST(a.AppliedAt AS DATE) ASC`,
-        { replacements: { since: sinceDate }, type: Sequelize.QueryTypes.SELECT }
+        { replacements: queryReplacements, type: Sequelize.QueryTypes.SELECT }
       ),
       sequelize.query(
         `SELECT TOP 100
@@ -138,11 +161,10 @@ export async function buildAgentPerformanceStats({ since } = {}) {
            a.UserId AS clientUserId
          FROM dbo.Applications AS a
          LEFT JOIN dbo.AgentClients AS ac ON ac.ClientUserId = a.UserId
-         WHERE a.AppliedAt >= :since
+         WHERE ${applicationScopeSql}
            AND LOWER(LTRIM(RTRIM(a.Status))) = 'applied'
-           AND ${agentFilter}
          ORDER BY a.AppliedAt DESC`,
-        { replacements: { since: sinceDate }, type: Sequelize.QueryTypes.SELECT }
+        { replacements: queryReplacements, type: Sequelize.QueryTypes.SELECT }
       ),
     ]);
 

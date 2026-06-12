@@ -1859,6 +1859,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<code>/admin_assignments</code> — assign agents to job seekers',
       '<code>/clients</code> — agent clients workspace (admins and assigned agents)',
       '<i>Aliases:</i> <code>/agent_clients</code>, <code>/agent-clients</code>',
+      '<code>/agent_performance</code> [days] — applied jobs report (agents: own stats; admins: all or pick in UI)',
+      '<i>Alias:</i> <code>/agent-performance</code>',
       '',
       '<b>Web App panels</b>',
       '<code>/admin_companies</code> — remote companies list',
@@ -1873,8 +1875,6 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<i>Alias:</i> <code>/publisher-stats</code>',
       '<code>/conversion_stats</code> [days] — channel conversion: publisher vs ref_ ads (default 7 days)',
       '<i>Alias:</i> <code>/conversion-stats</code>',
-      '<code>/agent_performance</code> [days] — career agent applied jobs report (default 7 days)',
-      '<i>Alias:</i> <code>/agent-performance</code>',
       '',
       '<b>Position apply screening</b>',
       'Config <code>PositionApplyScreeningResponseMin</code> (default 4320 = 3 days) — minutes until auto rejection',
@@ -1996,8 +1996,14 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   const openAgentPerformance = async (ctx) => {
     try {
-      const ok = await ensurePrivateAdminForHiddenCommand(ctx, '/agent_performance');
-      if (!ok) return;
+      if (ctx.chat?.type !== 'private') {
+        await ctx.reply('Agent performance is available only in private chat.');
+        return;
+      }
+      if (!(await canOpenAgentClients(ctx))) {
+        await ctx.reply('Unauthorized.');
+        return;
+      }
       const text = String(ctx.message?.text || '').trim();
       const parts = text.split(/\s+/).filter(Boolean);
       const periodDays = parsePeriodDays(parts[1], 7);

@@ -26,6 +26,11 @@ import {
   toSkillIdsOrNullOrUndefined,
   toWorkAuthCountriesOrNullOrUndefined,
 } from '../../utils/validators.js';
+import {
+  buildAgentPerformanceStats,
+  parseAgentPerformancePeriod,
+  resolvePerformanceAgentUserId,
+} from '../../services/agentPerformanceStatsService.js';
 
 function displayNameFromUser(u, projection) {
   const fromResume = [
@@ -165,6 +170,26 @@ export function createAgentClientsRouter() {
     } catch (err) {
       console.error('GET /api/app/agent/clients:', err);
       return res.status(500).json({ error: 'Failed to load agent clients' });
+    }
+  });
+
+  router.get('/api/app/agent/performance', agentMiniAppAuth, async (req, res) => {
+    try {
+      const agentUserId = resolvePerformanceAgentUserId(req);
+      if (agentUserId === undefined) return res.status(403).json({ error: 'Forbidden' });
+      const period = parseAgentPerformancePeriod(req.query.period, 7);
+      const since = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
+      const stats = await buildAgentPerformanceStats({ since, agentUserId });
+      return res.json({
+        success: true,
+        period,
+        since: since.toISOString(),
+        agentUserId,
+        ...stats,
+      });
+    } catch (err) {
+      console.error('GET /api/app/agent/performance:', err);
+      return res.status(500).json({ error: 'Failed to load agent performance stats' });
     }
   });
 
