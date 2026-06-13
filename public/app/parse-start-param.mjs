@@ -10,6 +10,14 @@
 
 export const SOURCE_BITS = [1, 2, 4, 8];
 
+/** Telegram start_param / startapp: only A-Z a-z 0-9 _ - (max 512). */
+export const TELEGRAM_START_PARAM_RE = /^[\w-]{0,512}$/;
+
+/** @param {string} value */
+export function isTelegramSafeStartParam(value) {
+  return TELEGRAM_START_PARAM_RE.test(String(value || ''));
+}
+
 /** Bit index = sourceId − 1 (Telegram=1, LinkedIn=2, HH=4, Indeed=8). */
 export const SOURCE_ID_TO_APPLY_TYPE = {
   1: 'telegram',
@@ -30,10 +38,29 @@ export function expandCompactDate(yyMMdd) {
   return `20${yyMMdd.slice(0, 2)}-${yyMMdd.slice(2, 4)}-${yyMMdd.slice(4, 6)}`;
 }
 
-/** @param {string} payload */
-export function parseCompactV2(payload) {
-  const m = /^(\d+)\.(\d+)\.(\d{6})\.(\d{6})$/.exec(String(payload || '').trim());
-  if (!m) return null;
+const COMPACT_V2_US_RE = /^(\d+)_(\d+)_(\d{6})_(\d{6})$/;
+/** Legacy dot separator — invalid in Telegram startapp; kept for decode-only compat. */
+const COMPACT_V2_DOT_RE = /^(\d+)\.(\d+)\.(\d{6})\.(\d{6})$/;
+
+function decodeBase64UrlToUtf8(b64url) {
+  let s = String(b64url || '').trim().replace(/-/g, '+').replace(/_/g, '/');
+  const padLen = (4 - (s.length % 4)) % 4;
+  s += '='.repeat(padLen);
+  const bin = atob(s);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+}
+
+function encodeBase64UrlUtf8(str) {
+  const bytes = new TextEncoder().encode(String(str || ''));
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+/** @param {RegExpMatchArray} m */
+function filtersFromCompactMatch(m) {
   const skillId = Number.parseInt(m[1], 10);
   const dateFrom = expandCompactDate(m[3]);
   const dateTo = expandCompactDate(m[4]);
@@ -45,6 +72,66 @@ export function parseCompactV2(payload) {
     dateTo,
     showOnlyHighlyRelevant: skillId > 0,
   };
+}
+
+function matchCompactV2Payload(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+  let m = COMPACT_V2_US_RE.exec(value);
+  if (m) return m;
+  m = COMPACT_V2_DOT_RE.exec(value);
+  if (m) return m;
+  if (!/^[\w-]+$/.test(value)) return null;
+  try {
+    const decoded = decodeBase64UrlToUtf8(value).trim();
+    m = COMPACT_V2_US_RE.exec(decoded);
+    if (m) return m;
+    return COMPACT_V2_DOT_RE.exec(decoded);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Canonical compact body: `{skillId}_{sourceMask}_{fromYYMMDD}_{toYYMMDD}`.
+ * Underscores are required — Telegram rejects `.` in startapp on mobile.
+ * @param {{ skillId?: number, sourceMask?: number, fromYYMMDD: string, toYYMMDD: string }} parts
+ */
+export function buildCompactV2Payload(parts) {
+  const skillId = Number.parseInt(String(parts?.skillId ?? 0), 10) || 0;
+  const sourceMask = Number.parseInt(String(parts?.sourceMask ?? 0), 10) || 0;
+  const fromYYMMDD = String(parts?.fromYYMMDD || '').trim();
+  const toYYMMDD = String(parts?.toYYMMDD || '').trim();
+  return `${skillId}_${sourceMask}_${fromYYMMDD}_${toYYMMDD}`;
+}
+
+/** @deprecated Use buildCompactV2Payload (underscore separator). */
+export function buildCompactV2DotPayload(parts) {
+  return buildCompactV2Payload(parts).replace(/_/g, '.');
+}
+
+/**
+ * Telegram-safe startapp: `sj2__{skillId}_{sourceMask}_{fromYYMMDD}_{toYYMMDD}`.
+ * @param {{ skillId?: number, sourceMask?: number, fromYYMMDD: string, toYYMMDD: string, encoding?: 'underscore' | 'base64' }} parts
+ */
+export function buildSj2TelegramStartapp(parts) {
+  const usBody = buildCompactV2Payload(parts);
+  const body =
+    parts?.encoding === 'base64'
+      ? encodeBase64UrlUtf8(buildCompactV2DotPayload(parts))
+      : usBody;
+  const startapp = `sj2__${body}`;
+  if (!isTelegramSafeStartParam(startapp)) {
+    throw new Error('sj2 startapp exceeds Telegram limits or contains invalid characters');
+  }
+  return startapp;
+}
+
+/** @param {string} payload */
+export function parseCompactV2(payload) {
+  const m = matchCompactV2Payload(payload);
+  if (!m) return null;
+  return filtersFromCompactMatch(m);
 }
 
 /** @param {URLSearchParams} params */
@@ -224,16 +311,6 @@ export function bootstrapMiniAppIndexRedirect(options = {}) {
   if (typeof window !== 'undefined') window.location.replace(fallbackUrl);
 }
 
-function decodeBase64UrlToUtf8(b64) {
-  let s = String(b64).trim().replace(/-/g, '+').replace(/_/g, '/');
-  const padLen = (4 - (s.length % 4)) % 4;
-  s += '='.repeat(padLen);
-  const bin = atob(s);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-}
-
 function innerParamsFromStartappPayload(raw, allowedKeys) {
   let r = String(raw || '').trim();
   if (!r) return new URLSearchParams();
@@ -357,9 +434,14 @@ export function applyStartParamFiltersFromLocation(options = {}) {
 if (typeof window !== 'undefined') {
   window.SeekerStartParam = {
     SOURCE_BITS,
+    TELEGRAM_START_PARAM_RE,
     SOURCE_ID_TO_APPLY_TYPE,
+    isTelegramSafeStartParam,
     decodeSourceMask,
     expandCompactDate,
+    buildCompactV2Payload,
+    buildCompactV2DotPayload,
+    buildSj2TelegramStartapp,
     parseCompactV2,
     parseLegacySeekerJobs,
     parseStartParam,

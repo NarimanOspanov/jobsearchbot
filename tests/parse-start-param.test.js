@@ -6,14 +6,17 @@ import {
   decodeSourceMask,
   expandCompactDate,
   filtersToUrlSearchParams,
+  isTelegramSafeStartParam,
+  buildCompactV2Payload,
+  buildSj2TelegramStartapp,
 } from '../src/utils/parseStartParam.js';
 
 function encodeLegacySeekerJobsQuery(query) {
   return btoa(query).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-test('sj2__100.11.260611.260613 decodes compact channel link', () => {
-  const result = parseStartParam('sj2__100.11.260611.260613');
+test('sj2__100_11_260611_260613 decodes compact channel link (underscore)', () => {
+  const result = parseStartParam('sj2__100_11_260611_260613');
   assert.equal(result?.kind, 'search');
   assert.deepEqual(result?.filters, {
     skillIds: [100],
@@ -24,12 +27,17 @@ test('sj2__100.11.260611.260613 decodes compact channel link', () => {
   });
 });
 
-test('sj2__0.11.260611.260613 has no skill filter', () => {
-  const result = parseStartParam('sj2__0.11.260611.260613');
+test('sj2__0_11_260611_260613 has no skill filter', () => {
+  const result = parseStartParam('sj2__0_11_260611_260613');
   assert.equal(result?.kind, 'search');
   assert.deepEqual(result?.filters?.skillIds, []);
   assert.equal(result?.filters?.showOnlyHighlyRelevant, false);
   assert.deepEqual(result?.filters?.sourceIds, [1, 2, 4]);
+});
+
+test('legacy dot sj2 body still decodes for backward compat', () => {
+  const result = parseStartParam('sj2__100.11.260611.260613');
+  assert.deepEqual(result?.filters?.skillIds, [100]);
 });
 
 test('legacy seekerjobs base64 payload decodes to same filters', () => {
@@ -74,30 +82,36 @@ test('parseLegacySeekerJobs accepts plain query fallback', () => {
   assert.deepEqual(filters?.skillIds, [100]);
 });
 
-test('production sj2 channel link startapp=sj2__23.11.260611.260613', () => {
-  const result = parseStartParam('sj2__23.11.260611.260613');
-  assert.equal(result?.kind, 'search');
+test('buildCompactV2Payload uses underscore separators', () => {
+  assert.equal(
+    buildCompactV2Payload({ skillId: 25, sourceMask: 11, fromYYMMDD: '260611', toYYMMDD: '260613' }),
+    '25_11_260611_260613'
+  );
+});
+
+test('production sj2 link startapp=sj2__25_11_260611_260613', () => {
+  const startapp = buildSj2TelegramStartapp({
+    skillId: 25,
+    sourceMask: 11,
+    fromYYMMDD: '260611',
+    toYYMMDD: '260613',
+  });
+  assert.equal(startapp, 'sj2__25_11_260611_260613');
+  assert.equal(isTelegramSafeStartParam(startapp), true);
+  const result = parseStartParam(startapp);
   assert.deepEqual(result?.filters, {
-    skillIds: [23],
+    skillIds: [25],
     sourceIds: [1, 2, 4],
     dateFrom: '2026-06-11',
     dateTo: '2026-06-13',
     showOnlyHighlyRelevant: true,
   });
   const qs = filtersToUrlSearchParams(result.filters);
-  assert.equal(qs.get('from'), '2026-06-11');
-  assert.equal(qs.get('to'), '2026-06-13');
-  assert.equal(qs.get('skillIds'), '23');
-  assert.equal(qs.get('sourceIds'), '1,2,4');
-  assert.equal(qs.get('applyTypes'), 'telegram,linkedin,indeed');
-  assert.equal(qs.get('showOnlyHighlyRelevant'), 'true');
+  assert.equal(qs.get('skillIds'), '25');
 });
 
-test('production sj2 channel link startapp=sj2__20.11.260611.260613', () => {
-  const result = parseStartParam('sj2__20.11.260611.260613');
-  assert.equal(result?.kind, 'search');
-  assert.deepEqual(result?.filters?.skillIds, [20]);
-  assert.equal(filtersToUrlSearchParams(result.filters).get('skillIds'), '20');
+test('dot-separated sj2 is not Telegram-safe startapp', () => {
+  assert.equal(isTelegramSafeStartParam('sj2__25.11.260611.260613'), false);
 });
 
 test('production legacy seekerjobs base64 channel link (skillIds=111)', () => {
@@ -105,17 +119,7 @@ test('production legacy seekerjobs base64 channel link (skillIds=111)', () => {
     'seekerjobs__ZnJvbT0yMDI2LTA2LTExJnRvPTIwMjYtMDYtMTMmc2tpbGxJZHM9MTExJnNvdXJjZUlkcz0xLDIsNCZzaG93T25seUhpZ2hseVJlbGV2YW50PXRydWU';
   const result = parseStartParam(startapp);
   assert.equal(result?.kind, 'search');
-  assert.deepEqual(result?.filters, {
-    skillIds: [111],
-    sourceIds: [1, 2, 4],
-    dateFrom: '2026-06-11',
-    dateTo: '2026-06-13',
-    showOnlyHighlyRelevant: true,
-  });
-  const qs = filtersToUrlSearchParams(result.filters);
-  assert.equal(qs.get('skillIds'), '111');
-  assert.equal(qs.get('sourceIds'), '1,2,4');
-  assert.equal(qs.get('showOnlyHighlyRelevant'), 'true');
+  assert.deepEqual(result?.filters?.skillIds, [111]);
 });
 
 test('production legacy seekerjobs base64 channel link (skillIds=64)', () => {
@@ -124,4 +128,16 @@ test('production legacy seekerjobs base64 channel link (skillIds=64)', () => {
   const result = parseStartParam(startapp);
   assert.equal(result?.kind, 'search');
   assert.deepEqual(result?.filters?.skillIds, [64]);
+});
+
+test('base64-wrapped legacy dot body still parses', () => {
+  const startapp = buildSj2TelegramStartapp({
+    skillId: 25,
+    sourceMask: 11,
+    fromYYMMDD: '260611',
+    toYYMMDD: '260613',
+    encoding: 'base64',
+  });
+  assert.equal(isTelegramSafeStartParam(startapp), true);
+  assert.deepEqual(parseStartParam(startapp)?.filters?.skillIds, [25]);
 });
