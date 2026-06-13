@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Поиск вакансий</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script type="module" src="/app/parse-start-param.mjs"></script>
     <style>
       :root {
         --bg: #111111;
@@ -999,6 +1000,36 @@
         'skillId',
       ];
       const SEEKER_FILTER_KEY_SET = new Set(SEEKER_FILTER_KEYS);
+      const DEEPLINK_START_PREFIXES = ['seekerjobs__', 'sj2__'];
+
+      function startsWithSeekerDeepLink(value) {
+        const raw = String(value || '');
+        return DEEPLINK_START_PREFIXES.some((prefix) => raw.startsWith(prefix));
+      }
+
+      function queryStateFromParsedStartParam(rawStart, malformedFallback, p, pickExtra) {
+        const parsed = window.SeekerStartParam?.parseStartParam?.(rawStart);
+        if (parsed?.kind !== 'search') return null;
+        const base = window.SeekerStartParam.parsedFiltersToQueryState(parsed.filters);
+        const pick = (key) => {
+          const a = String(base[key] || '').trim();
+          const m = String(malformedFallback.get(key) || '').trim();
+          const b = String(p.get(key) || '').trim();
+          return a || m || b || pickExtra?.(key) || '';
+        };
+        return {
+          from: pick('from'),
+          to: pick('to'),
+          skillIds: pick('skillIds') || pick('skillId'),
+          applyTypes: normalizeApplyTypesCsv(pick('applyTypes') || pick('sourceIds')),
+          source: normalizeSourceToken(pick('source')),
+          showOnlyHighlyRelevant: pick('showOnlyHighlyRelevant'),
+          country: pick('country'),
+          jobId: pick('jobId'),
+          page: pick('page') || '1',
+          pageSize: pick('pageSize') || '100',
+        };
+      }
 
       function decodeBase64UrlToUtf8(b64) {
         let s = String(b64).trim().replace(/-/g, '+').replace(/_/g, '/');
@@ -1088,13 +1119,18 @@
       function q() {
         const p = new URLSearchParams(location.search);
         const malformedFallback = extractMalformedSeekerParams();
-        const paramStart = String(p.get('startapp') || p.get('startApp') || '').trim();
+        const paramStart = String(p.get('startapp') || p.get('startApp') || p.get('start') || '').trim();
         const initStart = String(tg?.initDataUnsafe?.start_param || '').trim();
         let rawStart = paramStart;
-        if (initStart.startsWith('seekerjobs__')) {
-          if (!paramStart.startsWith('seekerjobs__') || initStart.length > paramStart.length) {
+        if (startsWithSeekerDeepLink(initStart)) {
+          if (!startsWithSeekerDeepLink(paramStart) || initStart.length > paramStart.length) {
             rawStart = initStart;
           }
+        }
+
+        if (startsWithSeekerDeepLink(rawStart)) {
+          const parsedState = queryStateFromParsedStartParam(rawStart, malformedFallback, p);
+          if (parsedState) return parsedState;
         }
 
         if (rawStart.startsWith('seekerjobs__')) {
@@ -1164,11 +1200,11 @@
       }
       function shouldAutoSearchOnBoot(state) {
         const initialParams = new URLSearchParams(initialLocationSearch);
-        const startapp = String(initialParams.get('startapp') || initialParams.get('startApp') || '').trim();
+        const startapp = String(initialParams.get('startapp') || initialParams.get('startApp') || initialParams.get('start') || '').trim();
         const qParam = String(initialParams.get('q') || '').trim();
         const initStart = String(tg?.initDataUnsafe?.start_param || '').trim();
         const hasDeepLinkPayload =
-          startapp.startsWith('seekerjobs__') || initStart.startsWith('seekerjobs__') || Boolean(qParam);
+          startsWithSeekerDeepLink(startapp) || startsWithSeekerDeepLink(initStart) || Boolean(qParam);
         const hasFilterOverrides =
           initialParams.has('from') ||
           initialParams.has('to') ||
@@ -2368,6 +2404,7 @@
       }
 
       async function boot() {
+        window.SeekerStartParam?.applyStartParamFiltersFromLocation?.({ tg });
         hydrateStateToInputs();
         renderSourcePickerOptions();
         renderCountryPickerOptions();
