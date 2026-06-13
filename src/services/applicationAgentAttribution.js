@@ -38,6 +38,24 @@ export async function resolveApplyingAgentUserId(req, clientUserId) {
 }
 
 /**
+ * Set AppliedAt when status first becomes applied (skip if already applied or client sent appliedAt).
+ * @param {Record<string, unknown>} updates
+ * @param {{ Status?: string | null, AppliedAt?: Date | string | null }} existingRow
+ * @param {Date} [now]
+ */
+export function applyAppliedAtForAppliedStatus(updates, existingRow, now = new Date()) {
+  if (updates.AppliedAt !== undefined) return;
+
+  const nextStatus = updates.Status !== undefined ? updates.Status : existingRow?.Status;
+  if (!isAppliedApplicationStatus(nextStatus)) return;
+
+  const wasApplied = isAppliedApplicationStatus(existingRow?.Status);
+  if (wasApplied) return;
+
+  updates.AppliedAt = now;
+}
+
+/**
  * Set AgentUserId when status becomes applied (or backfill when applied but unset).
  * @param {Record<string, unknown>} updates
  * @param {import('express').Request} req

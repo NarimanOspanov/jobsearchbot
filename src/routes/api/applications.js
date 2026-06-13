@@ -6,6 +6,7 @@ import { ensureUserByTelegramId } from '../../services/userService.js';
 import { assertCanAccessClient } from '../../services/agentAccessService.js';
 import {
   applyAgentUserIdForAppliedStatus,
+  applyAppliedAtForAppliedStatus,
   resolveApplyingAgentUserId,
 } from '../../services/applicationAgentAttribution.js';
 import { resumeStorage } from '../../services/resumeStorage.js';
@@ -249,6 +250,7 @@ export function createApplicationsRouter() {
         if (req.body.status !== undefined) {
           updates.Status = req.body.status ? String(req.body.status).slice(0, 50) : null;
         }
+        applyAppliedAtForAppliedStatus(updates, existing);
         await applyAgentUserIdForAppliedStatus(updates, req, existing);
         if (Object.keys(updates).length) {
           await existing.update(updates);
@@ -361,6 +363,7 @@ export function createApplicationsRouter() {
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
+      applyAppliedAtForAppliedStatus(updates, row);
       await applyAgentUserIdForAppliedStatus(updates, req, row);
       await row.update(updates);
       await row.reload();
