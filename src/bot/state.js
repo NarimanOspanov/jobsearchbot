@@ -138,3 +138,15 @@ export const applyPriorityCronHealthState = {
   lastResult: null,
   lastError: null,
 };
+
+export const agentPerformanceDigestCronHealthState = {
+  enabled: false,
+  timeZone: 'UTC',
+  targetHour: 21,
+  running: false,
+  runCount: 0,
+  lastStartedAt: null,
+  lastFinishedAt: null,
+  lastResult: null,
+  lastError: null,
+};

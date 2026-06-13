@@ -89,6 +89,15 @@ export const config = {
    * Set e.g. 10 to limit API load per tick.
    */
   applyPriorityCronMaxPages: Number.parseInt(process.env.APPLY_PRIORITY_CRON_MAX_PAGES || '0', 10) || 0,
+  /** Daily Telegram digest of agent applied-job counts (24h / 7d / 30d). */
+  agentPerformanceDigestCronEnabled:
+    String(process.env.AGENT_PERFORMANCE_DIGEST_CRON_ENABLED || 'true').toLowerCase() !== 'false',
+  /** IANA timezone for daily send hour (default 21:00). */
+  agentPerformanceDigestCronTz: getEnv('AGENT_PERFORMANCE_DIGEST_CRON_TZ') || 'UTC',
+  agentPerformanceDigestCronHour: Math.min(
+    23,
+    Math.max(0, Number.parseInt(process.env.AGENT_PERFORMANCE_DIGEST_CRON_HOUR || '21', 10) || 21)
+  ),
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',

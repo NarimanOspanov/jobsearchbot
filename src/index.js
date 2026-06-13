@@ -124,6 +124,10 @@ import { createAgentApplyPriorityJobsRouter } from './routes/api/agentApplyPrior
 import { createApplyLinkRouter } from './routes/api/applyLink.js';
 import { createNotificationsRouter } from './routes/api/notifications.js';
 import { startApplyPriorityHourlyCronIfNeeded } from './services/agentApplyPriorityCronScheduler.js';
+import {
+  runAgentPerformanceDigestCron,
+  startAgentPerformanceDigestCronIfNeeded,
+} from './services/agentPerformanceDigestCronScheduler.js';
 import { initAgentApplyPriorityQueue } from './services/agentApplyPriorityQueueService.js';
 import { startPositionApplyScreeningCronIfNeeded } from './services/positionApplyScreeningCronScheduler.js';
 
@@ -1861,6 +1865,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<i>Aliases:</i> <code>/agent_clients</code>, <code>/agent-clients</code>',
       '<code>/agent_performance</code> [days] — applied jobs report (agents: own stats; admins: all or pick in UI)',
       '<i>Alias:</i> <code>/agent-performance</code>',
+      '<code>/agent_performance_digest</code> — send applied-jobs leaderboard (24h / 7d / 30d) to all agents and admins',
+      '<i>Alias:</i> <code>/agent-performance-digest</code>',
       '',
       '<b>Web App panels</b>',
       '<code>/admin_companies</code> — remote companies list',
@@ -2034,6 +2040,40 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   };
 
   bot.hears(/^\/agent[_-]performance(?:@\w+)?(?:\s+.*)?$/i, openAgentPerformance);
+
+  const sendAgentPerformanceDigestNow = async (ctx) => {
+    try {
+      if (ctx.chat?.type !== 'private') {
+        await ctx.reply('This command is available only in private chat.');
+        return;
+      }
+      const adminIds = config.botAdminTelegramIds;
+      if (adminIds.size === 0) {
+        await ctx.reply('This command is disabled. Set BOT_ADMIN_TELEGRAM_IDS in the server environment.');
+        return;
+      }
+      const fromId = ctx.from?.id;
+      if (!fromId || !adminIds.has(fromId)) {
+        await ctx.reply('Unauthorized.');
+        return;
+      }
+      await ctx.reply('Sending agent performance digest to all agents and admins…');
+      const result = await runAgentPerformanceDigestCron(`bot:${fromId}`);
+      if (!result?.recipientCount) {
+        await ctx.reply('No recipients found (no assigned agents with Telegram chat ids).');
+        return;
+      }
+      await ctx.reply(
+        `Done. Sent to ${result.sent}/${result.recipientCount} recipients` +
+          (result.failed ? ` (${result.failed} failed).` : '.')
+      );
+    } catch (err) {
+      console.error('agent_performance_digest command failed:', err);
+      await ctx.reply('Failed to send agent performance digest. Check server logs.');
+    }
+  };
+
+  bot.hears(/^\/agent[_-]performance[_-]digest(?:@\w+)?(?:\s+.*)?$/i, sendAgentPerformanceDigestNow);
 
   bot.command('removeuser', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
@@ -2271,6 +2311,15 @@ async function main() {
       console.log('Position apply screening cron disabled (SCREENING_CRON_ENABLED=false).');
     } else if (screeningCronEarly.reason !== 'already_scheduled') {
       console.log('Position apply screening cron not started:', screeningCronEarly.reason);
+    }
+  }
+
+  const agentPerformanceDigestCronEarly = startAgentPerformanceDigestCronIfNeeded();
+  if (!agentPerformanceDigestCronEarly.started) {
+    if (agentPerformanceDigestCronEarly.reason === 'AGENT_PERFORMANCE_DIGEST_CRON_ENABLED=false') {
+      console.log('Agent performance digest cron disabled (AGENT_PERFORMANCE_DIGEST_CRON_ENABLED=false).');
+    } else if (agentPerformanceDigestCronEarly.reason !== 'already_scheduled') {
+      console.log('Agent performance digest cron not started:', agentPerformanceDigestCronEarly.reason);
     }
   }
 
