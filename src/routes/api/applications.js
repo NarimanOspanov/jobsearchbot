@@ -245,9 +245,13 @@ export function createApplicationsRouter() {
       });
       const snapshot = buildApplicationSnapshotFromBody(req.body);
       if (existing) {
-        const backfill = buildApplicationBackfillUpdates(existing, snapshot);
-        if (Object.keys(backfill).length) {
-          await existing.update(backfill);
+        const updates = buildApplicationBackfillUpdates(existing, snapshot);
+        if (req.body.status !== undefined) {
+          updates.Status = req.body.status ? String(req.body.status).slice(0, 50) : null;
+        }
+        await applyAgentUserIdForAppliedStatus(updates, req, existing);
+        if (Object.keys(updates).length) {
+          await existing.update(updates);
           await existing.reload();
         }
         return res.status(200).json(existing);
@@ -264,7 +268,7 @@ export function createApplicationsRouter() {
         Status: 'applied',
         AppliedAt: snapshot.AppliedAt,
       };
-      const applyingAgentUserId = resolveApplyingAgentUserId(req, user.Id);
+      const applyingAgentUserId = await resolveApplyingAgentUserId(req, user.Id);
       if (applyingAgentUserId) {
         createPayload.AgentUserId = applyingAgentUserId;
       }
@@ -357,8 +361,9 @@ export function createApplicationsRouter() {
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
-      applyAgentUserIdForAppliedStatus(updates, req, row);
+      await applyAgentUserIdForAppliedStatus(updates, req, row);
       await row.update(updates);
+      await row.reload();
       res.json(row);
     } catch (err) {
       console.error('PATCH /api/app/applications/:id:', err);

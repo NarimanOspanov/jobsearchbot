@@ -3503,6 +3503,7 @@
               tailoredCvUrl: generatedMaterials.tailoredCvUrl || null,
               coverLetter: generatedMaterials.coverLetter || null,
               coverLetterUrl: generatedMaterials.coverLetterUrl || null,
+              ...impersonatedAgentPayload(),
             }),
           });
           selectedApplication = updated;
