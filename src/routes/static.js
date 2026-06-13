@@ -2,42 +2,43 @@ import { Router } from 'express';
 import express from 'express';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { filtersToUrlSearchParams, parseStartParam } from '../utils/parseStartParam.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicApp = join(__dirname, '..', '..', 'public', 'app');
 
 function getStartappPayload(req) {
-  return String(req.query.startapp || req.query.startApp || '').trim();
+  return String(req.query.startapp || req.query.startApp || req.query.start || '').trim();
 }
 
-function resolveStartappEntryPage(rawStart) {
-  if (rawStart.startsWith('seekerjobs__')) return 'seeker-jobs-deeplink.html';
-  return null;
+function handleMiniAppEntry(req, res, next) {
+  const rawStart = getStartappPayload(req);
+  if (!rawStart) return next();
+
+  if (rawStart.startsWith('agentclients__')) {
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    return res.redirect(302, `/app/index.html${qs}`);
+  }
+
+  const parsed = parseStartParam(rawStart);
+  if (parsed?.kind === 'search') {
+    const qs = filtersToUrlSearchParams(parsed.filters).toString();
+    const target = qs ? `/app/seeker-jobs-deeplink?${qs}` : '/app/seeker-jobs-deeplink';
+    return res.redirect(302, target);
+  }
+
+  if (rawStart.startsWith('seekerjobs__') || rawStart.startsWith('sj2__')) {
+    return res.sendFile(join(publicApp, 'seeker-jobs-deeplink.html'));
+  }
+
+  return next();
 }
 
 export function createStaticRouter() {
   const router = Router();
 
-  router.get('/app', (req, res, next) => {
-    const rawStart = getStartappPayload(req);
-    if (rawStart.startsWith('agentclients__')) {
-      const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-      return res.redirect(302, `/app/index.html${qs}`);
-    }
-    const entryPage = resolveStartappEntryPage(rawStart);
-    if (!entryPage) return next();
-    return res.sendFile(join(publicApp, entryPage));
-  });
-  router.get('/app/', (req, res, next) => {
-    const rawStart = getStartappPayload(req);
-    if (rawStart.startsWith('agentclients__')) {
-      const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-      return res.redirect(302, `/app/index.html${qs}`);
-    }
-    const entryPage = resolveStartappEntryPage(rawStart);
-    if (!entryPage) return next();
-    return res.sendFile(join(publicApp, entryPage));
-  });
+  router.get('/app', handleMiniAppEntry);
+  router.get('/app/', handleMiniAppEntry);
   router.use('/app', express.static(publicApp));
   router.get('/app/applications', (_req, res) => res.sendFile(join(publicApp, 'applications.html')));
   router.get('/app/profile', (_req, res) => res.sendFile(join(publicApp, 'profile.html')));

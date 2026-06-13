@@ -93,6 +93,13 @@ test('production sj2 channel link startapp=sj2__23.11.260611.260613', () => {
   assert.equal(qs.get('showOnlyHighlyRelevant'), 'true');
 });
 
+test('production sj2 channel link startapp=sj2__20.11.260611.260613', () => {
+  const result = parseStartParam('sj2__20.11.260611.260613');
+  assert.equal(result?.kind, 'search');
+  assert.deepEqual(result?.filters?.skillIds, [20]);
+  assert.equal(filtersToUrlSearchParams(result.filters).get('skillIds'), '20');
+});
+
 test('production legacy seekerjobs base64 channel link (skillIds=111)', () => {
   const startapp =
     'seekerjobs__ZnJvbT0yMDI2LTA2LTExJnRvPTIwMjYtMDYtMTMmc2tpbGxJZHM9MTExJnNvdXJjZUlkcz0xLDIsNCZzaG93T25seUhpZ2hseVJlbGV2YW50PXRydWU';
@@ -109,4 +116,12 @@ test('production legacy seekerjobs base64 channel link (skillIds=111)', () => {
   assert.equal(qs.get('skillIds'), '111');
   assert.equal(qs.get('sourceIds'), '1,2,4');
   assert.equal(qs.get('showOnlyHighlyRelevant'), 'true');
+});
+
+test('production legacy seekerjobs base64 channel link (skillIds=64)', () => {
+  const startapp =
+    'seekerjobs__ZnJvbT0yMDI2LTA2LTExJnRvPTIwMjYtMDYtMTMmc2tpbGxJZHM9NjQmc291cmNlSWRzPTEsMiw0JnNob3dPbmx5SGlnaGx5UmVsZXZhbnQ9dHJ1ZQ';
+  const result = parseStartParam(startapp);
+  assert.equal(result?.kind, 'search');
+  assert.deepEqual(result?.filters?.skillIds, [64]);
 });
