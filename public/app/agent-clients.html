@@ -3218,18 +3218,20 @@
         const cover = document.getElementById('coverPreview');
         const coverBlock = document.getElementById('coverLetterBlock');
         const tailoredUrl = String(generatedMaterials?.tailoredCvUrl || selectedApplication?.TailoredCVURL || '').trim();
+        const coverLetterUrl = String(generatedMaterials?.coverLetterUrl || selectedApplication?.CoverLetterUrl || '').trim();
         const coverText = String(
           generatedMaterials?.coverLetter ?? selectedApplication?.CoverLetter ?? ''
         ).trim();
-        if (!tailoredUrl && !coverText) {
+        if (!tailoredUrl && !coverLetterUrl && !coverText) {
           links.innerHTML = '';
           cover.value = '';
           if (coverBlock) coverBlock.style.display = 'none';
           return;
         }
-        links.innerHTML = tailoredUrl
-          ? `<a href="${esc(tailoredUrl)}" download target="_blank" rel="noopener noreferrer">Download Tailored CV</a>`
-          : '';
+        const linkParts = [];
+        if (tailoredUrl) linkParts.push(`<a href="${esc(tailoredUrl)}" download target="_blank" rel="noopener noreferrer">Download Tailored CV</a>`);
+        if (coverLetterUrl) linkParts.push(`<a href="${esc(coverLetterUrl)}" download target="_blank" rel="noopener noreferrer">Download Cover Letter</a>`);
+        links.innerHTML = linkParts.join('');
         cover.value = coverText;
         if (coverBlock) coverBlock.style.display = coverText ? '' : 'none';
       }
@@ -3241,9 +3243,13 @@
         const coverText = String(
           generatedMaterials?.coverLetter ?? selectedApplication?.CoverLetter ?? ''
         ).trim();
+        const coverLetterUrl = String(
+          generatedMaterials?.coverLetterUrl || selectedApplication?.CoverLetterUrl || ''
+        ).trim();
         const payload = {};
         if (tailoredUrl) payload.tailoredCvUrl = tailoredUrl;
         if (coverText) payload.coverLetter = coverText;
+        if (coverLetterUrl) payload.coverLetterUrl = coverLetterUrl;
         const screenshotUrl = String(selectedApplication?.ScreenshotArtifactURL || '').trim();
         if (screenshotUrl) payload.screenshotArtifactUrl = screenshotUrl;
         return payload;
@@ -3338,7 +3344,7 @@
             }),
           });
           selectedApplication = updated;
-          if (artifacts.tailoredCvUrl || artifacts.coverLetter) {
+          if (artifacts.tailoredCvUrl || artifacts.coverLetter || artifacts.coverLetterUrl) {
             generatedMaterials = null;
           }
           await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
@@ -3486,6 +3492,7 @@
           generatedMaterials = {
             tailoredCvUrl: tailored.tailoredCvUrl,
             coverLetter: cover.coverLetter,
+            coverLetterUrl: cover.coverLetterUrl || null,
           };
           // Persist generated artifacts immediately so they are not lost
           // if the agent closes modal/page before changing status.
@@ -3495,6 +3502,7 @@
             body: JSON.stringify({
               tailoredCvUrl: generatedMaterials.tailoredCvUrl || null,
               coverLetter: generatedMaterials.coverLetter || null,
+              coverLetterUrl: generatedMaterials.coverLetterUrl || null,
             }),
           });
           selectedApplication = updated;
