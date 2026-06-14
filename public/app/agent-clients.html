@@ -520,6 +520,31 @@
         width: 100%;
         min-width: 0;
       }
+      .clients-column-nav {
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .clients-column-nav-link {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #0f1730;
+        color: var(--text);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .clients-column-nav-link:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
       .clients-column-toggle-btn {
         width: 28px;
         height: 28px;
@@ -696,6 +721,9 @@
             <label>View as agent
               <select id="agentPickerSel"></select>
             </label>
+          </div>
+          <div class="clients-column-nav">
+            <a id="agentPerformanceNavLink" class="clients-column-nav-link" href="/app/agent-performance">Agent performance</a>
           </div>
           <div class="layout-col-body">
             <div id="pendingHumanSection" class="pending-human-block" style="display:none">
@@ -1184,6 +1212,13 @@
         if (!isBotAdminUser) return '';
         const aid = String(q().agentUserId || '').trim();
         return aid ? `?agentUserId=${encodeURIComponent(aid)}` : '';
+      }
+      function agentPerformancePageUrl() {
+        return `${API_BASE}/app/agent-performance${agentQueryPrefix()}`;
+      }
+      function syncAgentPerformanceNavLink() {
+        const link = document.getElementById('agentPerformanceNavLink');
+        if (link) link.href = agentPerformancePageUrl();
       }
       function impersonatedAgentPayload() {
         if (!isBotAdminUser) return {};
@@ -2007,6 +2042,7 @@
           setQ({ agentUserId: agents[0].id });
           sel.value = String(agents[0].id);
         }
+        syncAgentPerformanceNavLink();
       }
 
       function formatPendingClientLabel(client) {
@@ -3555,6 +3591,7 @@
         renderStatusPickerOptions();
         renderClientWorkAuthPickerOptions();
         if (isBotAdminUser) await loadAgents();
+        syncAgentPerformanceNavLink();
         await Promise.all([loadPendingHumanRequests(), loadClients(), loadSkills()]);
         const s = q();
         renderSelectedUserInfo();
@@ -3755,6 +3792,7 @@
       document.getElementById('agentPickerSel')?.addEventListener('change', () => {
         const agentUserId = document.getElementById('agentPickerSel').value;
         setQ({ agentUserId, seekerId: '', jobId: '', page: 1 });
+        syncAgentPerformanceNavLink();
         loadClients().catch((e) => setMsg('globalMsg', e.message, true));
       });
       document.getElementById('statusSel').addEventListener('change', () => {
