@@ -13,6 +13,8 @@ const COPY = {
     greeting: (firstName) => `Hi, ${firstName}!`,
     summary: (count) =>
       `In last day we have applied to ${count} position${count === 1 ? '' : 's'} for you. We tailored resumes and cover letters for each application.`,
+    listHeader: 'Applied jobs:',
+    moreItems: (count) => `...and ${count} more.`,
     cta: 'Check report with details here',
     button: 'Open daily report',
   },
@@ -21,6 +23,8 @@ const COPY = {
     greeting: (firstName) => `Привет, ${firstName}!`,
     summary: (count) =>
       `За последний день мы откликнулись для вас на ${count} ваканси${count % 10 === 1 && count % 100 !== 11 ? 'ю' : 'й'}. Для каждого отклика мы подготовили адаптированные резюме и сопроводительные письма.`,
+    listHeader: 'Список откликов:',
+    moreItems: (count) => `...и еще ${count}.`,
     cta: 'Подробный отчет по кнопке ниже',
     button: 'Открыть дневной отчет',
   },
@@ -142,10 +146,27 @@ export async function fetchClientDailyReportRows(userId, { since = null } = {}) 
   });
 }
 
-export function formatClientDailyReportMessage({ firstName, language, appliedCount }) {
+function buildAppliedJobsLines(rows, copy) {
+  const items = Array.isArray(rows) ? rows : [];
+  if (!items.length) return [];
+  const maxItems = 12;
+  const visible = items.slice(0, maxItems);
+  const lines = visible.map((row) => {
+    const title = String(row?.vacancyTitle || '').trim() || '—';
+    const company = String(row?.companyName || '').trim() || '—';
+    return `• ${title} — ${company}`;
+  });
+  if (items.length > maxItems) lines.push(copy.moreItems(items.length - maxItems));
+  return [copy.listHeader, ...lines];
+}
+
+export function formatClientDailyReportMessage({ firstName, language, appliedCount, rows = [] }) {
   const copy = copyForLanguage(resolveBotLanguage(language));
   const greeting = firstName ? copy.greeting(firstName) : copy.noNameGreeting;
-  return [greeting, '', copy.summary(appliedCount), copy.cta].join('\n');
+  const jobsLines = buildAppliedJobsLines(rows, copy);
+  return [greeting, '', copy.summary(appliedCount), ...(jobsLines.length ? ['', ...jobsLines] : []), '', copy.cta].join(
+    '\n'
+  );
 }
 
 function buildClientDailyReportReplyMarkup(language) {
@@ -203,6 +224,7 @@ export async function sendClientDailyReportDigest(options = {}) {
         firstName: firstNameFromUser(recipient),
         language: recipient.language,
         appliedCount,
+        rows,
       });
       const replyMarkup = buildClientDailyReportReplyMarkup(recipient.language);
       if (!dryRun) {

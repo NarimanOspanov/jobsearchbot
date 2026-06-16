@@ -11,9 +11,15 @@ test('formatClientDailyReportMessage renders English greeting with name', () => 
     firstName: 'Nikita',
     language: 'en',
     appliedCount: 25,
+    rows: [
+      { vacancyTitle: 'Senior Fullstack Developer', companyName: 'Acme' },
+      { vacancyTitle: 'Backend Engineer', companyName: 'Globex' },
+    ],
   });
   assert.match(message, /Hi, Nikita!/);
   assert.match(message, /applied to 25 positions/);
+  assert.match(message, /Applied jobs:/);
+  assert.match(message, /Senior Fullstack Developer — Acme/);
 });
 
 test('formatClientDailyReportMessage renders Russian copy without name', () => {
@@ -21,9 +27,12 @@ test('formatClientDailyReportMessage renders Russian copy without name', () => {
     firstName: '',
     language: 'ru',
     appliedCount: 1,
+    rows: [{ vacancyTitle: 'Frontend Developer', companyName: 'Ромашка' }],
   });
   assert.match(message, /Привет!/);
   assert.match(message, /За последний день/);
+  assert.match(message, /Список откликов:/);
+  assert.match(message, /Frontend Developer — Ромашка/);
 });
 
 test('delivery mode helpers are consistent with config', () => {
