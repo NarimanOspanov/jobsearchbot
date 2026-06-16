@@ -41,6 +41,7 @@ export function createStaticRouter() {
   router.get('/app/', handleMiniAppEntry);
   router.use('/app', express.static(publicApp));
   router.get('/app/applications', (_req, res) => res.sendFile(join(publicApp, 'applications.html')));
+  router.get('/app/daily-report', (_req, res) => res.sendFile(join(publicApp, 'daily-report.html')));
   router.get('/app/profile', (_req, res) => res.sendFile(join(publicApp, 'profile.html')));
   router.get('/app/companies', (_req, res) => res.sendFile(join(publicApp, 'companies.html')));
   router.get('/app/seeker-jobs', (_req, res) => res.sendFile(join(publicApp, 'seeker-jobs.html')));

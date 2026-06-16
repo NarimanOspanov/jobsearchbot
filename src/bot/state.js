@@ -150,3 +150,15 @@ export const agentPerformanceDigestCronHealthState = {
   lastResult: null,
   lastError: null,
 };
+
+export const clientDailyReportCronHealthState = {
+  enabled: false,
+  timeZone: 'UTC',
+  targetHour: 20,
+  running: false,
+  runCount: 0,
+  lastStartedAt: null,
+  lastFinishedAt: null,
+  lastResult: null,
+  lastError: null,
+};

@@ -15,6 +15,7 @@ import {
   toScoreOrNullOrUndefined,
   toStringOrUndefined,
 } from '../../utils/validators.js';
+import { fetchClientDailyReportRows } from '../../services/clientDailyReportService.js';
 
 function parseImpersonateAgentUserId(req) {
   const n = Number.parseInt(String(req.query.agentUserId || req.body?.agentUserId || ''), 10);
@@ -158,6 +159,31 @@ export function createApplicationsRouter() {
     } catch (err) {
       console.error('GET /api/app/applications:', err);
       res.status(500).json({ error: 'Failed to load applications' });
+    }
+  });
+
+  router.get('/api/app/applications/daily-report', miniAppAuth, async (req, res) => {
+    try {
+      const period = String(req.query.period || '24h').trim().toLowerCase();
+      const hours = period === '24h' ? 24 : 24;
+      const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+      const { user } = await ensureUserByTelegramId(
+        req.miniAppUser.id,
+        req.miniAppUser.username ?? null,
+        req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+        req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+      );
+      const rows = await fetchClientDailyReportRows(user.Id, { since });
+      return res.json({
+        ok: true,
+        period: '24h',
+        since: since.toISOString(),
+        count: rows.length,
+        rows,
+      });
+    } catch (err) {
+      console.error('GET /api/app/applications/daily-report:', err);
+      return res.status(500).json({ error: 'Failed to load daily report applications' });
     }
   });
 

@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Daily Report</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="./tma-i18n.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --border: #273357;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 14px; display: grid; gap: 12px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+      h1 { margin: 0; font-size: 20px; }
+      .muted { color: var(--muted); }
+      .table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th, td { border-bottom: 1px solid var(--border); padding: 10px; text-align: left; vertical-align: top; }
+      th { font-size: 12px; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+      tr { cursor: pointer; }
+      tr:hover { background: rgba(79, 124, 255, 0.08); }
+      .pill { border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; font-size: 12px; color: var(--muted); }
+      .modal { position: fixed; inset: 0; background: rgba(5, 10, 20, 0.78); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 999; }
+      .modal.on { display: flex; }
+      .modal-card { width: min(980px, 100%); max-height: 90vh; background: var(--card); border: 1px solid var(--border); border-radius: 12px; display: grid; grid-template-rows: auto 1fr; }
+      .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); padding: 10px 12px; }
+      .modal-body { padding: 12px; overflow: auto; display: grid; gap: 10px; }
+      .btn { border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 8px; padding: 6px 10px; cursor: pointer; text-decoration: none; display: inline-block; }
+      .btn[disabled] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+      .artifacts { display: flex; gap: 8px; flex-wrap: wrap; }
+      .summary { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: #10182d; white-space: pre-wrap; margin: 0; }
+      #screenshotPreview { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; display: none; }
+      .empty { padding: 16px; text-align: center; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1 id="titleText">Daily report</h1>
+        <div id="subtitleText" class="muted" style="margin-top:6px"></div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th id="thAppliedAt">Applied at</th>
+                <th id="thTitle">Title</th>
+                <th id="thCompany">Company</th>
+                <th id="thLocation">Location</th>
+                <th id="thSource">Source</th>
+              </tr>
+            </thead>
+            <tbody id="rowsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="jobModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="jobModalTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="jobModalTitle">Job details</strong>
+          <button class="btn" id="closeModalBtn" type="button">Close</button>
+        </div>
+        <div class="modal-body">
+          <div><strong id="jobTitle"></strong></div>
+          <div class="muted" id="jobCompanyLine"></div>
+          <div class="muted" id="jobAppliedAtLine"></div>
+          <div class="muted" id="jobApplyTypeLine"></div>
+          <div class="artifacts">
+            <a id="tailoredCvLink" class="btn" target="_blank" rel="noopener noreferrer">Tailored CV</a>
+            <button id="coverLetterBtn" class="btn" type="button">Cover letter</button>
+            <a id="coverLetterUrlLink" class="btn" target="_blank" rel="noopener noreferrer">Cover letter file</a>
+            <a id="screenshotLink" class="btn" target="_blank" rel="noopener noreferrer">Screenshot</a>
+          </div>
+          <img id="screenshotPreview" alt="Application screenshot" />
+          <div>
+            <strong id="summaryLabel">Summary</strong>
+            <pre id="summaryText" class="summary"></pre>
+          </div>
+          <div>
+            <strong id="coverLabel">Cover letter</strong>
+            <pre id="coverLetterText" class="summary"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const STRINGS = {
+        en: {
+          pageTitle: 'Daily report',
+          subtitle: 'Applications sent in the last 24 hours.',
+          thAppliedAt: 'Applied at',
+          thTitle: 'Title',
+          thCompany: 'Company',
+          thLocation: 'Location',
+          thSource: 'Source',
+          empty: 'No applied jobs in the selected period.',
+          modalTitle: 'Job details',
+          close: 'Close',
+          tailoredCv: 'Tailored CV',
+          coverLetter: 'Cover letter',
+          coverLetterFile: 'Cover letter file',
+          screenshot: 'Screenshot',
+          summary: 'Summary',
+          appliedAt: 'Applied at',
+          applyType: 'Apply type',
+          noSummary: 'No summary.',
+          noCover: 'No cover letter.',
+          noLocation: '—',
+          noData: '—',
+          loadError: 'Failed to load daily report',
+        },
+        ru: {
+          pageTitle: 'Дневной отчет',
+          subtitle: 'Отклики за последние 24 часа.',
+          thAppliedAt: 'Время отклика',
+          thTitle: 'Вакансия',
+          thCompany: 'Компания',
+          thLocation: 'Локация',
+          thSource: 'Источник',
+          empty: 'За выбранный период нет откликов.',
+          modalTitle: 'Детали вакансии',
+          close: 'Закрыть',
+          tailoredCv: 'Адаптированное резюме',
+          coverLetter: 'Сопроводительное письмо',
+          coverLetterFile: 'Файл письма',
+          screenshot: 'Скриншот',
+          summary: 'Кратко о вакансии',
+          appliedAt: 'Время отклика',
+          applyType: 'Тип отклика',
+          noSummary: 'Нет краткого описания.',
+          noCover: 'Нет сопроводительного письма.',
+          noLocation: '—',
+          noData: '—',
+          loadError: 'Не удалось загрузить дневной отчет',
+        },
+      };
+
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+      const lang = window.TmaI18n ? window.TmaI18n.resolveLang(tg, new URLSearchParams(window.location.search)) : 'en';
+      const t = (key, params) => (window.TmaI18n ? window.TmaI18n.t(STRINGS, lang, key, params) : key);
+
+      let rows = [];
+
+      function api(path, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        if (tg?.initData) headers['x-init-data'] = tg.initData;
+        return fetch(path, { ...options, headers }).then(async (response) => {
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        });
+      }
+
+      function esc(value) {
+        return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function parseMetaJson(meta) {
+        if (!meta) return null;
+        if (typeof meta === 'object') return meta;
+        try { return JSON.parse(meta); } catch { return null; }
+      }
+
+      function fmtDateTime(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return t('noData');
+        return date.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US');
+      }
+
+      function applyStaticUi() {
+        document.title = t('pageTitle');
+        document.getElementById('titleText').textContent = t('pageTitle');
+        document.getElementById('subtitleText').textContent = t('subtitle');
+        document.getElementById('thAppliedAt').textContent = t('thAppliedAt');
+        document.getElementById('thTitle').textContent = t('thTitle');
+        document.getElementById('thCompany').textContent = t('thCompany');
+        document.getElementById('thLocation').textContent = t('thLocation');
+        document.getElementById('thSource').textContent = t('thSource');
+        document.getElementById('jobModalTitle').textContent = t('modalTitle');
+        document.getElementById('closeModalBtn').textContent = t('close');
+        document.getElementById('tailoredCvLink').textContent = t('tailoredCv');
+        document.getElementById('coverLetterBtn').textContent = t('coverLetter');
+        document.getElementById('coverLetterUrlLink').textContent = t('coverLetterFile');
+        document.getElementById('screenshotLink').textContent = t('screenshot');
+        document.getElementById('summaryLabel').textContent = t('summary');
+        document.getElementById('coverLabel').textContent = t('coverLetter');
+      }
+
+      function renderRows() {
+        const body = document.getElementById('rowsBody');
+        if (!rows.length) {
+          body.innerHTML = `<tr><td colspan="5" class="empty">${esc(t('empty'))}</td></tr>`;
+          return;
+        }
+        body.innerHTML = rows
+          .map((row) => {
+            const meta = parseMetaJson(row.meta);
+            const location = meta?.location || t('noLocation');
+            return `<tr data-row-id="${esc(row.id)}">
+              <td>${esc(fmtDateTime(row.appliedAt))}</td>
+              <td>${esc(row.vacancyTitle || t('noData'))}</td>
+              <td>${esc(row.companyName || t('noData'))}</td>
+              <td>${esc(location)}</td>
+              <td><span class="pill">${esc(row.source || t('noData'))}</span></td>
+            </tr>`;
+          })
+          .join('');
+      }
+
+      function closeModal() {
+        document.getElementById('jobModal').classList.remove('on');
+      }
+
+      function toggleButton(el, on, href = '') {
+        if (!el) return;
+        if (el.tagName === 'A') {
+          if (on) {
+            el.removeAttribute('disabled');
+            el.href = href;
+          } else {
+            el.setAttribute('disabled', 'disabled');
+            el.removeAttribute('href');
+          }
+          return;
+        }
+        el.disabled = !on;
+      }
+
+      function openModalById(id) {
+        const row = rows.find((item) => String(item.id) === String(id));
+        if (!row) return;
+        const meta = parseMetaJson(row.meta);
+        document.getElementById('jobTitle').textContent = row.vacancyTitle || t('noData');
+        document.getElementById('jobCompanyLine').textContent =
+          `${row.companyName || t('noData')} · ${meta?.location || t('noLocation')} · ${row.source || t('noData')}`;
+        document.getElementById('jobAppliedAtLine').textContent = `${t('appliedAt')}: ${fmtDateTime(row.appliedAt)}`;
+        document.getElementById('jobApplyTypeLine').textContent = `${t('applyType')}: ${row.applyType || t('noData')}`;
+        document.getElementById('summaryText').textContent = String(meta?.shortSummary || '').trim() || t('noSummary');
+        document.getElementById('coverLetterText').textContent = String(row.coverLetter || '').trim() || t('noCover');
+
+        const tailoredCvLink = document.getElementById('tailoredCvLink');
+        const coverLetterUrlLink = document.getElementById('coverLetterUrlLink');
+        const screenshotLink = document.getElementById('screenshotLink');
+        const coverLetterBtn = document.getElementById('coverLetterBtn');
+        const screenshotPreview = document.getElementById('screenshotPreview');
+
+        toggleButton(tailoredCvLink, Boolean(row.tailoredCvUrl), row.tailoredCvUrl || '');
+        toggleButton(coverLetterUrlLink, Boolean(row.coverLetterUrl), row.coverLetterUrl || '');
+        toggleButton(screenshotLink, Boolean(row.screenshotArtifactUrl), row.screenshotArtifactUrl || '');
+        toggleButton(coverLetterBtn, Boolean(row.coverLetter));
+        coverLetterBtn.onclick = () => {
+          const text = String(row.coverLetter || '').trim() || t('noCover');
+          document.getElementById('coverLetterText').textContent = text;
+        };
+
+        if (row.screenshotArtifactUrl) {
+          screenshotPreview.src = row.screenshotArtifactUrl;
+          screenshotPreview.style.display = '';
+        } else {
+          screenshotPreview.removeAttribute('src');
+          screenshotPreview.style.display = 'none';
+        }
+
+        document.getElementById('jobModal').classList.add('on');
+      }
+
+      async function load() {
+        applyStaticUi();
+        try {
+          const payload = await api('/api/app/applications/daily-report?period=24h');
+          rows = Array.isArray(payload?.rows) ? payload.rows : [];
+          renderRows();
+        } catch (err) {
+          const body = document.getElementById('rowsBody');
+          body.innerHTML = `<tr><td colspan="5" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
+        }
+      }
+
+      document.getElementById('rowsBody').addEventListener('click', (event) => {
+        const row = event.target.closest('tr[data-row-id]');
+        if (!row) return;
+        openModalById(row.getAttribute('data-row-id'));
+      });
+      document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+      document.getElementById('jobModal').addEventListener('click', (event) => {
+        if (event.target.id === 'jobModal') closeModal();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeModal();
+      });
+
+      load();
+    </script>
+  </body>
+</html>

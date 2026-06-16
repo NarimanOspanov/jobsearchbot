@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { runtimeBot, screeningCronHealthState, agentPerformanceDigestCronHealthState } from '../../bot/state.js';
+import {
+  runtimeBot,
+  screeningCronHealthState,
+  agentPerformanceDigestCronHealthState,
+  clientDailyReportCronHealthState,
+} from '../../bot/state.js';
 import { screeningCronSecretAuth } from '../../middleware/cronSecretAuth.js';
 import {
   buildScreeningJobsUi,
@@ -12,6 +17,7 @@ import {
   initPositionApplyScreeningQueue,
 } from '../../services/positionApplyScreeningQueueService.js';
 import { runAgentPerformanceDigestCron } from '../../services/agentPerformanceDigestCronScheduler.js';
+import { runClientDailyReportCron } from '../../services/clientDailyReportCronScheduler.js';
 
 function parseRunOptions(req) {
   const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || req.body?.limit || '50'), 10) || 50));
@@ -122,6 +128,28 @@ export function createCronRouter() {
 
   router.post('/api/cron/agent-performance-digest/run', screeningCronSecretAuth, runAgentPerformanceDigest);
   router.get('/api/cron/agent-performance-digest/run', screeningCronSecretAuth, runAgentPerformanceDigest);
+
+  router.get('/api/cron/client-daily-report/status', screeningCronSecretAuth, async (_req, res) => {
+    return res.json({
+      ok: true,
+      telegramReady: Boolean(runtimeBot.telegram),
+      cronHealth: clientDailyReportCronHealthState,
+    });
+  });
+
+  const runClientDailyReport = async (req, res) => {
+    try {
+      const requestedBy = req.query.requestedBy || req.body?.requestedBy || 'cron-manual';
+      const result = await runClientDailyReportCron(String(requestedBy));
+      return res.json({ ok: true, telegramReady: Boolean(runtimeBot.telegram), ...result });
+    } catch (err) {
+      console.error('client-daily-report run:', err);
+      return res.status(500).json({ error: 'Failed to send client daily report', message: err?.message });
+    }
+  };
+
+  router.post('/api/cron/client-daily-report/run', screeningCronSecretAuth, runClientDailyReport);
+  router.get('/api/cron/client-daily-report/run', screeningCronSecretAuth, runClientDailyReport);
 
   return router;
 }

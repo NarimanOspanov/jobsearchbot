@@ -128,6 +128,10 @@ import {
   runAgentPerformanceDigestCron,
   startAgentPerformanceDigestCronIfNeeded,
 } from './services/agentPerformanceDigestCronScheduler.js';
+import {
+  runClientDailyReportCron,
+  startClientDailyReportCronIfNeeded,
+} from './services/clientDailyReportCronScheduler.js';
 import { initAgentApplyPriorityQueue } from './services/agentApplyPriorityQueueService.js';
 import { startPositionApplyScreeningCronIfNeeded } from './services/positionApplyScreeningCronScheduler.js';
 
@@ -197,6 +201,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const publisherStatsUrl = appBaseUrl ? `${appBaseUrl}/app/publisher-stats` : '';
   const conversionStatsUrl = appBaseUrl ? `${appBaseUrl}/app/conversion-stats` : '';
   const agentPerformanceUrl = appBaseUrl ? `${appBaseUrl}/app/agent-performance` : '';
+  const dailyReportUrl = appBaseUrl ? `${appBaseUrl}/app/daily-report?period=24h` : '';
   const cvScoreUrl = appBaseUrl ? `${appBaseUrl}/app/cvscore` : '';
   const canUseSeekerJobsWebApp = isValidTelegramWebAppUrl(seekerJobsUrl);
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
@@ -214,6 +219,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUsePublisherStatsWebApp = isValidTelegramWebAppUrl(publisherStatsUrl);
   const canUseConversionStatsWebApp = isValidTelegramWebAppUrl(conversionStatsUrl);
   const canUseAgentPerformanceWebApp = isValidTelegramWebAppUrl(agentPerformanceUrl);
+  const canUseDailyReportWebApp = isValidTelegramWebAppUrl(dailyReportUrl);
   const canUseCvScoreWebApp = isValidTelegramWebAppUrl(cvScoreUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const notSubscribedImagePath = join(__dirname, '..', 'not_subscribed.png');
@@ -1867,6 +1873,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<i>Alias:</i> <code>/agent-performance</code>',
       '<code>/agent_performance_digest</code> — send applied-jobs leaderboard (24h / 7d / 30d) to all agents and admins',
       '<i>Alias:</i> <code>/agent-performance-digest</code>',
+      '<code>/client_daily_report</code> — send daily applied-jobs digest to clients',
+      '<i>Alias:</i> <code>/client-daily-report</code>',
       '',
       '<b>Web App panels</b>',
       '<code>/admin_companies</code> — remote companies list',
@@ -2074,6 +2082,35 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   };
 
   bot.hears(/^\/agent[_-]performance[_-]digest(?:@\w+)?(?:\s+.*)?$/i, sendAgentPerformanceDigestNow);
+
+  const sendClientDailyReportNow = async (ctx) => {
+    try {
+      const ok = await ensurePrivateAdminForHiddenCommand(ctx, '/client_daily_report');
+      if (!ok) return;
+      await ctx.reply('Sending client daily report digest…');
+      const fromId = Number(ctx.from?.id || 0);
+      const result = await runClientDailyReportCron(`bot:${fromId || 'admin'}`);
+      const mode = config.clientDailyReportDeliveryMode === 'all' ? 'all clients' : 'test client only';
+      await ctx.reply(
+        `Done (${mode}). Sent to ${result.sent}/${result.recipientCount} recipient(s)` +
+          (result.skippedNoApplications ? `, skipped ${result.skippedNoApplications} with no applications` : '') +
+          (result.failed ? `, failed ${result.failed}.` : '.')
+      );
+      if (canUseDailyReportWebApp) {
+        await ctx.reply('Open daily report preview:', {
+          reply_markup: {
+            inline_keyboard: [[{ text: 'Open daily report', web_app: { url: dailyReportUrl } }]],
+          },
+        });
+      }
+    } catch (err) {
+      console.error('client_daily_report command failed:', err);
+      await ctx.reply('Failed to send client daily report digest. Check server logs.');
+    }
+  };
+
+  bot.command('client_daily_report', sendClientDailyReportNow);
+  bot.hears(/^\/client[_-]daily[_-]report(?:@\w+)?(?:\s+.*)?$/i, sendClientDailyReportNow);
 
   bot.command('removeuser', async (ctx) => {
     if (ctx.chat?.type !== 'private') {
@@ -2320,6 +2357,15 @@ async function main() {
       console.log('Agent performance digest cron disabled (AGENT_PERFORMANCE_DIGEST_CRON_ENABLED=false).');
     } else if (agentPerformanceDigestCronEarly.reason !== 'already_scheduled') {
       console.log('Agent performance digest cron not started:', agentPerformanceDigestCronEarly.reason);
+    }
+  }
+
+  const clientDailyReportCronEarly = startClientDailyReportCronIfNeeded();
+  if (!clientDailyReportCronEarly.started) {
+    if (clientDailyReportCronEarly.reason === 'CLIENT_DAILY_REPORT_CRON_ENABLED=false') {
+      console.log('Client daily report cron disabled (CLIENT_DAILY_REPORT_CRON_ENABLED=false).');
+    } else if (clientDailyReportCronEarly.reason !== 'already_scheduled') {
+      console.log('Client daily report cron not started:', clientDailyReportCronEarly.reason);
     }
   }
 

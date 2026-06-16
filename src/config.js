@@ -98,6 +98,25 @@ export const config = {
     23,
     Math.max(0, Number.parseInt(process.env.AGENT_PERFORMANCE_DIGEST_CRON_HOUR || '21', 10) || 21)
   ),
+  /** Daily Telegram digest for clients with last-24h applied job report. */
+  clientDailyReportCronEnabled:
+    String(process.env.CLIENT_DAILY_REPORT_CRON_ENABLED || 'true').toLowerCase() !== 'false',
+  /** IANA timezone for daily send hour (default 20:00). */
+  clientDailyReportCronTz: getEnv('CLIENT_DAILY_REPORT_CRON_TZ') || 'UTC',
+  clientDailyReportCronHour: Math.min(
+    23,
+    Math.max(0, Number.parseInt(process.env.CLIENT_DAILY_REPORT_CRON_HOUR || '20', 10) || 20)
+  ),
+  /**
+   * Delivery mode:
+   * - test_only: send only to CLIENT_DAILY_REPORT_TEST_CHAT_ID (default)
+   * - all: send to all eligible clients
+   */
+  clientDailyReportDeliveryMode: String(process.env.CLIENT_DAILY_REPORT_DELIVERY_MODE || 'test_only')
+    .trim()
+    .toLowerCase(),
+  /** Test target Telegram chat id (used when delivery mode is test_only). */
+  clientDailyReportTestChatId: Number.parseInt(getEnv('CLIENT_DAILY_REPORT_TEST_CHAT_ID') || '0', 10) || 0,
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',
