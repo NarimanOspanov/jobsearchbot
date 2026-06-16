@@ -111,6 +111,7 @@ export function mapUserToAgentClientPayload(u) {
     isBlocked: !!u.IsBlocked,
     resumeUrl: u.ResumeURL || null,
     comment: u.Comment ?? null,
+    note: u.Note ?? null,
     skills: Array.isArray(u.skills) ? u.skills : [],
     workAuthorizationCountries: u.WorkAuthorizationCountries || '',
     searchMode: u.SearchMode || 'not_urgent',

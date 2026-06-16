@@ -91,6 +91,7 @@ function mapAssignmentRow(row) {
 }
 
 const CLIENT_COMMENT_MAX_LENGTH = 4000;
+const CLIENT_NOTE_MAX_LENGTH = 4000;
 
 function parseImpersonateAgentUserId(req) {
   const n = Number.parseInt(String(req.query.agentUserId || req.body?.agentUserId || ''), 10);
@@ -448,6 +449,19 @@ export function createAgentClientsRouter() {
           }
           updates.Comment = comment;
         }
+        if ('note' in req.body) {
+          let note = null;
+          if (req.body.note != null) {
+            const raw = String(req.body.note).trim();
+            if (raw.length > CLIENT_NOTE_MAX_LENGTH) {
+              return res.status(400).json({
+                error: `note must be at most ${CLIENT_NOTE_MAX_LENGTH} characters`,
+              });
+            }
+            note = raw || null;
+          }
+          updates.Note = note;
+        }
         if ('searchMode' in req.body) {
           const searchMode = toSearchModeOrUndefined(req.body.searchMode);
           if (searchMode === undefined) {
@@ -481,6 +495,7 @@ export function createAgentClientsRouter() {
         return res.json({
           ok: true,
           comment: client.Comment ?? null,
+          note: client.Note ?? null,
           searchMode: client.SearchMode || 'not_urgent',
           workAuthorizationCountries: client.WorkAuthorizationCountries || '',
           skills: Array.isArray(client.skills) ? client.skills : [],

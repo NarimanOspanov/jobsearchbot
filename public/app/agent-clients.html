@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Agent clients</title>
+    <!-- build: client-note-v2 -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       :root {
@@ -35,6 +36,25 @@
       th { color: var(--muted); font-weight: 600; }
       #jobsBody tr { cursor: pointer; }
       #jobsBody tr:hover { background: rgba(79, 124, 255, 0.08); }
+      #jobsBody tr.jobs-skeleton-row { cursor: default; pointer-events: none; }
+      #jobsBody tr.jobs-skeleton-row:hover { background: transparent; }
+      .skeleton-line {
+        background: #222222;
+        border-radius: 4px;
+        position: relative;
+        overflow: hidden;
+      }
+      .skeleton-line::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
+        animation: jobsTableShimmer 1.5s infinite;
+      }
+      @keyframes jobsTableShimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+      }
       .ok { color: var(--ok); }
       .bad { color: var(--bad); }
       .layout {
@@ -171,6 +191,14 @@
       .client-comment-label { display: block; }
       .client-comment-label .k { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
       .client-comment-block textarea { min-height: 88px; }
+      .user-info-grid .item--full {
+        grid-column: 1 / -1;
+      }
+      .client-note-block textarea {
+        width: 100%;
+        min-height: 72px;
+        margin-top: 4px;
+      }
       .client-resume-block { margin: 12px 0; }
       .client-resume-reupload { margin-top: 12px; margin-bottom: 12px; }
       .client-resume-block .k { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
@@ -354,6 +382,19 @@
       }
       .user-info-tab-panel { display: block; }
       .user-info-tab-panel.is-hidden { display: none; }
+      .user-info-tab-panel[data-user-tab-panel="profile"]:not(.is-hidden),
+      .user-info-tab-panel[data-user-tab-panel="resume"]:not(.is-hidden),
+      .user-info-tab-panel[data-user-tab-panel="preferences"]:not(.is-hidden) {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding-right: 2px;
+      }
+      .client-note-block {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--border);
+      }
       #userInfoSection {
         flex: 1;
         min-height: 0;
@@ -1020,8 +1061,8 @@
           </div>
           <div id="jobNotesBlock" class="job-detail" style="display:none;margin-top:12px">
             <div class="skills-block">
-              <h4>Agent note</h4>
-              <textarea id="notesText" aria-label="Agent note"></textarea>
+              <h4>Application notes</h4>
+              <textarea id="notesText" aria-label="Application notes"></textarea>
             </div>
           </div>
         </div>
@@ -1721,9 +1762,44 @@
         const el = document.getElementById(id);
         el.className = on ? 'loader on' : 'loader';
       }
+      function hasJobsTableRecords() {
+        return Array.isArray(positions) && positions.length > 0;
+      }
+      function renderJobsTableSkeleton() {
+        const body = document.getElementById('jobsBody');
+        if (!body) return;
+        const colCount = Math.max(
+          8,
+          Number(document.querySelector('#jobsTable thead tr')?.children?.length) || 8
+        );
+        body.innerHTML = Array.from({ length: 8 }, (_, index) => {
+          const titleWidth = `${58 + (index % 3) * 12}%`;
+          const subWidth = `${32 + (index % 4) * 10}%`;
+          return `<tr class="jobs-skeleton-row" aria-hidden="true">
+            <td colspan="${colCount}">
+              <div style="display:grid;gap:6px;padding:2px 0">
+                <div class="skeleton-line" style="height:12px;width:${titleWidth}"></div>
+                <div class="skeleton-line" style="height:10px;width:${subWidth}"></div>
+              </div>
+            </td>
+          </tr>`;
+        }).join('');
+      }
+      function clearJobsTableState() {
+        positions = [];
+        applications = [];
+        applicationsPeriodMode = false;
+        pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
+        renderJobs();
+        updatePagerUi();
+        setMsg('dashMsg', '');
+      }
       function setSyncBusy(on) {
         isSyncing = on;
         onLoading('syncLoader', on);
+        if (on) {
+          renderJobsTableSkeleton();
+        }
         ['syncBtn', 'clearFiltersBtn', 'fromDate', 'toDate', 'skillPickerBtn', 'sourcePickerBtn', 'countryPickerBtn', 'priorityPickerBtn', 'statusPickerBtn', 'clientSkillPickerBtn', 'clientWorkAuthPickerBtn', 'clientSearchModeSel', 'saveClientCommentBtn', 'sourceSel', 'viewClientResumeBtn', 'triggerClientResumeReuploadBtn', 'uploadClientResumeBtn', 'clientResumeFileInput', 'prevPageBtn', 'nextPageBtn', 'pageSizeSel', 'analyzeApplyPriorityBtn', 'queueAnalyzeAllClientsBtn', 'enqueueClientApplyPriorityBtn', 'enqueueClientApplyPriorityRewriteBtn'].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = on;
@@ -1857,7 +1933,9 @@
           panel.classList.toggle('is-hidden', panel.getAttribute('data-user-tab-panel') !== next);
         });
         if (autoSearch && next === 'applications' && prev !== 'applications' && q().seekerId) {
-          syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+          if (!hasJobsTableRecords()) {
+            syncJobs().catch((e) => setMsg('dashMsg', e.message, true));
+          }
         }
       }
       function syncUserInfoTabsUi(user) {
@@ -2178,6 +2256,25 @@
         renderSelectedClientBar();
         renderClientPanelTitle();
       }
+      function renderClientNoteHtml() {
+        return `
+            <div class="item client-note-block">
+              <label class="client-comment-label">
+                <span class="k">Agent note</span>
+                <textarea
+                  id="clientNoteText"
+                  rows="3"
+                  placeholder="Private notes (not used for AI ranking)."
+                  aria-label="Agent note"
+                ></textarea>
+              </label>
+              <div class="row" style="margin-top:8px;flex-wrap:wrap">
+                <button id="saveClientNoteBtn" type="button">Save note</button>
+                <span id="clientNoteMsg" class="muted"></span>
+              </div>
+            </div>
+        `;
+      }
       function renderSelectedUserInfo() {
         const el = document.getElementById('selectedUserInfo');
         const u = getSelectedUser();
@@ -2231,8 +2328,11 @@
               <div class="k">Phone</div>
               <div>${esc(phoneNumber || '—')}</div>
             </div>
+            ${renderClientNoteHtml()}
           </div>
         `;
+        const noteText = document.getElementById('clientNoteText');
+        if (noteText) noteText.value = String(u.note || '');
         syncUserInfoTabsUi(u);
         syncClientCommentUi(u);
         syncClientSettingsUi(u);
@@ -2544,6 +2644,34 @@
           onLoading('uploadClientResumeLoader', false);
           refreshClientResumeFileUi();
           renderClientResumeUi();
+        }
+      }
+
+      async function saveClientNote() {
+        const seekerId = q().seekerId;
+        if (!seekerId) throw new Error('Select a client first.');
+        const textarea = document.getElementById('clientNoteText');
+        const btn = document.getElementById('saveClientNoteBtn');
+        const body = { note: String(textarea?.value || '').trim() || null };
+        if (isBotAdminUser) {
+          const aid = String(q().agentUserId || '').trim();
+          if (aid) body.agentUserId = Number(aid);
+        }
+        if (btn) btn.disabled = true;
+        try {
+          const payload = await api(
+            `${API_BASE}/api/app/agent/clients/${encodeURIComponent(seekerId)}/settings`,
+            { method: 'PATCH', body: JSON.stringify(body) }
+          );
+          const savedNote = payload?.note ?? null;
+          const idx = users.findIndex((u) => String(u.id) === String(seekerId));
+          if (idx >= 0) {
+            users[idx] = { ...users[idx], note: savedNote };
+          }
+          if (textarea) textarea.value = String(savedNote || '');
+          setMsg('clientNoteMsg', 'Saved.');
+        } finally {
+          if (btn) btn.disabled = false;
         }
       }
 
@@ -3455,6 +3583,7 @@
         applyPriorityRankings = {};
         applyPriorityCacheMeta = null;
         applyPriorityStale = false;
+        clearJobsTableState();
         hydrateStateToInputs();
         const user = users.find((u) => String(u.id) === String(userId)) || null;
         setQ({ seekerId: userId, jobId: '' });
@@ -3791,6 +3920,7 @@
       document.getElementById('agentPickerSel')?.addEventListener('change', () => {
         const agentUserId = document.getElementById('agentPickerSel').value;
         setQ({ agentUserId, seekerId: '', jobId: '', page: 1 });
+        clearJobsTableState();
         syncAgentPerformanceNavLink();
         loadClients().catch((e) => setMsg('globalMsg', e.message, true));
       });
@@ -3852,6 +3982,11 @@
         renderClientWorkAuthPickerSummary();
       });
       document.getElementById('clientResumeOpenAnchor')?.addEventListener('click', openSelectedUserResumeExternal);
+      document.getElementById('userInfoTabProfile')?.addEventListener('click', (event) => {
+        if (event.target?.id === 'saveClientNoteBtn') {
+          saveClientNote().catch((e) => setMsg('clientNoteMsg', e.message, true));
+        }
+      });
       document.getElementById('saveClientCommentBtn').addEventListener('click', () => {
         saveClientComment().catch((e) => setMsg('clientCommentMsg', e.message, true));
       });

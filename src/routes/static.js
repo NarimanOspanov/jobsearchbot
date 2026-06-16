@@ -53,7 +53,10 @@ export function createStaticRouter() {
   router.get('/app/admin/agent-assignments', (_req, res) =>
     res.sendFile(join(publicApp, 'admin-agent-assignments.html'))
   );
-  router.get('/app/agent/clients', (_req, res) => res.sendFile(join(publicApp, 'agent-clients.html')));
+  router.get('/app/agent/clients', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.sendFile(join(publicApp, 'agent-clients.html'));
+  });
   router.get('/app/admin', (_req, res) => res.redirect(302, '/app/agent/clients'));
   router.get('/app/stat', (_req, res) => res.sendFile(join(publicApp, 'stats.html')));
   router.get('/app/stat2', (_req, res) => res.sendFile(join(publicApp, 'stat2.html')));
