@@ -63,12 +63,6 @@
         </div>
       </div>
       <div class="card">
-        <h2 id="chartTitle">Applications by client</h2>
-        <p id="chartHint" class="muted" style="margin:0 0 10px"></p>
-        <div id="chartWrap" class="chart-wrap"><canvas id="clientsChart"></canvas></div>
-        <p id="chartEmpty" class="empty" hidden></p>
-      </div>
-      <div class="card">
         <table>
           <thead>
             <tr>
@@ -80,6 +74,12 @@
           </thead>
           <tbody id="rowsBody"></tbody>
         </table>
+      </div>
+      <div class="card">
+        <h2 id="chartTitle">Applications by client</h2>
+        <p id="chartHint" class="muted" style="margin:0 0 10px"></p>
+        <div id="chartWrap" class="chart-wrap"><canvas id="clientsChart"></canvas></div>
+        <p id="chartEmpty" class="empty" hidden></p>
       </div>
     </div>
 
@@ -156,7 +156,7 @@
           skipReason: 'Skip reason',
           analyzedAt: 'Analyzed at',
           chartTitle: 'Applications by client',
-          chartHint: 'Compare assigned clients: date on Y axis, application count on X axis.',
+          chartHint: 'Compare assigned clients: date on Y axis, application count on X axis (one line per client).',
           chartEmpty: 'No application data for the selected period.',
           axisDate: 'Date',
           axisApplications: 'Applications',
@@ -198,7 +198,7 @@
           skipReason: 'Причина пропуска',
           analyzedAt: 'Проанализировано',
           chartTitle: 'Отклики по клиентам',
-          chartHint: 'Сравнение назначенных клиентов: дата по оси Y, число откликов по оси X.',
+          chartHint: 'Сравнение назначенных клиентов: дата по оси Y, число откликов по оси X (линия на клиента).',
           chartEmpty: 'Нет данных об откликах за выбранный период.',
           axisDate: 'Дата',
           axisApplications: 'Отклики',
@@ -360,23 +360,32 @@
         }
         wrap.hidden = false;
         emptyEl.hidden = true;
-        wrap.style.minHeight = `${Math.max(280, dates.length * 34)}px`;
+        wrap.style.minHeight = `${Math.max(320, dates.length * 36)}px`;
         destroyClientsChart();
         clientsChart = new Chart(canvas, {
-          type: 'bar',
+          type: 'line',
           data: {
             labels: dates.map(formatChartDateLabel),
-            datasets: series.map((item, index) => ({
-              label: item.clientName || `#${item.clientUserId}`,
-              data: (item.counts || []).map((count) => Number(count) || 0),
-              backgroundColor: CLIENT_CHART_COLORS[index % CLIENT_CHART_COLORS.length],
-              borderRadius: 4,
-            })),
+            datasets: series.map((item, index) => {
+              const color = CLIENT_CHART_COLORS[index % CLIENT_CHART_COLORS.length];
+              return {
+                label: item.clientName || `#${item.clientUserId}`,
+                data: (item.counts || []).map((count) => Number(count) || 0),
+                borderColor: color,
+                backgroundColor: color,
+                tension: 0.35,
+                fill: false,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                borderWidth: 2,
+              };
+            }),
           },
           options: {
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'nearest', axis: 'y', intersect: false },
             plugins: { legend: { labels: { color: '#eaf0ff' } } },
             scales: chartScale,
           },
