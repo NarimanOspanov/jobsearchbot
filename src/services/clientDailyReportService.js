@@ -38,6 +38,16 @@ function copyForLanguage(language) {
   return COPY[language === 'ru' ? 'ru' : 'en'];
 }
 
+function parseApplyPriorityJson(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function parseMetaJson(metaJson) {
   if (!metaJson) return null;
   if (typeof metaJson === 'object') return metaJson;
@@ -130,6 +140,7 @@ export async function fetchClientDailyReportRows(userId, { since = null } = {}) 
   return rows.map((row) => {
     const data = row.toJSON ? row.toJSON() : row;
     const meta = parseMetaJson(data.MetaJson);
+    const applyPriority = parseApplyPriorityJson(data.ApplyPriorityJson);
     return {
       id: data.Id,
       userId: data.UserId,
@@ -145,6 +156,7 @@ export async function fetchClientDailyReportRows(userId, { since = null } = {}) 
       coverLetterUrl: data.CoverLetterUrl || null,
       screenshotArtifactUrl: data.ScreenshotArtifactURL || null,
       meta: meta || {},
+      applyPriority: applyPriority || null,
     };
   });
 }

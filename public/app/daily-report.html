@@ -28,8 +28,10 @@
       tr { cursor: pointer; }
       tr:hover { background: rgba(79, 124, 255, 0.08); }
       .pill { border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; font-size: 12px; color: var(--muted); }
-      .title-link { color: var(--text); text-decoration: underline; }
+      .title-link { color: var(--text); text-decoration: underline; font-size: 1.1em; }
       .title-link:hover { color: #c7ddff; }
+      .apply-priority-block { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: #10182d; }
+      .apply-priority-meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
       .modal { position: fixed; inset: 0; background: rgba(5, 10, 20, 0.78); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 999; }
       .modal.on { display: flex; }
       .modal-card { width: min(980px, 100%); max-height: 90vh; background: var(--card); border: 1px solid var(--border); border-radius: 12px; display: grid; grid-template-rows: auto 1fr; }
@@ -73,10 +75,14 @@
           <button class="btn" id="closeModalBtn" type="button">Close</button>
         </div>
         <div class="modal-body">
-          <div><strong id="jobTitle"></strong></div>
+          <div id="jobTitle"></div>
           <div class="muted" id="jobCompanyLine"></div>
           <div class="muted" id="jobAppliedAtLine"></div>
           <div class="muted" id="jobApplyTypeLine"></div>
+          <div id="applyPrioritySection" hidden>
+            <strong id="applyPriorityLabel">Why applied</strong>
+            <div id="applyPriorityBlock" class="apply-priority-block"></div>
+          </div>
           <div class="artifacts">
             <a id="tailoredCvLink" class="btn" target="_blank" rel="noopener noreferrer">Tailored CV</a>
             <button id="coverLetterBtn" class="btn" type="button">Cover letter</button>
@@ -120,6 +126,16 @@
           noLocation: '—',
           noData: '—',
           loadError: 'Failed to load daily report',
+          whyApplied: 'Why applied',
+          applyPriority: 'Apply priority',
+          fitScore: 'Fit score',
+          noApplyPriority: 'No apply priority analysis.',
+          priorityHigh: 'High',
+          priorityMedium: 'Medium',
+          priorityLow: 'Low',
+          prioritySkip: 'Skip',
+          skipReason: 'Skip reason',
+          analyzedAt: 'Analyzed at',
         },
         ru: {
           pageTitle: 'Дневной отчет',
@@ -143,6 +159,16 @@
           noLocation: '—',
           noData: '—',
           loadError: 'Не удалось загрузить дневной отчет',
+          whyApplied: 'Почему откликнулись',
+          applyPriority: 'Приоритет отклика',
+          fitScore: 'Оценка соответствия',
+          noApplyPriority: 'Нет анализа приоритета отклика.',
+          priorityHigh: 'Высокий',
+          priorityMedium: 'Средний',
+          priorityLow: 'Низкий',
+          prioritySkip: 'Пропуск',
+          skipReason: 'Причина пропуска',
+          analyzedAt: 'Проанализировано',
         },
       };
 
@@ -172,6 +198,68 @@
         try { return JSON.parse(meta); } catch { return null; }
       }
 
+      function metaApplyUrl(meta) {
+        return String(meta?.applyUrl || meta?.applyURL || '').trim();
+      }
+
+      function parseApplyPriorityJson(raw) {
+        if (!raw) return null;
+        const parsed = typeof raw === 'object' ? raw : (() => { try { return JSON.parse(raw); } catch { return null; } })();
+        if (!parsed || typeof parsed !== 'object') return null;
+        const applyRank = Number(parsed.applyRank) || 0;
+        const justification = String(parsed.justification || '').trim();
+        if (!applyRank && !justification) return null;
+        return {
+          applyRank,
+          score: parsed.score != null ? Number(parsed.score) : null,
+          priority: String(parsed.priority || '').trim(),
+          justification,
+          skipReason: String(parsed.skipReason || '').trim() || null,
+          analyzedAt: parsed.analyzedAt || null,
+        };
+      }
+
+      function priorityLabel(priority) {
+        const key = String(priority || '').toLowerCase();
+        if (key === 'high') return t('priorityHigh');
+        if (key === 'medium') return t('priorityMedium');
+        if (key === 'low') return t('priorityLow');
+        if (key === 'skip') return t('prioritySkip');
+        return priority || t('noData');
+      }
+
+      function setJobTitleEl(title, applyUrl) {
+        const el = document.getElementById('jobTitle');
+        const safeTitle = esc(title || t('noData'));
+        const url = String(applyUrl || '').trim();
+        if (url) {
+          el.innerHTML = `<strong><a class="title-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${safeTitle}</a></strong>`;
+        } else {
+          el.innerHTML = `<strong>${safeTitle}</strong>`;
+        }
+      }
+
+      function renderApplyPrioritySection(applyPriority) {
+        const section = document.getElementById('applyPrioritySection');
+        const block = document.getElementById('applyPriorityBlock');
+        const parsed = parseApplyPriorityJson(applyPriority);
+        if (!parsed) {
+          section.hidden = true;
+          block.innerHTML = '';
+          return;
+        }
+        section.hidden = false;
+        const parts = [];
+        if (parsed.applyRank) parts.push(`#${esc(parsed.applyRank)}`);
+        if (parsed.priority) parts.push(esc(priorityLabel(parsed.priority)));
+        if (parsed.score != null && !Number.isNaN(parsed.score)) parts.push(`${esc(t('fitScore'))}: ${esc(parsed.score)}`);
+        let html = parts.length ? `<div><strong>${esc(t('applyPriority'))}</strong> · ${parts.join(' · ')}</div>` : '';
+        if (parsed.justification) html += `<div style="margin-top:8px;white-space:pre-wrap">${esc(parsed.justification)}</div>`;
+        if (parsed.skipReason) html += `<div class="apply-priority-meta" style="margin-top:8px"><strong>${esc(t('skipReason'))}:</strong> ${esc(parsed.skipReason)}</div>`;
+        if (parsed.analyzedAt) html += `<div class="apply-priority-meta">${esc(t('analyzedAt'))}: ${esc(fmtDateTime(parsed.analyzedAt))}</div>`;
+        block.innerHTML = html || esc(t('noApplyPriority'));
+      }
+
       function fmtDateTime(value) {
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) return t('noData');
@@ -194,6 +282,7 @@
         document.getElementById('screenshotLink').textContent = t('screenshot');
         document.getElementById('summaryLabel').textContent = t('summary');
         document.getElementById('coverLabel').textContent = t('coverLetter');
+        document.getElementById('applyPriorityLabel').textContent = t('whyApplied');
       }
 
       function renderRows() {
@@ -206,7 +295,7 @@
           .map((row) => {
             const meta = parseMetaJson(row.meta);
             const location = meta?.location || t('noLocation');
-            const applyUrl = String(meta?.applyUrl || '').trim();
+            const applyUrl = metaApplyUrl(meta);
             const safeTitle = esc(row.vacancyTitle || t('noData'));
             const titleHtml = applyUrl
               ? `<a class="title-link" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">${safeTitle}</a>`
@@ -244,11 +333,12 @@
         const row = rows.find((item) => String(item.id) === String(id));
         if (!row) return;
         const meta = parseMetaJson(row.meta);
-        document.getElementById('jobTitle').textContent = row.vacancyTitle || t('noData');
+        setJobTitleEl(row.vacancyTitle, metaApplyUrl(meta));
         document.getElementById('jobCompanyLine').textContent =
           `${row.companyName || t('noData')} · ${meta?.location || t('noLocation')} · ${row.source || t('noData')}`;
         document.getElementById('jobAppliedAtLine').textContent = `${t('appliedAt')}: ${fmtDateTime(row.appliedAt)}`;
         document.getElementById('jobApplyTypeLine').textContent = `${t('applyType')}: ${row.applyType || t('noData')}`;
+        renderApplyPrioritySection(row.applyPriority);
         document.getElementById('summaryText').textContent = String(meta?.shortSummary || '').trim() || t('noSummary');
         document.getElementById('coverLetterText').textContent = String(row.coverLetter || '').trim() || t('noCover');
 
