@@ -231,6 +231,19 @@
       #jobsBody tr.apply-priority-skip:hover { background: rgba(239, 68, 68, 0.1); }
       #jobsBody tr.apply-priority-top { background: rgba(34, 197, 94, 0.07); }
       #jobsBody tr.apply-priority-top:hover { background: rgba(34, 197, 94, 0.12); }
+      #jobsBody tr.apply-priority-loading { background: rgba(96, 165, 250, 0.05); }
+      #jobsBody tr.apply-priority-loading:hover { background: rgba(96, 165, 250, 0.09); }
+      .apply-priority-cell-loading {
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .apply-priority-cell-loading .row-loader-inline {
+        width: 12px;
+        height: 12px;
+        border-width: 2px;
+        margin-right: 6px;
+      }
+      .row-loader-inline.loader { display: inline-block; }
       .apply-rank-badge {
         display: inline-block;
         min-width: 28px;
@@ -1232,6 +1245,13 @@
       let applyPriorityStale = false;
       let isAnalyzingApplyPriority = false;
       let isQueueingApplyPriorityAllClients = false;
+      const AUTO_PRIORITY_BATCH_SIZE = 10;
+      const AUTO_PRIORITY_DEBOUNCE_MS = 500;
+      const autoPriorityInFlightJobIds = new Set();
+      const autoPriorityQueuedJobIds = new Set();
+      let isAutoPrioritizing = false;
+      let autoPriorityRunId = 0;
+      let autoPriorityDebounceTimer = null;
       let skipStatusAutoSave = false;
       let activeUserInfoTab = 'profile';
       let activeJobModalTab = 'job';
@@ -1801,9 +1821,123 @@
       function hasApplyPriorityData() {
         return Object.keys(applyPriorityRankings).length > 0;
       }
+      function shouldShowApplyPriorityColumns() {
+        if (hasApplyPriorityData()) return true;
+        if (autoPriorityInFlightJobIds.size || autoPriorityQueuedJobIds.size) return true;
+        const user = getSelectedUser();
+        if (!canRunApplyPriorityForUser(user) || applicationsPeriodMode || applyPriorityStale) return false;
+        return (positions || []).some((p) => !getJobApplyRanking(p.id));
+      }
       function getJobApplyRanking(jobId) {
         const id = Number(jobId);
         return applyPriorityRankings[id] || applyPriorityRankings[String(jobId)] || null;
+      }
+      function isJobAutoPriorityInFlight(jobId) {
+        const id = Number(jobId);
+        if (!Number.isFinite(id)) return false;
+        return autoPriorityInFlightJobIds.has(id) || autoPriorityQueuedJobIds.has(id);
+      }
+      function clearAutoPriorityQueues({ rerender = true } = {}) {
+        autoPriorityQueuedJobIds.clear();
+        autoPriorityInFlightJobIds.clear();
+        if (autoPriorityDebounceTimer) {
+          clearTimeout(autoPriorityDebounceTimer);
+          autoPriorityDebounceTimer = null;
+        }
+        isAutoPrioritizing = false;
+        if (rerender) renderJobs();
+      }
+      function resetAutoPriorityState({ rerender = true } = {}) {
+        autoPriorityRunId += 1;
+        clearAutoPriorityQueues({ rerender });
+      }
+      function collectUnrankedJobsForAutoPriority() {
+        return (positions || []).filter((p) => {
+          const id = Number(p.id);
+          if (!Number.isFinite(id)) return false;
+          if (getJobApplyRanking(id)) return false;
+          if (autoPriorityInFlightJobIds.has(id)) return false;
+          if (autoPriorityQueuedJobIds.has(id)) return false;
+          return true;
+        });
+      }
+      function maybeAutoPrioritizeMissingJobs() {
+        if (autoPriorityDebounceTimer) clearTimeout(autoPriorityDebounceTimer);
+        autoPriorityDebounceTimer = setTimeout(() => {
+          autoPriorityDebounceTimer = null;
+          void maybeAutoPrioritizeMissingJobsNow();
+        }, AUTO_PRIORITY_DEBOUNCE_MS);
+      }
+      async function maybeAutoPrioritizeMissingJobsNow() {
+        const seekerId = q().seekerId;
+        const user = getSelectedUser();
+        if (!seekerId || !user || applicationsPeriodMode || isSyncing || isAnalyzingApplyPriority) return;
+        if (!canRunApplyPriorityForUser(user) || applyPriorityStale) return;
+        if (!positions.length) return;
+        const unranked = collectUnrankedJobsForAutoPriority();
+        if (!unranked.length) return;
+        for (const job of unranked) {
+          autoPriorityQueuedJobIds.add(Number(job.id));
+        }
+        renderJobs();
+        if (!isAutoPrioritizing) {
+          void runAutoPriorityWorker();
+        }
+      }
+      async function runAutoPriorityWorker() {
+        const runId = autoPriorityRunId;
+        const seekerId = String(q().seekerId || '');
+        if (!seekerId || isAutoPrioritizing) return;
+        isAutoPrioritizing = true;
+        try {
+          while (autoPriorityQueuedJobIds.size > 0) {
+            if (runId !== autoPriorityRunId) return;
+            if (String(q().seekerId || '') !== seekerId) return;
+            const user = getSelectedUser();
+            if (!canRunApplyPriorityForUser(user) || applicationsPeriodMode || applyPriorityStale) {
+              resetAutoPriorityState({ rerender: true });
+              return;
+            }
+            const batchIds = [...autoPriorityQueuedJobIds].slice(0, AUTO_PRIORITY_BATCH_SIZE);
+            if (!batchIds.length) break;
+            const batch = batchIds
+              .map((id) => positions.find((p) => Number(p.id) === id))
+              .filter(Boolean);
+            for (const id of batchIds) {
+              autoPriorityQueuedJobIds.delete(id);
+              autoPriorityInFlightJobIds.add(id);
+            }
+            renderJobs();
+            try {
+              await api(
+                `${API_BASE}/api/app/agent/clients/${encodeURIComponent(seekerId)}/apply-priority${agentQueryPrefix()}`,
+                { method: 'POST', body: JSON.stringify({ jobs: batch }) }
+              );
+              if (runId !== autoPriorityRunId || String(q().seekerId || '') !== seekerId) return;
+              await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds(), skipAutoPrioritize: true });
+              renderJobs();
+            } catch (err) {
+              console.error('auto-priority batch failed', err);
+            } finally {
+              for (const id of batchIds) {
+                autoPriorityInFlightJobIds.delete(id);
+              }
+              renderJobs();
+            }
+          }
+        } finally {
+          if (runId === autoPriorityRunId) {
+            isAutoPrioritizing = false;
+            renderJobs();
+            const more = collectUnrankedJobsForAutoPriority();
+            if (more.length) maybeAutoPrioritizeMissingJobs();
+          }
+        }
+      }
+      function appendAutoPriorityDashHint(msg) {
+        const pending = autoPriorityQueuedJobIds.size + autoPriorityInFlightJobIds.size;
+        if (!pending) return msg;
+        return `${msg} Prioritizing ${pending} unranked job(s) in background...`;
       }
       function getSelectedPriorities() {
         const checked = document.querySelectorAll('#priorityPickerMenu input[type="checkbox"]:checked');
@@ -1875,6 +2009,7 @@
         return 'fit-low';
       }
       function invalidateApplyPriorityCache({ clearRankings = false } = {}) {
+        resetAutoPriorityState({ rerender: false });
         applyPriorityStale = true;
         if (clearRankings) {
           applyPriorityRankings = {};
@@ -1991,11 +2126,19 @@
         html += '</div>';
         return html;
       }
+      function renderApplyPriorityLoadingCells() {
+        const cell =
+          '<td class="apply-priority-cell-loading muted"><span class="row-loader-inline loader on" aria-hidden="true"></span> Processing…</td>';
+        return cell + cell + cell + cell;
+      }
       function renderApplyPriorityCells(p) {
-        if (!hasApplyPriorityData()) return '';
+        if (!shouldShowApplyPriorityColumns()) return '';
         const r = getJobApplyRanking(p.id);
         const staleCls = applyPriorityStale ? ' apply-priority-stale' : '';
         if (!r) {
+          if (isJobAutoPriorityInFlight(p.id)) {
+            return renderApplyPriorityLoadingCells();
+          }
           return '<td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td>';
         }
         const rankCls = r.applyRank <= 3 && r.priority !== 'skip' ? ' rank-top' : '';
@@ -2011,7 +2154,9 @@
       }
       function applyPriorityRowClass(p, app) {
         const r = getJobApplyRanking(p.id);
-        if (!r) return '';
+        if (!r) {
+          return isJobAutoPriorityInFlight(p.id) ? 'apply-priority-loading' : '';
+        }
         if (r.priority === 'skip') return 'apply-priority-skip';
         const status = String(app?.Status || 'new').toLowerCase();
         if (status !== 'applied' && r.applyRank <= 3 && r.priority !== 'skip') return 'apply-priority-top';
@@ -2045,6 +2190,7 @@
         }).join('');
       }
       function clearJobsTableState() {
+        resetAutoPriorityState({ rerender: false });
         positions = [];
         applications = [];
         applicationsPeriodMode = false;
@@ -3536,7 +3682,7 @@
           .filter((id) => Number.isSafeInteger(id) && id > 0);
       }
 
-      async function loadApplicationsByUser(userId, { screenlyJobIds, appliedFrom, appliedTo, statuses } = {}) {
+      async function loadApplicationsByUser(userId, { screenlyJobIds, appliedFrom, appliedTo, statuses, skipAutoPrioritize } = {}) {
         const ids = (Array.isArray(screenlyJobIds) ? screenlyJobIds : [])
           .map((id) => Number.parseInt(String(id), 10))
           .filter((id) => Number.isSafeInteger(id) && id > 0);
@@ -3558,6 +3704,7 @@
         }
         applications = await api(url);
         refreshApplyPriorityFromApplications();
+        if (!skipAutoPrioritize) maybeAutoPrioritizeMissingJobs();
         return applications;
       }
 
@@ -3579,6 +3726,7 @@
         if (!seekerId) throw new Error('Select seeker first.');
         if (!from || !to) throw new Error('Set from and to dates.');
 
+        resetAutoPriorityState({ rerender: false });
         setQ({
           seekerId,
           from,
@@ -3642,10 +3790,11 @@
           await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
           renderJobs();
           updatePagerUi();
-          setMsg('dashMsg', buildJobsDashMessage());
+          setMsg('dashMsg', appendAutoPriorityDashHint(buildJobsDashMessage()));
         } finally {
           setSyncBusy(false);
           updatePagerUi();
+          if (!applicationsPeriodMode) maybeAutoPrioritizeMissingJobs();
         }
       }
 
@@ -3656,7 +3805,7 @@
       function renderJobs() {
         const body = document.getElementById('jobsBody');
         const headRow = document.querySelector('#jobsTable thead tr');
-        const showPriority = hasApplyPriorityData();
+        const showPriority = shouldShowApplyPriorityColumns();
         const priorityHeaders = showPriority
           ? `<th><button type="button" data-sort="apply_priority">Apply #${sortArrow('apply_priority')}</button></th>` +
             `<th><button type="button" data-sort="fit">Fit${sortArrow('fit')}</button></th>` +
@@ -3729,7 +3878,8 @@
         updateApplyPriorityUi();
         updatePriorityPickerUi();
         updateStatusPickerUi();
-        if (positions.length) setMsg('dashMsg', buildJobsDashMessage());
+        if (positions.length) setMsg('dashMsg', appendAutoPriorityDashHint(buildJobsDashMessage()));
+        if (!isSyncing && !applicationsPeriodMode) maybeAutoPrioritizeMissingJobs();
       }
 
       async function ensureApplication(seekerId, job) {
