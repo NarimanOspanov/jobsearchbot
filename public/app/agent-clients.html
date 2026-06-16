@@ -365,6 +365,22 @@
       #jobModalClientSection > .job-modal-tab-panel {
         flex: 1;
       }
+      #jobModalClientSection.client-detail-readonly .client-readonly-value {
+        color: var(--text);
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+      }
+      #jobModalClientSection.client-detail-readonly .client-readonly-field {
+        margin-bottom: 12px;
+      }
+      #jobModalClientSection.client-detail-readonly .client-readonly-field .k {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
       .user-info-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1097,7 +1113,7 @@
               </div>
             </div>
           </div>
-          <div id="jobModalClientSection">
+          <div id="jobModalClientSection" class="client-detail-readonly">
             <div data-job-modal-panel="profile" class="job-modal-tab-panel is-hidden" role="tabpanel">
               <div data-client-role="selectedUserInfo" class="muted">Select a user to view user information.</div>
             </div>
@@ -1108,23 +1124,8 @@
                 <p data-client-role="clientResumeOpenLink" class="resume-open-link" style="display:none">
                   <a data-client-role="clientResumeOpenAnchor" href="#" target="_blank" rel="noopener noreferrer">Open resume in browser</a>
                 </p>
-                <div data-client-role="clientResumeReuploadBlock" class="client-resume-reupload">
-                  <span data-client-role="clientResumeReuploadLabel" class="k">Upload resume</span>
-                  <p class="muted" style="margin:0 0 8px;font-size:13px">AI will parse contacts, roles/skills, and work authorization into the client profile.</p>
-                  <input data-client-role="clientResumeFileInput" class="resume-file-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" />
-                  <label data-client-role="clientResumeFilePickerLabel" class="resume-file-picker">
-                    <div>
-                      <div data-client-role="clientResumePickerTitle">Tap to choose a file</div>
-                      <div class="resume-file-picker-name">PDF/JPG/PNG/WEBP — up to 15 MB</div>
-                    </div>
-                  </label>
-                  <button data-client-role="uploadClientResumeBtn" type="button" disabled style="width:100%;margin-top:10px">Upload resume</button>
-                  <span data-client-role="uploadClientResumeLoader" class="loader" aria-hidden="true"></span>
-                  <p data-client-role="clientResumeUploadMsg" class="bad" style="display:none;margin-top:8px" role="alert"></p>
-                </div>
                 <div class="resume-actions">
                   <button data-client-role="viewClientResumeBtn" type="button">Open full screen</button>
-                  <button data-client-role="triggerClientResumeReuploadBtn" type="button" class="ghost-btn">Choose new file</button>
                 </div>
                 <div data-client-role="clientResumePreviewWrap" class="client-resume-preview" style="display:none">
                   <iframe data-client-role="clientResumePreviewFrame" title="Resume preview"></iframe>
@@ -1133,48 +1134,24 @@
             </div>
             <div data-job-modal-panel="preferences" class="job-modal-tab-panel is-hidden" role="tabpanel">
               <div data-client-role="clientSettingsBlock" class="client-settings-block">
-                <div>
-                  <label>Search mode</label>
-                  <select data-client-role="clientSearchModeSel">
-                    <option value="not_urgent">Not urgent</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
+                <div class="client-readonly-field">
+                  <span class="k">Search mode</span>
+                  <p data-client-role="clientSearchModeDisplay" class="client-readonly-value muted">—</p>
                 </div>
-                <div>
-                  <label>Roles</label>
-                  <div class="skills-picker">
-                    <button data-client-role="clientSkillPickerBtn" type="button" class="skills-picker-btn">No roles selected</button>
-                    <div data-client-role="clientSkillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
-                  </div>
+                <div class="client-readonly-field">
+                  <span class="k">Roles</span>
+                  <p data-client-role="clientRolesDisplay" class="client-readonly-value muted">—</p>
                 </div>
-                <div>
-                  <label>Work authorization</label>
-                  <div class="skills-picker">
-                    <button data-client-role="clientWorkAuthPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
-                    <div data-client-role="clientWorkAuthPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
-                  </div>
+                <div class="client-readonly-field">
+                  <span class="k">Work authorization</span>
+                  <p data-client-role="clientWorkAuthDisplay" class="client-readonly-value muted">—</p>
                 </div>
               </div>
               <div data-client-role="clientCommentBlock" class="client-comment-block">
-                <label class="client-comment-label">
+                <div class="client-readonly-field">
                   <span class="k">Apply preferences</span>
-                  <textarea
-                    data-client-role="clientCommentText"
-                    rows="5"
-                    placeholder="Free-form notes for AI job ranking. Examples: companies to skip (cvat.ai, CDEK), priority companies (Stripe), industries (fintech), preferred roles (senior backend), current employer..."
-                    aria-label="Apply preferences"
-                  ></textarea>
-                </label>
-                <div class="row">
-                  <button data-client-role="saveClientCommentBtn" type="button">Save client settings</button>
-                  <span data-client-role="clientCommentMsg" class="muted"></span>
+                  <p data-client-role="clientCommentDisplay" class="client-readonly-value muted">—</p>
                 </div>
-              </div>
-              <div class="preferences-actions">
-                <button data-client-role="enqueueClientApplyPriorityBtn" type="button" class="ghost-btn">Run apply priority (background)</button>
-                <button data-client-role="enqueueClientApplyPriorityRewriteBtn" type="button" class="ghost-btn">Run apply priority (background) with rewrite, last 7 days</button>
-                <span data-client-role="enqueueClientApplyPriorityLoader" class="loader" aria-hidden="true"></span>
-                <span data-client-role="enqueueClientApplyPriorityRewriteLoader" class="loader" aria-hidden="true"></span>
               </div>
             </div>
           </div>
@@ -1263,8 +1240,13 @@
         modal: 'jobModalClientSection',
       };
       const CLIENT_DETAIL_SCOPE_KEYS = ['main', 'modal'];
+      const MAIN_CLIENT_SCOPE = 'main';
+      const MODAL_CLIENT_SCOPE = 'modal';
       let clientSkillPickerOpenScope = null;
       let clientWorkAuthPickerOpenScope = null;
+      function isClientScopeReadOnly(scope) {
+        return scope === MODAL_CLIENT_SCOPE;
+      }
       function clientRoot(scope) {
         return document.getElementById(CLIENT_DETAIL_SCOPES[scope]);
       }
@@ -1289,20 +1271,17 @@
         for (const scope of CLIENT_DETAIL_SCOPE_KEYS) fn(scope);
       }
       function syncClientDetailAllScopes(user) {
-        forEachClientScope((scope) => {
-          syncClientCommentUi(scope, user);
-          syncClientSettingsUi(scope, user);
-          syncClientResumeUi(scope, user);
-        });
+        syncClientCommentUi(MAIN_CLIENT_SCOPE, user);
+        syncClientSettingsUi(MAIN_CLIENT_SCOPE, user);
+        syncClientResumeUi(MAIN_CLIENT_SCOPE, user);
+        renderModalClientReadOnly(user);
         updateEnqueueClientApplyPriorityUi();
       }
       function closeClientPickers() {
         clientSkillPickerOpenScope = null;
         clientWorkAuthPickerOpenScope = null;
-        forEachClientScope((scope) => {
-          clientEl(scope, 'clientSkillPickerMenu')?.classList.remove('open');
-          clientEl(scope, 'clientWorkAuthPickerMenu')?.classList.remove('open');
-        });
+        clientEl(MAIN_CLIENT_SCOPE, 'clientSkillPickerMenu')?.classList.remove('open');
+        clientEl(MAIN_CLIENT_SCOPE, 'clientWorkAuthPickerMenu')?.classList.remove('open');
       }
       function toggleClientSkillPicker(scope) {
         const menu = clientEl(scope, 'clientSkillPickerMenu');
@@ -1329,28 +1308,26 @@
         clientWorkAuthPickerOpenScope = scope;
       }
       function setClientSyncBusy(on) {
-        forEachClientScope((scope) => {
-          [
-            'clientSkillPickerBtn',
-            'clientWorkAuthPickerBtn',
-            'clientSearchModeSel',
-            'saveClientCommentBtn',
-            'saveClientNoteBtn',
-            'viewClientResumeBtn',
-            'triggerClientResumeReuploadBtn',
-            'uploadClientResumeBtn',
-            'clientResumeFileInput',
-            'enqueueClientApplyPriorityBtn',
-            'enqueueClientApplyPriorityRewriteBtn',
-          ].forEach((role) => {
-            const el = clientEl(scope, role);
-            if (el) el.disabled = on;
-          });
+        [
+          'clientSkillPickerBtn',
+          'clientWorkAuthPickerBtn',
+          'clientSearchModeSel',
+          'saveClientCommentBtn',
+          'saveClientNoteBtn',
+          'viewClientResumeBtn',
+          'triggerClientResumeReuploadBtn',
+          'uploadClientResumeBtn',
+          'clientResumeFileInput',
+          'enqueueClientApplyPriorityBtn',
+          'enqueueClientApplyPriorityRewriteBtn',
+        ].forEach((role) => {
+          const el = clientEl(MAIN_CLIENT_SCOPE, role);
+          if (el) el.disabled = on;
         });
       }
       function handleClientDetailClick(event) {
         const scope = clientScopeFromTarget(event.target);
-        if (!scope) return;
+        if (!scope || isClientScopeReadOnly(scope)) return;
         const roleEl = event.target.closest('[data-client-role]');
         const role = roleEl?.getAttribute('data-client-role');
         if (role === 'saveClientNoteBtn') {
@@ -1401,7 +1378,7 @@
       }
       function handleClientDetailChange(event) {
         const scope = clientScopeFromTarget(event.target);
-        if (!scope) return;
+        if (!scope || isClientScopeReadOnly(scope)) return;
         if (event.target.matches('[data-client-role="clientResumeFileInput"]')) {
           refreshClientResumeFileUi(scope);
           return;
@@ -1412,6 +1389,19 @@
         }
         if (event.target.closest('[data-client-role="clientWorkAuthPickerMenu"]')) {
           renderClientWorkAuthPickerSummary(scope);
+        }
+      }
+
+      function handleModalClientViewClick(event) {
+        const scope = clientScopeFromTarget(event.target);
+        if (scope !== MODAL_CLIENT_SCOPE) return;
+        const role = event.target.closest('[data-client-role]')?.getAttribute('data-client-role');
+        if (role === 'viewClientResumeBtn') {
+          openSelectedUserResume();
+          return;
+        }
+        if (role === 'clientResumeOpenAnchor') {
+          openSelectedUserResumeExternal(event);
         }
       }
 
@@ -2076,7 +2066,8 @@
         setClientSyncBusy(on);
         updateHighlyRelevantFilterState();
         updatePriorityPickerUi();
-        forEachClientScope((scope) => renderClientResumeUi(scope));
+        renderClientResumeUi(MAIN_CLIENT_SCOPE);
+        renderModalClientResumeReadOnly(getSelectedUser());
         updateApplyPriorityUi();
         updateEnqueueClientApplyPriorityUi();
       }
@@ -2549,6 +2540,159 @@
         renderSelectedClientBar();
         renderClientPanelTitle();
       }
+      function formatClientRolesDisplay(user) {
+        const ids = Array.isArray(user?.skills)
+          ? user.skills
+              .map((id) => Number.parseInt(String(id || ''), 10))
+              .filter((id) => Number.isSafeInteger(id) && id > 0)
+          : [];
+        if (!ids.length) return 'No roles selected';
+        const labels = ids.map((id) => {
+          const skill = skills.find((s) => Number(s.id) === id);
+          if (!skill) return String(id);
+          const roleName = String(skill.roleName || skill.RoleName || '').trim();
+          const skillName = String(skill.name || skill.Name || '').trim();
+          return roleName && skillName ? `${roleName}: ${skillName}` : skillName || roleName || String(id);
+        });
+        return labels.join(', ');
+      }
+      function formatClientWorkAuthDisplay(csv) {
+        const values = String(csv || '')
+          .split(',')
+          .map((v) => v.trim())
+          .filter(Boolean);
+        if (!values.length) return 'Not specified';
+        return values
+          .map((value) => COUNTRY_AUTH_OPTIONS.find((item) => item.value === value)?.label || value)
+          .join(', ');
+      }
+      function formatClientSearchModeDisplay(user) {
+        return String(user?.searchMode || '').trim() === 'urgent' ? 'Urgent' : 'Not urgent';
+      }
+      function buildSelectedUserInfoReadOnlyHtml(u) {
+        const username = String(u.telegramUserName || '').trim();
+        const firstName = String(u.displayFirstName || u.firstName || '').trim();
+        const lastName = String(u.displayLastName || u.lastName || '').trim();
+        const email = String(u.displayEmail || '').trim();
+        const phoneNumber = String(u.displayPhoneNumber || '').trim();
+        const note = String(u.note || '').trim();
+        const usernameNoAt = username.replace(/^@/, '');
+        const usernameHtml = usernameNoAt
+          ? `<a href="https://t.me/${encodeURIComponent(usernameNoAt)}" target="_blank" rel="noopener noreferrer">${esc(usernameNoAt)}</a>`
+          : '—';
+        return `
+          <div class="user-info-grid">
+            <div class="item">
+              <div class="k">Telegram username</div>
+              <div>${usernameHtml}</div>
+            </div>
+            <div class="item">
+              <div class="k">First name</div>
+              <div>${esc(firstName || '—')}</div>
+            </div>
+            <div class="item">
+              <div class="k">Last name</div>
+              <div>${esc(lastName || '—')}</div>
+            </div>
+            <div class="item">
+              <div class="k">User Id</div>
+              <div>${esc(String(u.id || '—'))}</div>
+            </div>
+            <div class="item">
+              <div class="k">TelegramChatId</div>
+              <div>${esc(String(u.telegramChatId || '—'))}</div>
+            </div>
+            <div class="item">
+              <div class="k">Email</div>
+              <div>${esc(email || '—')}</div>
+            </div>
+            <div class="item">
+              <div class="k">Phone</div>
+              <div>${esc(phoneNumber || '—')}</div>
+            </div>
+            <div class="item client-note-block">
+              <div class="k">Agent note</div>
+              <div class="client-readonly-value">${esc(note || '—')}</div>
+            </div>
+          </div>
+        `;
+      }
+      function renderModalClientResumeReadOnly(user) {
+        const scope = MODAL_CLIENT_SCOPE;
+        const u = user || null;
+        const status = clientEl(scope, 'clientResumeStatus');
+        const viewBtn = clientEl(scope, 'viewClientResumeBtn');
+        const openLink = clientEl(scope, 'clientResumeOpenLink');
+        const openAnchor = clientEl(scope, 'clientResumeOpenAnchor');
+        const previewFrame = clientEl(scope, 'clientResumePreviewFrame');
+        const previewWrap = clientEl(scope, 'clientResumePreviewWrap');
+        const resumeUrl = String(u?.resumeUrl || '').trim();
+        if (status) {
+          status.textContent = resumeUrl ? 'Resume on file' : 'No resume uploaded yet.';
+        }
+        if (openLink && openAnchor) {
+          if (resumeUrl) {
+            openAnchor.href = resumeUrl;
+            openLink.style.display = '';
+          } else {
+            openAnchor.removeAttribute('href');
+            openLink.style.display = 'none';
+          }
+        }
+        if (previewWrap && previewFrame) {
+          if (resumeUrl) {
+            previewFrame.src = resumeUrl;
+            previewWrap.style.display = '';
+          } else {
+            previewFrame.src = 'about:blank';
+            previewWrap.style.display = 'none';
+          }
+        }
+        if (viewBtn) viewBtn.disabled = !resumeUrl;
+      }
+      function renderModalClientReadOnly(user) {
+        const scope = MODAL_CLIENT_SCOPE;
+        const profileEl = clientEl(scope, 'selectedUserInfo');
+        if (!profileEl) return;
+        if (!user) {
+          profileEl.className = 'muted';
+          profileEl.innerHTML = 'Select a user to view user information.';
+          renderModalClientResumeReadOnly(null);
+          const searchModeDisplay = clientEl(scope, 'clientSearchModeDisplay');
+          const rolesDisplay = clientEl(scope, 'clientRolesDisplay');
+          const workAuthDisplay = clientEl(scope, 'clientWorkAuthDisplay');
+          const commentDisplay = clientEl(scope, 'clientCommentDisplay');
+          if (searchModeDisplay) searchModeDisplay.textContent = '—';
+          if (rolesDisplay) rolesDisplay.textContent = '—';
+          if (workAuthDisplay) workAuthDisplay.textContent = '—';
+          if (commentDisplay) commentDisplay.textContent = '—';
+          return;
+        }
+        profileEl.className = 'job-detail';
+        profileEl.innerHTML = buildSelectedUserInfoReadOnlyHtml(user);
+        renderModalClientResumeReadOnly(user);
+        const searchModeDisplay = clientEl(scope, 'clientSearchModeDisplay');
+        const rolesDisplay = clientEl(scope, 'clientRolesDisplay');
+        const workAuthDisplay = clientEl(scope, 'clientWorkAuthDisplay');
+        const commentDisplay = clientEl(scope, 'clientCommentDisplay');
+        if (searchModeDisplay) {
+          searchModeDisplay.textContent = formatClientSearchModeDisplay(user);
+          searchModeDisplay.classList.remove('muted');
+        }
+        if (rolesDisplay) {
+          rolesDisplay.textContent = formatClientRolesDisplay(user);
+          rolesDisplay.classList.remove('muted');
+        }
+        if (workAuthDisplay) {
+          workAuthDisplay.textContent = formatClientWorkAuthDisplay(user.workAuthorizationCountries || '');
+          workAuthDisplay.classList.remove('muted');
+        }
+        if (commentDisplay) {
+          const comment = String(user.comment || '').trim();
+          commentDisplay.textContent = comment || '—';
+          commentDisplay.classList.toggle('muted', !comment);
+        }
+      }
       function renderClientNoteHtml() {
         return `
             <div class="item client-note-block">
@@ -2612,7 +2756,8 @@
           </div>
         `;
       }
-      function renderSelectedUserInfo(scope) {
+      function renderSelectedUserInfo(scope = MAIN_CLIENT_SCOPE) {
+        if (scope !== MAIN_CLIENT_SCOPE) return;
         const el = clientEl(scope, 'selectedUserInfo');
         if (!el) return;
         const u = getSelectedUser();
@@ -2630,12 +2775,13 @@
         renderClientPanelTitle();
         const u = getSelectedUser();
         if (!u) {
-          forEachClientScope((scope) => renderSelectedUserInfo(scope));
+          renderSelectedUserInfo(MAIN_CLIENT_SCOPE);
+          renderModalClientReadOnly(null);
           syncUserInfoTabsUi(null);
           syncClientDetailAllScopes(null);
           return;
         }
-        forEachClientScope((scope) => renderSelectedUserInfo(scope));
+        renderSelectedUserInfo(MAIN_CLIENT_SCOPE);
         syncUserInfoTabsUi(u);
         syncClientDetailAllScopes(u);
       }
@@ -2655,6 +2801,7 @@
       }
 
       function syncClientResumeUi(scope, user) {
+        if (scope !== MAIN_CLIENT_SCOPE) return;
         const input = clientEl(scope, 'clientResumeFileInput');
         const previewFrame = clientEl(scope, 'clientResumePreviewFrame');
         const previewWrap = clientEl(scope, 'clientResumePreviewWrap');
@@ -2669,6 +2816,7 @@
       }
 
       function renderClientResumeUi(scope, user) {
+        if (scope !== MAIN_CLIENT_SCOPE) return;
         const u = user || getSelectedUser();
         const status = clientEl(scope, 'clientResumeStatus');
         const viewBtn = clientEl(scope, 'viewClientResumeBtn');
@@ -2735,16 +2883,14 @@
           canRunApplyPriorityForUser(user) && seekerId && !isSyncing && !isUploadingClientResume;
         const defaultBusy = seekerId && applyPriorityDefaultEnqueueInFlight.has(seekerId);
         const rewriteBusy = seekerId && applyPriorityRewriteEnqueueInFlight.has(seekerId);
-        forEachClientScope((scope) => {
-          const btn = clientEl(scope, 'enqueueClientApplyPriorityBtn');
-          const rewriteBtn = clientEl(scope, 'enqueueClientApplyPriorityRewriteBtn');
-          const loader = clientEl(scope, 'enqueueClientApplyPriorityLoader');
-          const rewriteLoader = clientEl(scope, 'enqueueClientApplyPriorityRewriteLoader');
-          if (loader) loader.classList.toggle('on', Boolean(defaultBusy));
-          if (rewriteLoader) rewriteLoader.classList.toggle('on', Boolean(rewriteBusy));
-          if (btn) btn.disabled = !canRun || defaultBusy;
-          if (rewriteBtn) rewriteBtn.disabled = !canRun || rewriteBusy;
-        });
+        const btn = clientEl(MAIN_CLIENT_SCOPE, 'enqueueClientApplyPriorityBtn');
+        const rewriteBtn = clientEl(MAIN_CLIENT_SCOPE, 'enqueueClientApplyPriorityRewriteBtn');
+        const loader = clientEl(MAIN_CLIENT_SCOPE, 'enqueueClientApplyPriorityLoader');
+        const rewriteLoader = clientEl(MAIN_CLIENT_SCOPE, 'enqueueClientApplyPriorityRewriteLoader');
+        if (loader) loader.classList.toggle('on', Boolean(defaultBusy));
+        if (rewriteLoader) rewriteLoader.classList.toggle('on', Boolean(rewriteBusy));
+        if (btn) btn.disabled = !canRun || defaultBusy;
+        if (rewriteBtn) rewriteBtn.disabled = !canRun || rewriteBusy;
       }
 
       async function enqueueClientApplyPriorityFromUi({ rewrite = false, days = 7 } = {}) {
@@ -2809,7 +2955,7 @@
       }
 
       function renderClientWorkAuthPickerOptionsAll() {
-        forEachClientScope((scope) => renderClientWorkAuthPickerOptions(scope));
+        renderClientWorkAuthPickerOptions(MAIN_CLIENT_SCOPE);
       }
 
       function renderClientWorkAuthPickerSummary(scope) {
@@ -2823,6 +2969,7 @@
       }
 
       function syncClientSettingsUi(scope, user) {
+        if (scope !== MAIN_CLIENT_SCOPE) return;
         if (!user) {
           applyClientSkillIdsCsv(scope, '');
           applyClientWorkAuthCsv(scope, '');
@@ -2894,10 +3041,10 @@
         }
       }
 
-      async function uploadClientResumeFromUi(scope) {
+      async function uploadClientResumeFromUi(scope = MAIN_CLIENT_SCOPE) {
         const seekerId = q().seekerId;
         if (!seekerId) throw new Error('Select a client first.');
-        const fileInput = clientEl(scope, 'clientResumeFileInput');
+        const fileInput = clientEl(MAIN_CLIENT_SCOPE, 'clientResumeFileInput');
         const file = fileInput?.files?.[0];
         if (!file) throw new Error('Choose a resume file first.');
         if (file.size > 15 * 1024 * 1024) throw new Error('File must be under 15 MB.');
@@ -2905,10 +3052,10 @@
         if (!allowedTypes.includes(file.type)) throw new Error('Use PDF or image (JPG/PNG/WEBP).');
 
         isUploadingClientResume = true;
-        forEachClientScope((s) => refreshClientResumeFileUi(s));
-        forEachClientScope((s) => renderClientResumeUi(s));
-        forEachClientScope((s) => onScopeLoading(s, 'uploadClientResumeLoader', true));
-        forEachClientScope((s) => setClientResumeMsg(s, ''));
+        refreshClientResumeFileUi(MAIN_CLIENT_SCOPE);
+        renderClientResumeUi(MAIN_CLIENT_SCOPE);
+        onScopeLoading(MAIN_CLIENT_SCOPE, 'uploadClientResumeLoader', true);
+        setClientResumeMsg(MAIN_CLIENT_SCOPE, '');
         try {
           const resolveExtension = () => {
             const name = String(file.name || '').toLowerCase();
@@ -2940,30 +3087,22 @@
           if (idx >= 0) {
             users[idx] = updatedClient ? { ...users[idx], ...updatedClient } : { ...users[idx], resumeUrl };
           }
-          forEachClientScope((s) => {
-            const input = clientEl(s, 'clientResumeFileInput');
-            if (input) input.value = '';
-          });
+          if (fileInput) fileInput.value = '';
           invalidateApplyPriorityCache();
           const user = getSelectedUser();
           renderAllSelectedUserInfo();
-          forEachClientScope((s) => renderClientResumeUi(s, user));
           const skillCount = Array.isArray(user?.skills) ? user.skills.length : 0;
           const msg =
             resumeUrl
               ? `Resume saved. AI updated profile fields${skillCount ? ` (${skillCount} role(s))` : ''}.`
               : 'Resume updated';
-          forEachClientScope((s) => {
-            setClientResumeMsg(s, msg, true);
-            setTimeout(() => setClientResumeMsg(s, ''), 4000);
-          });
+          setClientResumeMsg(MAIN_CLIENT_SCOPE, msg, true);
+          setTimeout(() => setClientResumeMsg(MAIN_CLIENT_SCOPE, ''), 4000);
         } finally {
           isUploadingClientResume = false;
-          forEachClientScope((s) => onScopeLoading(s, 'uploadClientResumeLoader', false));
-          forEachClientScope((s) => {
-            refreshClientResumeFileUi(s);
-            renderClientResumeUi(s);
-          });
+          onScopeLoading(MAIN_CLIENT_SCOPE, 'uploadClientResumeLoader', false);
+          refreshClientResumeFileUi(MAIN_CLIENT_SCOPE);
+          renderClientResumeUi(MAIN_CLIENT_SCOPE);
         }
       }
 
@@ -2988,17 +3127,17 @@
           if (idx >= 0) {
             users[idx] = { ...users[idx], note: savedNote };
           }
-          forEachClientScope((s) => {
-            const noteEl = clientEl(s, 'clientNoteText');
-            if (noteEl) noteEl.value = String(savedNote || '');
-            setScopeMsg(s, 'clientNoteMsg', 'Saved.');
-          });
+          const noteEl = clientEl(MAIN_CLIENT_SCOPE, 'clientNoteText');
+          if (noteEl) noteEl.value = String(savedNote || '');
+          setScopeMsg(MAIN_CLIENT_SCOPE, 'clientNoteMsg', 'Saved.');
+          renderModalClientReadOnly(getSelectedUser());
         } finally {
           if (btn) btn.disabled = false;
         }
       }
 
       function syncClientCommentUi(scope, user) {
+        if (scope !== MAIN_CLIENT_SCOPE) return;
         const textarea = clientEl(scope, 'clientCommentText');
         if (!textarea) return;
         if (!user) {
@@ -3047,17 +3186,16 @@
               skills: savedSkills,
             };
           }
-          forEachClientScope((s) => {
-            const commentEl = clientEl(s, 'clientCommentText');
-            const modeEl = clientEl(s, 'clientSearchModeSel');
-            if (commentEl) commentEl.value = String(savedComment || '');
-            if (modeEl) modeEl.value = savedSearchMode === 'urgent' ? 'urgent' : 'not_urgent';
-            applyClientSkillIdsCsv(s, userSkillIdsCsv(users[idx] || { skills: savedSkills }));
-            applyClientWorkAuthCsv(s, savedWorkAuth);
-            setScopeMsg(s, 'clientCommentMsg', 'Saved.');
-          });
+          const commentEl = clientEl(MAIN_CLIENT_SCOPE, 'clientCommentText');
+          const modeEl = clientEl(MAIN_CLIENT_SCOPE, 'clientSearchModeSel');
+          if (commentEl) commentEl.value = String(savedComment || '');
+          if (modeEl) modeEl.value = savedSearchMode === 'urgent' ? 'urgent' : 'not_urgent';
+          applyClientSkillIdsCsv(MAIN_CLIENT_SCOPE, userSkillIdsCsv(users[idx] || { skills: savedSkills }));
+          applyClientWorkAuthCsv(MAIN_CLIENT_SCOPE, savedWorkAuth);
+          setScopeMsg(MAIN_CLIENT_SCOPE, 'clientCommentMsg', 'Saved.');
           applyUserSkillsToFilters(users[idx] || getSelectedUser(), { force: true });
           invalidateApplyPriorityCache();
+          renderModalClientReadOnly(getSelectedUser());
         } finally {
           if (btn) btn.disabled = false;
         }
@@ -3089,18 +3227,14 @@
       function renderSkillPickerMenus() {
         const html = buildSkillPickerMenuHtml();
         const filterMenu = document.getElementById('skillPickerMenu');
+        const clientMenu = clientEl(MAIN_CLIENT_SCOPE, 'clientSkillPickerMenu');
         const filterCsv = getSelectedSkillIdsCsv();
         const clientCsv = userSkillIdsCsv(getSelectedUser());
         if (filterMenu) filterMenu.innerHTML = html;
-        forEachClientScope((scope) => {
-          const clientMenu = clientEl(scope, 'clientSkillPickerMenu');
-          if (clientMenu) clientMenu.innerHTML = html;
-        });
+        if (clientMenu) clientMenu.innerHTML = html;
         if (filterCsv) applySelectedSkillIdsCsv(filterCsv);
-        forEachClientScope((scope) => {
-          if (clientCsv) applyClientSkillIdsCsv(scope, clientCsv);
-          else renderClientSkillPickerSummary(scope);
-        });
+        if (clientCsv) applyClientSkillIdsCsv(MAIN_CLIENT_SCOPE, clientCsv);
+        else renderClientSkillPickerSummary(MAIN_CLIENT_SCOPE);
       }
 
       async function loadSkills() {
@@ -4280,9 +4414,8 @@
       document.getElementById('notesText').addEventListener('blur', () => saveStatus().catch((e) => setMsg('jobMsg', e.message, true)));
       document.getElementById('genBtn').addEventListener('click', () => generateMaterials().catch((e) => setMsg('jobMsg', e.message, true)));
       document.getElementById('userInfoSection')?.addEventListener('click', handleClientDetailClick);
-      document.getElementById('jobModalClientSection')?.addEventListener('click', handleClientDetailClick);
+      document.getElementById('jobModalClientSection')?.addEventListener('click', handleModalClientViewClick);
       document.getElementById('userInfoSection')?.addEventListener('change', handleClientDetailChange);
-      document.getElementById('jobModalClientSection')?.addEventListener('change', handleClientDetailChange);
       document.getElementById('userInfoTabs')?.addEventListener('click', (event) => {
         const btn = event.target.closest('[data-user-tab]');
         if (!btn) return;
