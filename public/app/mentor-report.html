@@ -156,7 +156,7 @@
           skipReason: 'Skip reason',
           analyzedAt: 'Analyzed at',
           chartTitle: 'Applications by client',
-          chartHint: 'Compare assigned clients: date on Y axis, application count on X axis (one line per client).',
+          chartHint: 'Compare assigned clients: date on X axis, application count on Y axis (one line per client).',
           chartEmpty: 'No application data for the selected period.',
           axisDate: 'Date',
           axisApplications: 'Applications',
@@ -198,7 +198,7 @@
           skipReason: 'Причина пропуска',
           analyzedAt: 'Проанализировано',
           chartTitle: 'Отклики по клиентам',
-          chartHint: 'Сравнение назначенных клиентов: дата по оси Y, число откликов по оси X (линия на клиента).',
+          chartHint: 'Сравнение назначенных клиентов: дата по оси X, число откликов по оси Y (линия на клиента).',
           chartEmpty: 'Нет данных об откликах за выбранный период.',
           axisDate: 'Дата',
           axisApplications: 'Отклики',
@@ -214,8 +214,8 @@
       let chartPayload = { dates: [], series: [] };
       const CLIENT_CHART_COLORS = ['#4f7cff', '#22c55e', '#f59e0b', '#ec4899', '#38bdf8', '#a78bfa', '#f97316', '#14b8a6'];
       const chartScale = {
-        x: { beginAtZero: true, ticks: { precision: 0, color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' }, title: { display: true, color: '#9eb0d1' } },
-        y: { ticks: { color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' }, title: { display: true, color: '#9eb0d1' } },
+        x: { ticks: { color: '#9eb0d1', maxRotation: 45, minRotation: 0 }, grid: { color: 'rgba(158,176,209,0.15)' }, title: { display: true, color: '#9eb0d1' } },
+        y: { beginAtZero: true, ticks: { precision: 0, color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' }, title: { display: true, color: '#9eb0d1' } },
       };
       function api(path, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -329,8 +329,8 @@
         document.getElementById('chartTitle').textContent = t('chartTitle');
         document.getElementById('chartHint').textContent = t('chartHint');
         document.getElementById('chartEmpty').textContent = t('chartEmpty');
-        chartScale.x.title.text = t('axisApplications');
-        chartScale.y.title.text = t('axisDate');
+        chartScale.x.title.text = t('axisDate');
+        chartScale.y.title.text = t('axisApplications');
       }
       function formatChartDateLabel(value) {
         const raw = String(value || '').slice(0, 10);
@@ -360,7 +360,7 @@
         }
         wrap.hidden = false;
         emptyEl.hidden = true;
-        wrap.style.minHeight = `${Math.max(320, dates.length * 36)}px`;
+        wrap.style.minHeight = '320px';
         destroyClientsChart();
         clientsChart = new Chart(canvas, {
           type: 'line',
@@ -382,10 +382,9 @@
             }),
           },
           options: {
-            indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'nearest', axis: 'y', intersect: false },
+            interaction: { mode: 'nearest', axis: 'x', intersect: false },
             plugins: { legend: { labels: { color: '#eaf0ff' } } },
             scales: chartScale,
           },
