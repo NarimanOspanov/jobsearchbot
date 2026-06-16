@@ -1838,7 +1838,7 @@
         if (hasApplyPriorityData()) return true;
         if (autoPriorityInFlightJobIds.size || autoPriorityQueuedJobIds.size) return true;
         const user = getSelectedUser();
-        if (!canRunApplyPriorityForUser(user) || applicationsPeriodMode || applyPriorityStale) return false;
+        if (!canRunApplyPriorityForUser(user) || applicationsPeriodMode) return false;
         return (positions || []).some((p) => !getJobApplyRanking(p.id));
       }
       function getJobApplyRanking(jobId) {
@@ -1885,7 +1885,7 @@
         const seekerId = q().seekerId;
         const user = getSelectedUser();
         if (!seekerId || !user || applicationsPeriodMode || isSyncing || isAnalyzingApplyPriority) return;
-        if (!canRunApplyPriorityForUser(user) || applyPriorityStale) return;
+        if (!canRunApplyPriorityForUser(user)) return;
         if (!positions.length) return;
         const unranked = collectUnrankedJobsForAutoPriority();
         if (!unranked.length) return;
@@ -1907,7 +1907,7 @@
             if (runId !== autoPriorityRunId) return;
             if (String(q().seekerId || '') !== seekerId) return;
             const user = getSelectedUser();
-            if (!canRunApplyPriorityForUser(user) || applicationsPeriodMode || applyPriorityStale) {
+            if (!canRunApplyPriorityForUser(user) || applicationsPeriodMode) {
               resetAutoPriorityState({ rerender: true });
               return;
             }
