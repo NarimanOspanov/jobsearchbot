@@ -90,6 +90,36 @@ function mapAssignmentRow(row) {
   };
 }
 
+function mapMentorAssignmentRow(row) {
+  const mentor = row.Mentor;
+  const client = row.Client;
+  const mentorProj = mentor ? buildAdminUserContactProjection(mentor) : {};
+  const clientProj = client ? buildAdminUserContactProjection(client) : {};
+  return {
+    id: row.Id,
+    mentorUserId: row.MentorUserId,
+    clientUserId: row.ClientUserId,
+    createdAt: row.CreatedAt,
+    mentor: mentor
+      ? {
+          id: mentor.Id,
+          telegramChatId: String(mentor.TelegramChatId),
+          telegramUserName: mentor.TelegramUserName,
+          displayName: displayNameFromUser(mentor, mentorProj),
+        }
+      : null,
+    client: client
+      ? {
+          id: client.Id,
+          telegramChatId: String(client.TelegramChatId),
+          telegramUserName: client.TelegramUserName,
+          displayName: displayNameFromUser(client, clientProj),
+          resumeUrl: client.ResumeURL || null,
+        }
+      : null,
+  };
+}
+
 const CLIENT_COMMENT_MAX_LENGTH = 4000;
 const CLIENT_NOTE_MAX_LENGTH = 4000;
 
@@ -324,6 +354,106 @@ export function createAgentClientsRouter() {
       }
       console.error('POST /api/app/admin/agent-clients:', err);
       return res.status(500).json({ error: 'Failed to create assignment' });
+    }
+  });
+
+  router.get('/api/app/admin/client-mentors', adminMiniAppAuth, async (_req, res) => {
+    try {
+      const rows = await models.ClientMentors.findAll({
+        include: [
+          { model: models.Users, as: 'Mentor', required: true },
+          { model: models.Users, as: 'Client', required: true },
+        ],
+        order: [['CreatedAt', 'DESC'], ['Id', 'DESC']],
+      });
+      return res.json(rows.map(mapMentorAssignmentRow));
+    } catch (err) {
+      console.error('GET /api/app/admin/client-mentors:', err);
+      return res.status(500).json({ error: 'Failed to load client-mentor assignments' });
+    }
+  });
+
+  router.post('/api/app/admin/client-mentors', adminMiniAppAuth, async (req, res) => {
+    try {
+      const mentorUserId = Number.parseInt(String(req.body?.mentorUserId ?? ''), 10);
+      const clientUserId = Number.parseInt(String(req.body?.clientUserId ?? ''), 10);
+      if (!Number.isSafeInteger(mentorUserId) || mentorUserId <= 0) {
+        return res.status(400).json({ error: 'mentorUserId is required' });
+      }
+      if (!Number.isSafeInteger(clientUserId) || clientUserId <= 0) {
+        return res.status(400).json({ error: 'clientUserId is required' });
+      }
+      const [mentor, client] = await Promise.all([
+        models.Users.findByPk(mentorUserId),
+        models.Users.findByPk(clientUserId),
+      ]);
+      if (!mentor) return res.status(404).json({ error: 'Mentor user not found' });
+      if (!client) return res.status(404).json({ error: 'Client user not found' });
+      const existing = await models.ClientMentors.findOne({
+        where: { MentorUserId: mentorUserId, ClientUserId: clientUserId },
+      });
+      if (existing) return res.status(409).json({ error: 'Client is already assigned to this mentor' });
+      const row = await models.ClientMentors.create({ MentorUserId: mentorUserId, ClientUserId: clientUserId });
+      const loaded = await models.ClientMentors.findByPk(row.Id, {
+        include: [
+          { model: models.Users, as: 'Mentor', required: true },
+          { model: models.Users, as: 'Client', required: true },
+        ],
+      });
+      return res.status(201).json(mapMentorAssignmentRow(loaded));
+    } catch (err) {
+      if (err?.name === 'SequelizeUniqueConstraintError') {
+        return res.status(409).json({ error: 'Client is already assigned to this mentor' });
+      }
+      console.error('POST /api/app/admin/client-mentors:', err);
+      return res.status(500).json({ error: 'Failed to create mentor assignment' });
+    }
+  });
+
+  router.patch('/api/app/admin/client-mentors/:id', adminMiniAppAuth, async (req, res) => {
+    try {
+      const id = Number.parseInt(String(req.params.id), 10);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
+      const row = await models.ClientMentors.findByPk(id);
+      if (!row) return res.status(404).json({ error: 'Assignment not found' });
+      const nextMentorId =
+        req.body?.mentorUserId != null ? Number.parseInt(String(req.body.mentorUserId), 10) : row.MentorUserId;
+      const nextClientId =
+        req.body?.clientUserId != null ? Number.parseInt(String(req.body.clientUserId), 10) : row.ClientUserId;
+      if (!Number.isSafeInteger(nextMentorId) || nextMentorId <= 0) {
+        return res.status(400).json({ error: 'Invalid mentorUserId' });
+      }
+      if (!Number.isSafeInteger(nextClientId) || nextClientId <= 0) {
+        return res.status(400).json({ error: 'Invalid clientUserId' });
+      }
+      const [mentor, client] = await Promise.all([
+        models.Users.findByPk(nextMentorId),
+        models.Users.findByPk(nextClientId),
+      ]);
+      if (!mentor) return res.status(404).json({ error: 'Mentor user not found' });
+      if (!client) return res.status(404).json({ error: 'Client user not found' });
+      const conflict = await models.ClientMentors.findOne({
+        where: {
+          MentorUserId: nextMentorId,
+          ClientUserId: nextClientId,
+          Id: { [Sequelize.Op.ne]: id },
+        },
+      });
+      if (conflict) return res.status(409).json({ error: 'Client is already assigned to this mentor' });
+      await row.update({ MentorUserId: nextMentorId, ClientUserId: nextClientId });
+      const loaded = await models.ClientMentors.findByPk(id, {
+        include: [
+          { model: models.Users, as: 'Mentor', required: true },
+          { model: models.Users, as: 'Client', required: true },
+        ],
+      });
+      return res.json(mapMentorAssignmentRow(loaded));
+    } catch (err) {
+      if (err?.name === 'SequelizeUniqueConstraintError') {
+        return res.status(409).json({ error: 'Client is already assigned to this mentor' });
+      }
+      console.error('PATCH /api/app/admin/client-mentors/:id:', err);
+      return res.status(500).json({ error: 'Failed to update mentor assignment' });
     }
   });
 
@@ -662,6 +792,20 @@ export function createAgentClientsRouter() {
     } catch (err) {
       console.error('DELETE /api/app/admin/agent-clients/:id:', err);
       return res.status(500).json({ error: 'Failed to delete assignment' });
+    }
+  });
+
+  router.delete('/api/app/admin/client-mentors/:id', adminMiniAppAuth, async (req, res) => {
+    try {
+      const id = Number.parseInt(String(req.params.id), 10);
+      if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id' });
+      const row = await models.ClientMentors.findByPk(id);
+      if (!row) return res.status(404).json({ error: 'Assignment not found' });
+      await row.destroy();
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('DELETE /api/app/admin/client-mentors/:id:', err);
+      return res.status(500).json({ error: 'Failed to delete mentor assignment' });
     }
   });
 

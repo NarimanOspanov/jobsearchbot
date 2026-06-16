@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mentor assignments</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      :root {
+        --bg: #0d1222;
+        --card: #151b30;
+        --text: #eaf0ff;
+        --muted: #9eb0d1;
+        --accent: #4f7cff;
+        --danger: #dc5b6a;
+        --border: #273357;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      .wrap { max-width: 960px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+      h1, h2 { margin: 0 0 12px; }
+      input, button, select { border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 10px; font: inherit; }
+      button { cursor: pointer; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+      .ghost-btn { background: #0f1730; border: 1px solid var(--border); }
+      .danger { background: var(--danger); border-color: var(--danger); }
+      .muted { color: var(--muted); }
+      .bad { color: var(--danger); }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .search-results { border: 1px solid var(--border); border-radius: 8px; max-height: 160px; overflow: auto; margin-top: 6px; }
+      .search-results button { display: block; width: 100%; text-align: left; border: none; border-bottom: 1px solid var(--border); border-radius: 0; background: #0f1730; font-weight: 400; }
+      .search-results button:last-child { border-bottom: none; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Client mentor assignments</h1>
+      <p id="globalMsg" class="muted"></p>
+
+      <section class="card">
+        <h2 id="formTitle">Add assignment</h2>
+        <div class="row">
+          <div style="flex:1;min-width:220px">
+            <label class="muted" style="display:block;margin-bottom:4px">Client mentor</label>
+            <input id="mentorSearch" type="search" placeholder="Search by name, username, or chat id" autocomplete="off" />
+            <div id="mentorSearchResults" class="search-results" style="display:none"></div>
+            <p id="mentorPicked" class="muted" style="margin:8px 0 0">No mentor selected.</p>
+          </div>
+          <div style="flex:1;min-width:220px">
+            <label class="muted" style="display:block;margin-bottom:4px">Client (job seeker)</label>
+            <input id="clientSearch" type="search" placeholder="Search by name, username, or chat id" autocomplete="off" />
+            <div id="clientSearchResults" class="search-results" style="display:none"></div>
+            <p id="clientPicked" class="muted" style="margin:8px 0 0">No client selected.</p>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="saveBtn" type="button">Save assignment</button>
+          <button id="cancelEditBtn" type="button" class="ghost-btn" style="display:none">Cancel edit</button>
+        </div>
+        <p id="formMsg" class="muted"></p>
+      </section>
+
+      <section class="card">
+        <h2>Assignments</h2>
+        <div id="list"></div>
+      </section>
+    </div>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+      if (tg) tg.ready();
+
+      let editingId = null;
+      let pickedMentor = null;
+      let pickedClient = null;
+      let searchTimer = null;
+
+      function getTgInitDataString() {
+        return String(tg?.initData || window.Telegram?.WebView?.initParams?.tgWebAppData || '').trim();
+      }
+
+      function attachMiniAppAuthHeaders(headers) {
+        const data = getTgInitDataString();
+        if (data) {
+          headers['x-init-data'] = data;
+          headers.Authorization = `tma ${data}`;
+        }
+      }
+
+      async function api(url, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        attachMiniAppAuthHeaders(headers);
+        const res = await fetch(url, { ...options, headers });
+        if (!res.ok) throw new Error(await res.text());
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) return res.json();
+        return res.text();
+      }
+
+      function esc(v) {
+        return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function setMsg(id, txt, isErr = false) {
+        const el = document.getElementById(id);
+        el.textContent = txt || '';
+        el.className = isErr ? 'bad' : 'muted';
+      }
+
+      function formatUserLabel(u) {
+        const name = [
+          u.displayFirstName || u.displayName || u.firstName,
+          u.displayLastName || u.lastName,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+        const label = name || u.telegramUserName || `#${u.id}`;
+        return `${label} (${u.telegramChatId || '—'})`;
+      }
+
+      function resetForm() {
+        editingId = null;
+        pickedMentor = null;
+        pickedClient = null;
+        document.getElementById('formTitle').textContent = 'Add assignment';
+        document.getElementById('mentorSearch').value = '';
+        document.getElementById('clientSearch').value = '';
+        document.getElementById('mentorPicked').textContent = 'No mentor selected.';
+        document.getElementById('clientPicked').textContent = 'No client selected.';
+        document.getElementById('cancelEditBtn').style.display = 'none';
+        document.getElementById('mentorSearchResults').style.display = 'none';
+        document.getElementById('clientSearchResults').style.display = 'none';
+      }
+
+      function renderSearchResults(containerId, rows, onPick) {
+        const box = document.getElementById(containerId);
+        if (!rows.length) {
+          box.innerHTML = '<p class="muted" style="padding:8px;margin:0">No users found.</p>';
+          box.style.display = 'block';
+          return;
+        }
+        box.innerHTML = rows
+          .map(
+            (u) =>
+              `<button type="button" data-id="${esc(u.id)}">${esc(formatUserLabel(u))}</button>`
+          )
+          .join('');
+        box.style.display = 'block';
+        box.querySelectorAll('button[data-id]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const user = rows.find((x) => String(x.id) === btn.getAttribute('data-id'));
+            if (user) onPick(user);
+            box.style.display = 'none';
+          });
+        });
+      }
+
+      async function searchUsers(query, containerId, onPick) {
+        const q = String(query || '').trim();
+        if (q.length < 2) {
+          document.getElementById(containerId).style.display = 'none';
+          return;
+        }
+        const rows = await api(`/api/app/admin/users/search?q=${encodeURIComponent(q)}&limit=10`);
+        renderSearchResults(containerId, rows, onPick);
+      }
+
+      function startEdit(row) {
+        editingId = row.id;
+        pickedMentor = row.mentor ? { id: row.mentor.id, ...row.mentor } : { id: row.mentorUserId };
+        pickedClient = row.client ? { id: row.client.id, ...row.client } : { id: row.clientUserId };
+        document.getElementById('formTitle').textContent = `Edit assignment #${row.id}`;
+        document.getElementById('mentorPicked').textContent = row.mentor
+          ? `Mentor: ${row.mentor.displayName} (${row.mentor.telegramChatId})`
+          : `Mentor user id: ${row.mentorUserId}`;
+        document.getElementById('clientPicked').textContent = row.client
+          ? `Client: ${row.client.displayName} (${row.client.telegramChatId})`
+          : `Client user id: ${row.clientUserId}`;
+        document.getElementById('cancelEditBtn').style.display = 'inline-block';
+        setMsg('formMsg', '');
+      }
+
+      async function loadAssignments() {
+        const rows = await api('/api/app/admin/client-mentors');
+        const list = document.getElementById('list');
+        if (!rows.length) {
+          list.innerHTML = '<p class="muted">No mentor assignments yet.</p>';
+          return;
+        }
+        list.innerHTML = `
+          <table>
+            <thead>
+              <tr><th>Id</th><th>Mentor</th><th>Client</th><th>Created</th><th></th></tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map((row) => {
+                  const created = row.createdAt ? String(row.createdAt).split('T')[0] : '—';
+                  return `<tr>
+                    <td>${esc(row.id)}</td>
+                    <td>${esc(row.mentor?.displayName || row.mentorUserId)}<br><span class="muted">${esc(row.mentor?.telegramChatId || '')}</span></td>
+                    <td>${esc(row.client?.displayName || row.clientUserId)}<br><span class="muted">${esc(row.client?.telegramChatId || '')}</span></td>
+                    <td>${esc(created)}</td>
+                    <td>
+                      <button type="button" class="ghost-btn" data-edit="${esc(row.id)}">Edit</button>
+                      <button type="button" class="danger" data-del="${esc(row.id)}">Delete</button>
+                    </td>
+                  </tr>`;
+                })
+                .join('')}
+            </tbody>
+          </table>`;
+        list.querySelectorAll('button[data-edit]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const row = rows.find((r) => String(r.id) === btn.getAttribute('data-edit'));
+            if (row) startEdit(row);
+          });
+        });
+        list.querySelectorAll('button[data-del]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-del');
+            if (!confirm(`Delete mentor assignment #${id}?`)) return;
+            try {
+              await api(`/api/app/admin/client-mentors/${encodeURIComponent(id)}`, { method: 'DELETE' });
+              if (String(editingId) === String(id)) resetForm();
+              await loadAssignments();
+              setMsg('formMsg', 'Assignment deleted.');
+            } catch (e) {
+              setMsg('formMsg', e.message, true);
+            }
+          });
+        });
+      }
+
+      document.getElementById('mentorSearch').addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          searchUsers(e.target.value, 'mentorSearchResults', (u) => {
+            pickedMentor = u;
+            document.getElementById('mentorPicked').textContent = `Mentor: ${formatUserLabel(u)}`;
+          }).catch((err) => setMsg('formMsg', err.message, true));
+        }, 300);
+      });
+
+      document.getElementById('clientSearch').addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          searchUsers(e.target.value, 'clientSearchResults', (u) => {
+            pickedClient = u;
+            document.getElementById('clientPicked').textContent = `Client: ${formatUserLabel(u)}`;
+          }).catch((err) => setMsg('formMsg', err.message, true));
+        }, 300);
+      });
+
+      document.getElementById('saveBtn').addEventListener('click', async () => {
+        if (!pickedMentor?.id || !pickedClient?.id) {
+          setMsg('formMsg', 'Select both mentor and client.', true);
+          return;
+        }
+        try {
+          if (editingId) {
+            await api(`/api/app/admin/client-mentors/${encodeURIComponent(editingId)}`, {
+              method: 'PATCH',
+              body: JSON.stringify({
+                mentorUserId: Number(pickedMentor.id),
+                clientUserId: Number(pickedClient.id),
+              }),
+            });
+            setMsg('formMsg', 'Assignment updated.');
+          } else {
+            await api('/api/app/admin/client-mentors', {
+              method: 'POST',
+              body: JSON.stringify({
+                mentorUserId: Number(pickedMentor.id),
+                clientUserId: Number(pickedClient.id),
+              }),
+            });
+            setMsg('formMsg', 'Assignment created.');
+          }
+          resetForm();
+          await loadAssignments();
+        } catch (e) {
+          setMsg('formMsg', e.message, true);
+        }
+      });
+
+      document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
+
+      async function boot() {
+        if (!getTgInitDataString()) {
+          throw new Error('Open from the bot via /admin_mentor_assignments (Telegram auth required).');
+        }
+        await loadAssignments();
+      }
+
+      boot().catch((err) => setMsg('globalMsg', err.message, true));
+    </script>
+  </body>
+</html>

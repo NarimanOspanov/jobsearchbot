@@ -3,7 +3,7 @@ import { Sequelize } from 'sequelize';
 import { miniAppAuth, miniAppActorAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
 import { ensureUserByTelegramId } from '../../services/userService.js';
-import { assertCanAccessClient } from '../../services/agentAccessService.js';
+import { assertCanAccessClient, assertCanAccessClientAsMentor } from '../../services/agentAccessService.js';
 import {
   applyAgentUserIdForAppliedStatus,
   applyAppliedAtForAppliedStatus,
@@ -53,6 +53,14 @@ function parseApplicationStatusesCsv(raw) {
       .map((part) => part.trim().toLowerCase())
       .filter(Boolean)
   )];
+}
+
+function parseReportPeriodHours(raw) {
+  const value = String(raw || '24h').trim().toLowerCase();
+  if (value === '24h') return 24;
+  if (value === '7d') return 7 * 24;
+  if (value === '30d') return 30 * 24;
+  return 24;
 }
 
 function normalizeApplyType(value) {
@@ -184,6 +192,69 @@ export function createApplicationsRouter() {
     } catch (err) {
       console.error('GET /api/app/applications/daily-report:', err);
       return res.status(500).json({ error: 'Failed to load daily report applications' });
+    }
+  });
+
+  router.get('/api/app/mentor/clients', miniAppActorAuth, async (req, res) => {
+    try {
+      if (!req.isBotAdmin && !req.isClientMentor) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      const where = req.isBotAdmin ? {} : { MentorUserId: req.actorUser.Id };
+      const rows = await models.ClientMentors.findAll({
+        where,
+        include: [{ model: models.Users, as: 'Client', required: true }],
+        order: [['CreatedAt', 'DESC'], ['Id', 'DESC']],
+      });
+      const clients = rows
+        .map((row) => row.Client)
+        .filter(Boolean)
+        .map((u) => ({
+          id: u.Id,
+          firstName: u.FirstName || null,
+          lastName: u.LastName || null,
+          telegramUserName: u.TelegramUserName || null,
+          telegramChatId: String(u.TelegramChatId || ''),
+          resumeUrl: u.ResumeURL || null,
+        }));
+      return res.json({ ok: true, clients });
+    } catch (err) {
+      console.error('GET /api/app/mentor/clients:', err);
+      return res.status(500).json({ error: 'Failed to load mentor clients' });
+    }
+  });
+
+  router.get('/api/app/mentor/report', miniAppActorAuth, async (req, res) => {
+    try {
+      if (!req.isBotAdmin && !req.isClientMentor) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      const clientUserId = Number.parseInt(String(req.query.clientUserId || ''), 10);
+      if (!Number.isSafeInteger(clientUserId) || clientUserId <= 0) {
+        return res.status(400).json({ error: 'clientUserId is required' });
+      }
+      const access = await assertCanAccessClientAsMentor({
+        actorUserId: req.actorUser.Id,
+        clientUserId,
+        isBotAdmin: req.isBotAdmin,
+      });
+      if (!access.ok) {
+        return res.status(access.status).json({ error: access.error });
+      }
+      const hours = parseReportPeriodHours(req.query.period);
+      const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+      const rows = await fetchClientDailyReportRows(clientUserId, { since });
+      const period = hours === 24 ? '24h' : hours === 7 * 24 ? '7d' : '30d';
+      return res.json({
+        ok: true,
+        period,
+        since: since.toISOString(),
+        count: rows.length,
+        rows,
+      });
+    } catch (err) {
+      console.error('GET /api/app/mentor/report:', err);
+      return res.status(500).json({ error: 'Failed to load mentor report' });
     }
   });
 

@@ -49,6 +49,16 @@ export async function isCareerAgentUser(userId) {
   return (await countAgentAssignments(userId)) > 0;
 }
 
+export async function countMentorAssignments(mentorUserId) {
+  const id = Number(mentorUserId);
+  if (!Number.isSafeInteger(id) || id <= 0 || !models.ClientMentors) return 0;
+  return models.ClientMentors.count({ where: { MentorUserId: id } });
+}
+
+export async function isClientMentorUser(userId) {
+  return (await countMentorAssignments(userId)) > 0;
+}
+
 export async function findAssignmentForClient(clientUserId) {
   const id = Number(clientUserId);
   if (!Number.isSafeInteger(id) || id <= 0) return null;
@@ -94,6 +104,27 @@ export async function assertCanAccessClient({
 
   const row = await models.AgentClients.findOne({
     where: { AgentUserId: Number(actorUserId), ClientUserId: clientId },
+  });
+  if (!row) return { ok: false, status: 403, error: 'Forbidden' };
+  return { ok: true, client };
+}
+
+export async function assertCanAccessClientAsMentor({
+  actorUserId,
+  clientUserId,
+  isBotAdmin,
+}) {
+  const clientId = Number(clientUserId);
+  if (!Number.isSafeInteger(clientId) || clientId <= 0) {
+    return { ok: false, status: 400, error: 'Invalid client user id' };
+  }
+  const client = await models.Users.findByPk(clientId);
+  if (!client) return { ok: false, status: 404, error: 'User not found' };
+  if (Number(actorUserId) === clientId) return { ok: true, client };
+  if (isBotAdmin) return { ok: true, client };
+  if (!models.ClientMentors) return { ok: false, status: 403, error: 'Forbidden' };
+  const row = await models.ClientMentors.findOne({
+    where: { MentorUserId: Number(actorUserId), ClientUserId: clientId },
   });
   if (!row) return { ok: false, status: 403, error: 'Forbidden' };
   return { ok: true, client };

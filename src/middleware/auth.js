@@ -3,6 +3,7 @@ import { verifyInitData, extractMiniAppInitData } from '../utils/telegramUtils.j
 import {
   canUseApplyLinkBuilder,
   countAgentAssignments,
+  countMentorAssignments,
   isBotAdminTelegramId,
   resolveUserFromMiniApp,
 } from '../services/agentAccessService.js';
@@ -64,6 +65,7 @@ export async function miniAppActorAuth(req, res, next) {
     req.actorUser = actorUser;
     req.isBotAdmin = isBotAdminTelegramId(telegramUserId);
     req.isCareerAgent = (await countAgentAssignments(actorUser.Id)) > 0;
+    req.isClientMentor = (await countMentorAssignments(actorUser.Id)) > 0;
     return next();
   });
 }

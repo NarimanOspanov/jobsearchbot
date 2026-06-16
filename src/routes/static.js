@@ -46,6 +46,7 @@ export function createStaticRouter() {
   router.get('/app/companies', (_req, res) => res.sendFile(join(publicApp, 'companies.html')));
   router.get('/app/seeker-jobs', (_req, res) => res.sendFile(join(publicApp, 'seeker-jobs.html')));
   router.get('/app/seeker-jobs-deeplink', (_req, res) => res.sendFile(join(publicApp, 'seeker-jobs-deeplink.html')));
+  router.get('/app/mentor-report', (_req, res) => res.sendFile(join(publicApp, 'mentor-report.html')));
   router.get('/app/pricing', (_req, res) => res.sendFile(join(publicApp, 'pricing.html')));
   router.get('/app/admin/companies', (_req, res) => res.sendFile(join(publicApp, 'admin-companies.html')));
   router.get('/app/admin/positions', (_req, res) => res.sendFile(join(publicApp, 'admin-positions.html')));
@@ -53,6 +54,9 @@ export function createStaticRouter() {
   router.get('/app/admin/notifications', (_req, res) => res.sendFile(join(publicApp, 'admin-notifications.html')));
   router.get('/app/admin/agent-assignments', (_req, res) =>
     res.sendFile(join(publicApp, 'admin-agent-assignments.html'))
+  );
+  router.get('/app/admin/mentor-assignments', (_req, res) =>
+    res.sendFile(join(publicApp, 'admin-mentor-assignments.html'))
   );
   router.get('/app/agent/clients', (_req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');

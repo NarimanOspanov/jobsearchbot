@@ -65,6 +65,7 @@ import {
 import {
   canUseApplyLinkBuilder,
   countAgentAssignments,
+  countMentorAssignments,
   isBotAdminTelegramId,
 } from './services/agentAccessService.js';
 import { tailorResumeForSeeker } from './services/tailoredCvService.js';
@@ -193,6 +194,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const adminUrl = appBaseUrl ? `${appBaseUrl}/app/admin` : '';
   const agentClientsUrl = appBaseUrl ? `${appBaseUrl}/app/agent/clients` : '';
   const adminAgentAssignmentsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/agent-assignments` : '';
+  const adminMentorAssignmentsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/mentor-assignments` : '';
   const adminCompaniesUrl = appBaseUrl ? `${appBaseUrl}/app/admin/companies` : '';
   const adminPositionsUrl = appBaseUrl ? `${appBaseUrl}/app/admin/positions` : '';
   const applyLinkBuilderUrl = appBaseUrl ? `${appBaseUrl}/app/apply-link-builder` : '';
@@ -202,6 +204,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const conversionStatsUrl = appBaseUrl ? `${appBaseUrl}/app/conversion-stats` : '';
   const agentPerformanceUrl = appBaseUrl ? `${appBaseUrl}/app/agent-performance` : '';
   const dailyReportUrl = appBaseUrl ? `${appBaseUrl}/app/daily-report?period=24h` : '';
+  const mentorReportUrl = appBaseUrl ? `${appBaseUrl}/app/mentor-report` : '';
   const cvScoreUrl = appBaseUrl ? `${appBaseUrl}/app/cvscore` : '';
   const canUseSeekerJobsWebApp = isValidTelegramWebAppUrl(seekerJobsUrl);
   const canUseApplicationsWebApp = isValidTelegramWebAppUrl(applicationsUrl);
@@ -211,6 +214,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseAdminWebApp = isValidTelegramWebAppUrl(adminUrl);
   const canUseAgentClientsWebApp = isValidTelegramWebAppUrl(agentClientsUrl);
   const canUseAdminAgentAssignmentsWebApp = isValidTelegramWebAppUrl(adminAgentAssignmentsUrl);
+  const canUseAdminMentorAssignmentsWebApp = isValidTelegramWebAppUrl(adminMentorAssignmentsUrl);
   const canUseAdminCompaniesWebApp = isValidTelegramWebAppUrl(adminCompaniesUrl);
   const canUseAdminPositionsWebApp = isValidTelegramWebAppUrl(adminPositionsUrl);
   const canUseApplyLinkBuilderWebApp = isValidTelegramWebAppUrl(applyLinkBuilderUrl);
@@ -220,6 +224,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const canUseConversionStatsWebApp = isValidTelegramWebAppUrl(conversionStatsUrl);
   const canUseAgentPerformanceWebApp = isValidTelegramWebAppUrl(agentPerformanceUrl);
   const canUseDailyReportWebApp = isValidTelegramWebAppUrl(dailyReportUrl);
+  const canUseMentorReportWebApp = isValidTelegramWebAppUrl(mentorReportUrl);
   const canUseCvScoreWebApp = isValidTelegramWebAppUrl(cvScoreUrl);
   const startAvatarPath = join(__dirname, '..', 'avatar.png');
   const notSubscribedImagePath = join(__dirname, '..', 'not_subscribed.png');
@@ -1614,6 +1619,20 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     return (await countAgentAssignments(user.Id)) > 0;
   }
 
+  async function canOpenMentorReport(ctx) {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return false;
+    if (isBotAdminTelegramId(telegramId)) return true;
+    const { user } = await ensureUserByTelegramId(
+      telegramId,
+      ctx.from?.username ?? null,
+      ctx.from?.first_name ?? null,
+      ctx.from?.last_name ?? null
+    );
+    if (!user) return false;
+    return (await countMentorAssignments(user.Id)) > 0;
+  }
+
   const openAgentClients = async (ctx) => {
     if (ctx.chat?.type !== 'private') {
       await ctx.reply('Agent clients page is available only in private chat.');
@@ -1632,6 +1651,29 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     await ctx.reply('Agent clients page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  };
+
+  const openAdminMentorAssignments = async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Mentor assignments page is available only in private chat.');
+      return;
+    }
+    const adminIds = config.botAdminTelegramIds;
+    if (adminIds.size > 0 && (!ctx.from?.id || !adminIds.has(ctx.from.id))) {
+      await ctx.reply('Unauthorized.');
+      return;
+    }
+    if (canUseAdminMentorAssignmentsWebApp) {
+      await ctx.reply('Manage client mentor assignments:', {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'Manage mentor assignments', web_app: { url: adminMentorAssignmentsUrl } }],
+          ],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Mentor assignments page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
   };
 
   const openAdminAgentAssignments = async (ctx) => {
@@ -1667,7 +1709,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       await ctx.reply('Unauthorized.');
       return;
     }
-    if (!canUseAgentClientsWebApp && !canUseAdminAgentAssignmentsWebApp) {
+    if (!canUseAgentClientsWebApp && !canUseAdminAgentAssignmentsWebApp && !canUseAdminMentorAssignmentsWebApp) {
       await ctx.reply('Admin pages require public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
       return;
     }
@@ -1676,7 +1718,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       rows.push([{ text: 'Agent clients', web_app: { url: agentClientsUrl } }]);
     }
     if (canUseAdminAgentAssignmentsWebApp) {
-      rows.push([{ text: 'Manage assignments', web_app: { url: adminAgentAssignmentsUrl } }]);
+      rows.push([{ text: 'Manage agent assignments', web_app: { url: adminAgentAssignmentsUrl } }]);
+    }
+    if (canUseAdminMentorAssignmentsWebApp) {
+      rows.push([{ text: 'Manage mentor assignments', web_app: { url: adminMentorAssignmentsUrl } }]);
     }
     await ctx.reply('Admin menu:', { reply_markup: { inline_keyboard: rows } });
   });
@@ -1693,12 +1738,48 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await openAgentClients(ctx);
   });
 
+  const openMentorReport = async (ctx) => {
+    if (ctx.chat?.type !== 'private') {
+      await ctx.reply('Mentor report is available only in private chat.');
+      return;
+    }
+    if (!(await canOpenMentorReport(ctx))) {
+      await ctx.reply('Unauthorized.');
+      return;
+    }
+    if (canUseMentorReportWebApp) {
+      await ctx.reply('Open mentor report:', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Mentor report', web_app: { url: mentorReportUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply('Mentor report page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+  };
+
+  bot.command('mentor_report', async (ctx) => {
+    await openMentorReport(ctx);
+  });
+
+  bot.hears(/^\/mentor-report(?:@\w+)?$/, async (ctx) => {
+    await openMentorReport(ctx);
+  });
+
   bot.command('admin_assignments', async (ctx) => {
     await openAdminAgentAssignments(ctx);
   });
 
   bot.hears(/^\/admin-assignments(?:@\w+)?$/, async (ctx) => {
     await openAdminAgentAssignments(ctx);
+  });
+
+  bot.command('admin_mentor_assignments', async (ctx) => {
+    await openAdminMentorAssignments(ctx);
+  });
+
+  bot.hears(/^\/admin-mentor-assignments(?:@\w+)?$/, async (ctx) => {
+    await openAdminMentorAssignments(ctx);
   });
 
   const openAdminCompanies = async (ctx) => {
@@ -1867,6 +1948,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '',
       '<b>Career agents</b>',
       '<code>/admin_assignments</code> — assign agents to job seekers',
+      '<code>/admin_mentor_assignments</code> — assign client mentors to job seekers',
+      '<i>Alias:</i> <code>/admin-mentor-assignments</code>',
       '<code>/clients</code> — agent clients workspace (admins and assigned agents)',
       '<i>Aliases:</i> <code>/agent_clients</code>, <code>/agent-clients</code>',
       '<code>/agent_performance</code> [days] — applied jobs report (agents: own stats; admins: all or pick in UI)',
@@ -1875,6 +1958,8 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       '<i>Alias:</i> <code>/agent-performance-digest</code>',
       '<code>/client_daily_report</code> — send daily applied-jobs digest to clients',
       '<i>Alias:</i> <code>/client-daily-report</code>',
+      '<code>/mentor_report</code> — open mentor report page (period + client filters)',
+      '<i>Alias:</i> <code>/mentor-report</code>',
       '',
       '<b>Web App panels</b>',
       '<code>/admin_companies</code> — remote companies list',

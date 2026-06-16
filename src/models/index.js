@@ -17,6 +17,7 @@ import defineUserApplicationOutreach from './UserApplicationOutreach.js';
 import defineAdminNotification from './AdminNotification.js';
 import defineAdminNotificationRun from './AdminNotificationRun.js';
 import defineAgentClient from './AgentClient.js';
+import defineClientMentor from './ClientMentor.js';
 import defineHumanAssistantRequest from './HumanAssistantRequest.js';
 import definePublisherSignup from './PublisherSignup.js';
 import defineCampaignSignup from './CampaignSignup.js';
@@ -44,6 +45,7 @@ export function initModels(sequelize) {
   const AdminNotification = defineAdminNotification(sequelize);
   const AdminNotificationRun = defineAdminNotificationRun(sequelize);
   const AgentClient = defineAgentClient(sequelize);
+  const ClientMentor = defineClientMentor(sequelize);
   const HumanAssistantRequest = defineHumanAssistantRequest(sequelize);
   const PublisherSignup = definePublisherSignup(sequelize);
   const CampaignSignup = defineCampaignSignup(sequelize);
@@ -82,6 +84,10 @@ export function initModels(sequelize) {
   AgentClient.belongsTo(User, { as: 'Agent', foreignKey: 'AgentUserId' });
   User.hasOne(AgentClient, { as: 'ClientAssignment', foreignKey: 'ClientUserId' });
   AgentClient.belongsTo(User, { as: 'Client', foreignKey: 'ClientUserId' });
+  User.hasMany(ClientMentor, { as: 'MentorAssignments', foreignKey: 'MentorUserId' });
+  ClientMentor.belongsTo(User, { as: 'Mentor', foreignKey: 'MentorUserId' });
+  User.hasMany(ClientMentor, { as: 'ClientMentorAssignments', foreignKey: 'ClientUserId' });
+  ClientMentor.belongsTo(User, { as: 'Client', foreignKey: 'ClientUserId' });
   User.hasMany(HumanAssistantRequest, { foreignKey: 'UserId' });
   HumanAssistantRequest.belongsTo(User, { as: 'User', foreignKey: 'UserId' });
   User.hasOne(PublisherSignup, { foreignKey: 'UserId' });
@@ -129,6 +135,8 @@ export function initModels(sequelize) {
     AdminNotificationRuns: AdminNotificationRun,
     AgentClient,
     AgentClients: AgentClient,
+    ClientMentor,
+    ClientMentors: ClientMentor,
     HumanAssistantRequest,
     HumanAssistantRequests: HumanAssistantRequest,
     PublisherSignup,
