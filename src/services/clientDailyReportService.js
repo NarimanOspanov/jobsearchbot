@@ -48,6 +48,57 @@ function parseApplyPriorityJson(raw) {
   }
 }
 
+function metaApplyUrl(meta) {
+  if (!meta || typeof meta !== 'object') return '';
+  return String(meta.applyUrl || meta.applyURL || '').trim();
+}
+
+async function enrichClientDailyReportRows(mappedRows) {
+  if (!Array.isArray(mappedRows) || !mappedRows.length) return [];
+
+  const rowsNeedingPositionUrl = mappedRows.filter((row) => {
+    if (metaApplyUrl(row.meta)) return false;
+    const positionId = Number.parseInt(String(row.meta?.positionId ?? row.screenlyJobId ?? ''), 10);
+    return Number.isSafeInteger(positionId) && positionId > 0;
+  });
+
+  const urlByPositionId = new Map();
+  if (rowsNeedingPositionUrl.length && models.Positions) {
+    const positionIds = [
+      ...new Set(
+        rowsNeedingPositionUrl.map((row) =>
+          Number.parseInt(String(row.meta?.positionId ?? row.screenlyJobId ?? ''), 10)
+        )
+      ),
+    ];
+    const positions = await models.Positions.findAll({
+      where: { Id: positionIds },
+      attributes: ['Id', 'ExternalApplyURL'],
+    });
+    for (const position of positions) {
+      const url = String(position.ExternalApplyURL || '').trim();
+      if (url) urlByPositionId.set(position.Id, url);
+    }
+  }
+
+  return mappedRows.map((row) => {
+    const existingUrl = metaApplyUrl(row.meta);
+    if (existingUrl) {
+      return { ...row, applyUrl: existingUrl };
+    }
+    const positionId = Number.parseInt(String(row.meta?.positionId ?? row.screenlyJobId ?? ''), 10);
+    const fallbackUrl = urlByPositionId.get(positionId) || '';
+    if (!fallbackUrl) {
+      return { ...row, applyUrl: null };
+    }
+    return {
+      ...row,
+      applyUrl: fallbackUrl,
+      meta: { ...(row.meta || {}), applyUrl: fallbackUrl },
+    };
+  });
+}
+
 function parseMetaJson(metaJson) {
   if (!metaJson) return null;
   if (typeof metaJson === 'object') return metaJson;
@@ -137,7 +188,7 @@ export async function fetchClientDailyReportRows(userId, { since = null } = {}) 
     limit: 500,
   });
 
-  return rows.map((row) => {
+  const mappedRows = rows.map((row) => {
     const data = row.toJSON ? row.toJSON() : row;
     const meta = parseMetaJson(data.MetaJson);
     const applyPriority = parseApplyPriorityJson(data.ApplyPriorityJson);
@@ -157,8 +208,89 @@ export async function fetchClientDailyReportRows(userId, { since = null } = {}) 
       screenshotArtifactUrl: data.ScreenshotArtifactURL || null,
       meta: meta || {},
       applyPriority: applyPriority || null,
+      applyPriorityJson: applyPriority || null,
     };
   });
+
+  return enrichClientDailyReportRows(mappedRows);
+}
+
+function displayNameFromUser(user) {
+  const first = String(user?.FirstName || '').trim();
+  const last = String(user?.LastName || '').trim();
+  const full = [first, last].filter(Boolean).join(' ').trim();
+  return full || String(user?.TelegramUserName || '').trim() || `#${user?.Id || '?'}`;
+}
+
+function formatAppliedDay(value) {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value || '').slice(0, 10);
+}
+
+function buildDateKeys(since, until = new Date()) {
+  const keys = [];
+  const d = new Date(since);
+  d.setUTCHours(0, 0, 0, 0);
+  const end = new Date(until);
+  end.setUTCHours(0, 0, 0, 0);
+  while (d <= end) {
+    keys.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return keys;
+}
+
+export async function fetchMentorClientApplicationChart(clientUserIds, { since } = {}) {
+  const ids = [
+    ...new Set(
+      (Array.isArray(clientUserIds) ? clientUserIds : [])
+        .map((id) => Number.parseInt(String(id), 10))
+        .filter((id) => Number.isSafeInteger(id) && id > 0)
+    ),
+  ];
+  const fromDate = since instanceof Date ? since : new Date(Date.now() - DAY_MS);
+  const dates = buildDateKeys(fromDate);
+  if (!ids.length) return { dates, series: [] };
+
+  const rows = await sequelize.query(
+    `SELECT
+       a.UserId AS clientUserId,
+       CAST(a.AppliedAt AS DATE) AS appliedDate,
+       COUNT(*) AS appliedCount
+     FROM dbo.Applications AS a
+     WHERE a.UserId IN (:clientUserIds)
+       AND a.AppliedAt >= :since
+       AND LOWER(a.Status) = 'applied'
+     GROUP BY a.UserId, CAST(a.AppliedAt AS DATE)
+     ORDER BY CAST(a.AppliedAt AS DATE) ASC`,
+    {
+      replacements: { clientUserIds: ids, since: fromDate },
+      type: Sequelize.QueryTypes.SELECT,
+    }
+  );
+
+  const countByClientDate = new Map();
+  for (const row of rows) {
+    const clientId = Number(row.clientUserId);
+    const day = formatAppliedDay(row.appliedDate);
+    if (!clientId || !day) continue;
+    countByClientDate.set(`${clientId}:${day}`, Number(row.appliedCount) || 0);
+  }
+
+  const users = await models.Users.findAll({ where: { Id: ids } });
+  const userById = new Map(users.map((u) => [u.Id, u]));
+
+  const series = ids.map((clientUserId) => {
+    const user = userById.get(clientUserId);
+    const counts = dates.map((day) => countByClientDate.get(`${clientUserId}:${day}`) || 0);
+    return {
+      clientUserId,
+      clientName: user ? displayNameFromUser(user) : `#${clientUserId}`,
+      counts,
+    };
+  });
+
+  return { dates, series };
 }
 
 function buildAppliedJobsLines(rows, copy) {

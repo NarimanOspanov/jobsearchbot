@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mentor Report</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script src="./tma-i18n.js"></script>
     <style>
       :root { --bg:#0d1222; --card:#151b30; --text:#eaf0ff; --muted:#9eb0d1; --border:#273357; }
@@ -21,8 +22,9 @@
       th { font-size:12px; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
       tr[data-row-id] { cursor:pointer; }
       tr[data-row-id]:hover { background: rgba(79,124,255,0.08); }
-      .title-link { color: var(--text); text-decoration: underline; font-size: 1.1em; }
+      .title-link { color: #7eb4ff; text-decoration: underline; font-size: 1.1em; }
       .title-link:hover { color: #c7ddff; }
+      #jobTitle .title-link { font-size: 1.15em; font-weight: 700; }
       .apply-priority-block { border:1px solid var(--border); border-radius:8px; padding:10px; background:#10182d; }
       .apply-priority-meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
       .empty { padding:16px; color:var(--muted); text-align:center; }
@@ -36,6 +38,9 @@
       .artifacts { display:flex; gap:8px; flex-wrap:wrap; }
       .summary { border:1px solid var(--border); border-radius:8px; padding:10px; background:#10182d; white-space:pre-wrap; margin:0; }
       #screenshotPreview { max-width:100%; border:1px solid var(--border); border-radius:8px; display:none; }
+      .chart-wrap { min-height: 280px; position: relative; overflow: auto; }
+      .chart-wrap canvas { width: 100%; }
+      h2 { margin: 0 0 10px; font-size: 1rem; }
     </style>
   </head>
   <body>
@@ -56,6 +61,12 @@
           <select id="clientSel"></select>
           <button id="refreshBtn" type="button">Refresh</button>
         </div>
+      </div>
+      <div class="card">
+        <h2 id="chartTitle">Applications by client</h2>
+        <p id="chartHint" class="muted" style="margin:0 0 10px"></p>
+        <div id="chartWrap" class="chart-wrap"><canvas id="clientsChart"></canvas></div>
+        <p id="chartEmpty" class="empty" hidden></p>
       </div>
       <div class="card">
         <table>
@@ -83,10 +94,6 @@
           <div class="muted" id="jobCompanyLine"></div>
           <div class="muted" id="jobAppliedAtLine"></div>
           <div class="muted" id="jobApplyTypeLine"></div>
-          <div id="applyPrioritySection" hidden>
-            <strong id="applyPriorityLabel">Why applied</strong>
-            <div id="applyPriorityBlock" class="apply-priority-block"></div>
-          </div>
           <div class="artifacts">
             <a id="tailoredCvLink" class="btn" target="_blank" rel="noopener noreferrer">Tailored CV</a>
             <button id="coverLetterBtn" class="btn" type="button">Cover letter</button>
@@ -97,6 +104,10 @@
           <div>
             <strong id="summaryLabel">Summary</strong>
             <pre id="summaryText" class="summary"></pre>
+          </div>
+          <div id="applyPrioritySection" hidden>
+            <strong id="applyPriorityLabel">Why applied</strong>
+            <div id="applyPriorityBlock" class="apply-priority-block"></div>
           </div>
           <div>
             <strong id="coverLabel">Cover letter</strong>
@@ -144,6 +155,11 @@
           prioritySkip: 'Skip',
           skipReason: 'Skip reason',
           analyzedAt: 'Analyzed at',
+          chartTitle: 'Applications by client',
+          chartHint: 'Compare assigned clients: date on Y axis, application count on X axis.',
+          chartEmpty: 'No application data for the selected period.',
+          axisDate: 'Date',
+          axisApplications: 'Applications',
         },
         ru: {
           pageTitle: 'Отчет ментора',
@@ -181,6 +197,11 @@
           prioritySkip: 'Пропуск',
           skipReason: 'Причина пропуска',
           analyzedAt: 'Проанализировано',
+          chartTitle: 'Отклики по клиентам',
+          chartHint: 'Сравнение назначенных клиентов: дата по оси Y, число откликов по оси X.',
+          chartEmpty: 'Нет данных об откликах за выбранный период.',
+          axisDate: 'Дата',
+          axisApplications: 'Отклики',
         },
       };
       const tg = window.Telegram?.WebApp;
@@ -189,6 +210,13 @@
       const t = (key, params) => (window.TmaI18n ? window.TmaI18n.t(STRINGS, lang, key, params) : key);
       let rows = [];
       let clients = [];
+      let clientsChart = null;
+      let chartPayload = { dates: [], series: [] };
+      const CLIENT_CHART_COLORS = ['#4f7cff', '#22c55e', '#f59e0b', '#ec4899', '#38bdf8', '#a78bfa', '#f97316', '#14b8a6'];
+      const chartScale = {
+        x: { beginAtZero: true, ticks: { precision: 0, color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' }, title: { display: true, color: '#9eb0d1' } },
+        y: { ticks: { color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' }, title: { display: true, color: '#9eb0d1' } },
+      };
       function api(path, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
         if (tg?.initData) headers['x-init-data'] = tg.initData;
@@ -200,19 +228,28 @@
       function esc(value) { return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
       function parseMetaJson(meta) { if (!meta) return null; if (typeof meta === 'object') return meta; try { return JSON.parse(meta); } catch { return null; } }
       function metaApplyUrl(meta) { return String(meta?.applyUrl || meta?.applyURL || '').trim(); }
+      function rowApplyUrl(row, meta) {
+        return String(row?.applyUrl || metaApplyUrl(meta) || '').trim();
+      }
+      function rowApplyPriority(row) {
+        return row?.applyPriority ?? row?.applyPriorityJson ?? null;
+      }
       function parseApplyPriorityJson(raw) {
         if (!raw) return null;
         const parsed = typeof raw === 'object' ? raw : (() => { try { return JSON.parse(raw); } catch { return null; } })();
         if (!parsed || typeof parsed !== 'object') return null;
         const applyRank = Number(parsed.applyRank) || 0;
+        const score = parsed.score != null && !Number.isNaN(Number(parsed.score)) ? Number(parsed.score) : null;
+        const priority = String(parsed.priority || '').trim();
         const justification = String(parsed.justification || '').trim();
-        if (!applyRank && !justification) return null;
+        const skipReason = String(parsed.skipReason || '').trim() || null;
+        if (!applyRank && score == null && !priority && !justification && !skipReason) return null;
         return {
           applyRank,
-          score: parsed.score != null ? Number(parsed.score) : null,
-          priority: String(parsed.priority || '').trim(),
+          score,
+          priority,
           justification,
-          skipReason: String(parsed.skipReason || '').trim() || null,
+          skipReason,
           analyzedAt: parsed.analyzedAt || null,
         };
       }
@@ -230,6 +267,13 @@
         const url = String(applyUrl || '').trim();
         if (url) {
           el.innerHTML = `<strong><a class="title-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${safeTitle}</a></strong>`;
+          const link = el.querySelector('a.title-link');
+          if (link && tg?.openLink) {
+            link.addEventListener('click', (event) => {
+              event.preventDefault();
+              tg.openLink(url);
+            }, { once: true });
+          }
         } else {
           el.innerHTML = `<strong>${safeTitle}</strong>`;
         }
@@ -239,11 +283,11 @@
         const block = document.getElementById('applyPriorityBlock');
         const parsed = parseApplyPriorityJson(applyPriority);
         if (!parsed) {
-          section.hidden = true;
+          section.setAttribute('hidden', '');
           block.innerHTML = '';
           return;
         }
-        section.hidden = false;
+        section.removeAttribute('hidden');
         const parts = [];
         if (parsed.applyRank) parts.push(`#${esc(parsed.applyRank)}`);
         if (parsed.priority) parts.push(esc(priorityLabel(parsed.priority)));
@@ -282,6 +326,61 @@
         document.getElementById('summaryLabel').textContent = t('summary');
         document.getElementById('coverLabel').textContent = t('coverLetter');
         document.getElementById('applyPriorityLabel').textContent = t('whyApplied');
+        document.getElementById('chartTitle').textContent = t('chartTitle');
+        document.getElementById('chartHint').textContent = t('chartHint');
+        document.getElementById('chartEmpty').textContent = t('chartEmpty');
+        chartScale.x.title.text = t('axisApplications');
+        chartScale.y.title.text = t('axisDate');
+      }
+      function formatChartDateLabel(value) {
+        const raw = String(value || '').slice(0, 10);
+        if (!raw) return t('noData');
+        const parts = raw.split('-');
+        if (parts.length !== 3) return raw;
+        return lang === 'ru' ? `${parts[2]}.${parts[1]}` : `${parts[1]}/${parts[2]}`;
+      }
+      function destroyClientsChart() {
+        if (clientsChart) {
+          clientsChart.destroy();
+          clientsChart = null;
+        }
+      }
+      function renderClientsChart() {
+        const canvas = document.getElementById('clientsChart');
+        const wrap = document.getElementById('chartWrap');
+        const emptyEl = document.getElementById('chartEmpty');
+        const dates = Array.isArray(chartPayload?.dates) ? chartPayload.dates : [];
+        const series = Array.isArray(chartPayload?.series) ? chartPayload.series : [];
+        const hasData = series.some((item) => (item.counts || []).some((count) => Number(count) > 0));
+        if (!window.Chart || !dates.length || !series.length || !hasData) {
+          destroyClientsChart();
+          wrap.hidden = true;
+          emptyEl.hidden = false;
+          return;
+        }
+        wrap.hidden = false;
+        emptyEl.hidden = true;
+        wrap.style.minHeight = `${Math.max(280, dates.length * 34)}px`;
+        destroyClientsChart();
+        clientsChart = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: dates.map(formatChartDateLabel),
+            datasets: series.map((item, index) => ({
+              label: item.clientName || `#${item.clientUserId}`,
+              data: (item.counts || []).map((count) => Number(count) || 0),
+              backgroundColor: CLIENT_CHART_COLORS[index % CLIENT_CHART_COLORS.length],
+              borderRadius: 4,
+            })),
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#eaf0ff' } } },
+            scales: chartScale,
+          },
+        });
       }
       function renderClientOptions() {
         const sel = document.getElementById('clientSel');
@@ -302,7 +401,7 @@
         body.innerHTML = rows.map((row) => {
           const meta = parseMetaJson(row.meta);
           const location = meta?.location || t('noLocation');
-          const applyUrl = metaApplyUrl(meta);
+          const applyUrl = rowApplyUrl(row, meta);
           const safeTitle = esc(row.vacancyTitle || t('noData'));
           const titleHtml = applyUrl ? `<a class="title-link" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">${safeTitle}</a>` : safeTitle;
           return `<tr data-row-id="${esc(row.id)}"><td>${esc(fmtDateTime(row.appliedAt))}</td><td>${titleHtml}</td><td>${esc(row.companyName || t('noData'))}</td><td>${esc(location)}</td></tr>`;
@@ -321,12 +420,12 @@
         const row = rows.find((item) => String(item.id) === String(id));
         if (!row) return;
         const meta = parseMetaJson(row.meta);
-        setJobTitleEl(row.vacancyTitle, metaApplyUrl(meta));
+        setJobTitleEl(row.vacancyTitle, rowApplyUrl(row, meta));
         document.getElementById('jobCompanyLine').textContent = `${row.companyName || t('noData')} · ${meta?.location || t('noLocation')} · ${row.source || t('noData')}`;
         document.getElementById('jobAppliedAtLine').textContent = `${t('appliedAt')}: ${fmtDateTime(row.appliedAt)}`;
         document.getElementById('jobApplyTypeLine').textContent = `${t('applyType')}: ${row.applyType || t('noData')}`;
-        renderApplyPrioritySection(row.applyPriority);
         document.getElementById('summaryText').textContent = String(meta?.shortSummary || '').trim() || t('noSummary');
+        renderApplyPrioritySection(rowApplyPriority(row));
         document.getElementById('coverLetterText').textContent = String(row.coverLetter || '').trim() || t('noCover');
         const tailoredCvLink = document.getElementById('tailoredCvLink');
         const coverLetterUrlLink = document.getElementById('coverLetterUrlLink');
@@ -347,6 +446,15 @@
         clients = Array.isArray(payload?.clients) ? payload.clients : [];
         renderClientOptions();
       }
+      async function loadChart() {
+        const period = document.getElementById('periodSel').value || '24h';
+        const payload = await api(`/api/app/mentor/report/chart?period=${encodeURIComponent(period)}`);
+        chartPayload = {
+          dates: Array.isArray(payload?.dates) ? payload.dates : [],
+          series: Array.isArray(payload?.series) ? payload.series : [],
+        };
+        renderClientsChart();
+      }
       async function loadRows() {
         const clientUserId = document.getElementById('clientSel').value;
         const period = document.getElementById('periodSel').value || '24h';
@@ -358,10 +466,13 @@
       async function boot() {
         applyStaticUi();
         await loadClients();
-        await loadRows();
+        await Promise.all([loadRows(), loadChart()]);
       }
-      document.getElementById('refreshBtn').addEventListener('click', () => { loadRows().catch(showLoadError); });
-      document.getElementById('periodSel').addEventListener('change', () => { loadRows().catch(showLoadError); });
+      async function reloadReport() {
+        await Promise.all([loadRows(), loadChart()]);
+      }
+      document.getElementById('refreshBtn').addEventListener('click', () => { reloadReport().catch(showLoadError); });
+      document.getElementById('periodSel').addEventListener('change', () => { reloadReport().catch(showLoadError); });
       document.getElementById('clientSel').addEventListener('change', () => { loadRows().catch(showLoadError); });
       document.getElementById('rowsBody').addEventListener('click', (event) => {
         if (event.target.closest('a.title-link')) return;

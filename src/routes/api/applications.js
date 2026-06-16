@@ -15,7 +15,7 @@ import {
   toScoreOrNullOrUndefined,
   toStringOrUndefined,
 } from '../../utils/validators.js';
-import { fetchClientDailyReportRows } from '../../services/clientDailyReportService.js';
+import { fetchClientDailyReportRows, fetchMentorClientApplicationChart } from '../../services/clientDailyReportService.js';
 
 function parseImpersonateAgentUserId(req) {
   const n = Number.parseInt(String(req.query.agentUserId || req.body?.agentUserId || ''), 10);
@@ -221,6 +221,35 @@ export function createApplicationsRouter() {
     } catch (err) {
       console.error('GET /api/app/mentor/clients:', err);
       return res.status(500).json({ error: 'Failed to load mentor clients' });
+    }
+  });
+
+  router.get('/api/app/mentor/report/chart', miniAppActorAuth, async (req, res) => {
+    try {
+      if (!req.isBotAdmin && !req.isClientMentor) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      const where = req.isBotAdmin ? {} : { MentorUserId: req.actorUser.Id };
+      const assignments = await models.ClientMentors.findAll({
+        where,
+        attributes: ['ClientUserId'],
+        order: [['CreatedAt', 'DESC'], ['Id', 'DESC']],
+      });
+      const clientUserIds = assignments.map((row) => row.ClientUserId).filter(Boolean);
+      const hours = parseReportPeriodHours(req.query.period);
+      const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+      const period = hours === 24 ? '24h' : hours === 7 * 24 ? '7d' : '30d';
+      const chart = await fetchMentorClientApplicationChart(clientUserIds, { since });
+      return res.json({
+        ok: true,
+        period,
+        since: since.toISOString(),
+        dates: chart.dates,
+        series: chart.series,
+      });
+    } catch (err) {
+      console.error('GET /api/app/mentor/report/chart:', err);
+      return res.status(500).json({ error: 'Failed to load mentor report chart' });
     }
   });
 
