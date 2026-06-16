@@ -244,6 +244,19 @@
         margin-right: 6px;
       }
       .row-loader-inline.loader { display: inline-block; }
+      .job-row-processing {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+        font-size: 11px;
+        color: #93c5fd;
+      }
+      .job-row-processing .row-loader-inline {
+        width: 11px;
+        height: 11px;
+        border-width: 2px;
+      }
       .apply-rank-badge {
         display: inline-block;
         min-width: 28px;
@@ -1225,7 +1238,7 @@
       let selectedJob = null;
       let selectedApplication = null;
       let generatedMaterials = null;
-      let jobsSort = { key: 'id', dir: 'desc' };
+      let jobsSort = { key: 'posted', dir: 'desc' };
       let isSyncing = false;
       let isJobBusy = false;
       let isFiltersHidden = true;
@@ -2130,6 +2143,9 @@
         const cell =
           '<td class="apply-priority-cell-loading muted"><span class="row-loader-inline loader on" aria-hidden="true"></span> Processing…</td>';
         return cell + cell + cell + cell;
+      }
+      function renderRowProcessingHint() {
+        return '<span class="job-row-processing"><span class="row-loader-inline loader on" aria-hidden="true"></span>Priority processing in progress</span>';
       }
       function renderApplyPriorityCells(p) {
         if (!shouldShowApplyPriorityColumns()) return '';
@@ -3845,10 +3861,11 @@
         body.innerHTML = sorted.map((p) => {
           const app = appByScreenlyId(p.id);
           const rowCls = applyPriorityRowClass(p, app);
+          const showRowProcessing = isJobAutoPriorityInFlight(p.id) && !getJobApplyRanking(p.id);
           return `<tr data-open="${p.id}" class="${rowCls}">
             ${renderApplyPriorityCells(p)}
             <td>${esc(p.id)}</td>
-            <td>${esc(p.title)}</td>
+            <td>${showRowProcessing ? renderRowProcessingHint() : ''}${esc(p.title)}</td>
             <td>${esc(p.company)}</td>
             <td>${esc(p.location)}</td>
             <td>${esc(formatPostedDate(p.publishedAt))}</td>
