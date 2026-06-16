@@ -83,7 +83,8 @@ export function isClientDailyReportTestTarget(chatId) {
   return Number.isSafeInteger(target) && target > 0 && Number(chatId) === target;
 }
 
-export async function listClientDailyReportRecipients() {
+export async function listClientDailyReportRecipients(options = {}) {
+  const forceTestChatId = Number.parseInt(String(options.forceTestChatId || ''), 10);
   const baseSql = `
       SELECT
         u.Id AS userId,
@@ -97,7 +98,9 @@ export async function listClientDailyReportRecipients() {
   `;
 
   if (isClientDailyReportTestOnlyMode()) {
-    const chatId = Number(config.clientDailyReportTestChatId || 0);
+    const fromOptions =
+      Number.isSafeInteger(forceTestChatId) && forceTestChatId > 0 ? forceTestChatId : 0;
+    const chatId = fromOptions || Number(config.clientDailyReportTestChatId || 0);
     if (!Number.isSafeInteger(chatId) || chatId <= 0) return [];
     const rows = await sequelize.query(`${baseSql} AND u.TelegramChatId = :chatId`, {
       replacements: { chatId },
@@ -195,7 +198,9 @@ export async function sendClientDailyReportDigest(options = {}) {
     };
   }
 
-  const recipients = await listClientDailyReportRecipients();
+  const recipients = await listClientDailyReportRecipients({
+    forceTestChatId: options.forceTestChatId,
+  });
   if (!recipients.length) {
     return {
       ok: true,

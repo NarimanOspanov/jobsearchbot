@@ -2089,13 +2089,24 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       if (!ok) return;
       await ctx.reply('Sending client daily report digest…');
       const fromId = Number(ctx.from?.id || 0);
-      const result = await runClientDailyReportCron(`bot:${fromId || 'admin'}`);
+      const fallbackTestChatId =
+        config.clientDailyReportDeliveryMode === 'all' || Number(config.clientDailyReportTestChatId || 0) > 0
+          ? null
+          : Number(ctx.chat?.id || 0) || null;
+      const result = await runClientDailyReportCron(`bot:${fromId || 'admin'}`, {
+        forceTestChatId: fallbackTestChatId,
+      });
       const mode = config.clientDailyReportDeliveryMode === 'all' ? 'all clients' : 'test client only';
       await ctx.reply(
         `Done (${mode}). Sent to ${result.sent}/${result.recipientCount} recipient(s)` +
           (result.skippedNoApplications ? `, skipped ${result.skippedNoApplications} with no applications` : '') +
           (result.failed ? `, failed ${result.failed}.` : '.')
       );
+      if (!result.recipientCount && config.clientDailyReportDeliveryMode !== 'all') {
+        await ctx.reply(
+          'No recipients in test mode. Set CLIENT_DAILY_REPORT_TEST_CHAT_ID, or run the command from the target client chat.'
+        );
+      }
       if (canUseDailyReportWebApp) {
         await ctx.reply('Open daily report preview:', {
           reply_markup: {

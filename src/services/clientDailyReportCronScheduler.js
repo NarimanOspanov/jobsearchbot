@@ -23,13 +23,16 @@ function getZonedParts(date, timeZone) {
   };
 }
 
-export async function runClientDailyReportCron(trigger) {
+export async function runClientDailyReportCron(trigger, options = {}) {
   if (reportCronRunning) return { skipped: true, reason: 'already_running' };
   reportCronRunning = true;
   clientDailyReportCronHealthState.running = true;
   clientDailyReportCronHealthState.lastStartedAt = new Date().toISOString();
   try {
-    const result = await sendClientDailyReportDigest({ requestedBy: trigger });
+    const result = await sendClientDailyReportDigest({
+      requestedBy: trigger,
+      forceTestChatId: options.forceTestChatId,
+    });
     clientDailyReportCronHealthState.lastResult = result;
     clientDailyReportCronHealthState.lastError = result.ok ? null : result.error || 'partial_failure';
     console.log('Client daily report cron:', {
