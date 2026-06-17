@@ -31,6 +31,12 @@
         border-left: 1px solid #2e2e2e;
         border-right: 1px solid #2e2e2e;
         border-radius: 12px 12px 0 0;
+        justify-content: center;
+        gap: 8px;
+      }
+      .tma-bottom-nav-item {
+        flex: 0 0 auto;
+        width: 100px;
       }
     }
     .tma-bottom-nav-item {
