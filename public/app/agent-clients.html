@@ -987,6 +987,7 @@
                       <option value="">All</option>
                       <option value="Linkedin">Linkedin</option>
                       <option value="Indeed">Indeed</option>
+                      <option value="hh">hh</option>
                       <option value="hirehi">hirehi</option>
                     </select>
                   </label>
@@ -1483,12 +1484,14 @@
       const APPLY_TYPE_OPTIONS = [
         { value: 'linkedin', label: 'LinkedIn' },
         { value: 'indeed', label: 'Indeed' },
+        { value: 'hh', label: 'HH' },
         { value: 'telegram', label: 'Telegram' },
         { value: 'external', label: 'Company sites' },
       ];
       const APPLY_TYPE_LABELS = {
         linkedin: 'LinkedIn',
         indeed: 'Indeed',
+        hh: 'HH',
         telegram: 'Telegram',
         external: 'Company sites',
         thirdParty: 'Third-party site',
@@ -1578,6 +1581,7 @@
         const v = String(value || '').trim().toLowerCase();
         if (v === 'linkedin') return 'Linkedin';
         if (v === 'indeed') return 'Indeed';
+        if (v === 'hh') return 'hh';
         if (v === 'hirehi') return 'hirehi';
         return '';
       }
@@ -1588,6 +1592,7 @@
         if (v === 'external' || v === 'company sites') return 'external';
         if (v === 'linkedin') return 'linkedin';
         if (v === 'indeed') return 'indeed';
+        if (v === 'hh' || v === 'hirehi') return 'hh';
         return '';
       }
       function localIsoDate(d) {

@@ -7,6 +7,7 @@ function mapApplyTypeToken(rawToken) {
   if (!value) return '';
   if (value === 'linkedin') return 'linkedin';
   if (value === 'indeed') return 'indeed';
+  if (value === 'hh' || value === 'hirehi') return 'hh';
   if (value === 'telegram' || value === 'telegram channels') return 'telegram';
   if (value === 'external' || value === 'company sites') return 'external';
   return '';
@@ -30,7 +31,7 @@ function normalizeSourceToken(rawToken) {
   if (!value) return '';
   if (value === 'linkedin') return 'Linkedin';
   if (value === 'indeed') return 'Indeed';
-  if (value === 'hirehi') return 'hirehi';
+  if (value === 'hh' || value === 'hirehi') return 'hh';
   return '';
 }
 

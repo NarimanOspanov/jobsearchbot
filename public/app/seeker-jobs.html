@@ -712,6 +712,7 @@
                 <option value="">Все</option>
                 <option value="Linkedin">Linkedin</option>
                 <option value="Indeed">Indeed</option>
+                <option value="hh">hh</option>
                 <option value="hirehi">hirehi</option>
               </select>
             </label>
@@ -1284,6 +1285,7 @@
         const v = String(value || '').trim().toLowerCase();
         if (v === 'linkedin') return 'Linkedin';
         if (v === 'indeed') return 'Indeed';
+        if (v === 'hh') return 'hh';
         if (v === 'hirehi') return 'hirehi';
         return '';
       }
@@ -1294,6 +1296,7 @@
         if (v === 'external' || v === 'company sites') return 'external';
         if (v === 'linkedin') return 'linkedin';
         if (v === 'indeed') return 'indeed';
+        if (v === 'hh' || v === 'hirehi') return 'hh';
         return '';
       }
       function normalizeApplyTypesCsv(csv) {

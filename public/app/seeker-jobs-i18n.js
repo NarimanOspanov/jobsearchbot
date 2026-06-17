@@ -456,6 +456,7 @@
     return [
       { value: 'linkedin', label: 'LinkedIn' },
       { value: 'indeed', label: 'Indeed' },
+      { value: 'hh', label: 'HH' },
       { value: 'telegram', label: 'Telegram' },
       { value: 'external', label: sj(L, 'applyExternalSites') },
     ];
@@ -466,6 +467,7 @@
     return {
       linkedin: 'LinkedIn',
       indeed: 'Indeed',
+      hh: 'HH',
       telegram: 'Telegram',
       external: sj(L, 'applyExternalSites'),
       thirdParty: sj(L, 'applyThirdParty'),
