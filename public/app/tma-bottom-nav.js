@@ -55,6 +55,7 @@
       font-weight: 600;
       line-height: 1.2;
       transition: color 0.15s, background 0.15s;
+      cursor: pointer;
     }
     .tma-bottom-nav-item svg {
       width: 22px;
@@ -68,6 +69,27 @@
     .tma-bottom-nav-item:not(.is-active):active {
       background: rgba(255, 255, 255, 0.04);
     }
+    .tma-settings-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+      z-index: 1300;
+      background: #111111;
+      transform: translateY(110%);
+      transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+      overflow: hidden;
+    }
+    .tma-settings-modal.is-open {
+      transform: translateY(0);
+    }
+    .tma-settings-modal iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
   `;
 
   const ICON_JOBS =
@@ -78,6 +100,47 @@
   function normalizeLang(lang) {
     if (global.TmaI18n?.normalizeLang) return global.TmaI18n.normalizeLang(lang);
     return String(lang || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+  }
+
+  function openModal() {
+    let modal = document.getElementById('tmaSettingsModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'tmaSettingsModal';
+      modal.className = 'tma-settings-modal';
+
+      const iframe = document.createElement('iframe');
+      iframe.src = '/app/profile';
+      iframe.addEventListener('load', function () {
+        try {
+          const innerDoc = iframe.contentDocument || iframe.contentWindow.document;
+          const innerNav = innerDoc.getElementById('tmaBottomNav');
+          if (innerNav) innerNav.style.display = 'none';
+          if (innerDoc.body) {
+            innerDoc.body.classList.remove('has-tma-bottom-nav');
+            innerDoc.body.style.paddingBottom = '0';
+          }
+        } catch (e) {}
+      });
+      modal.appendChild(iframe);
+      document.body.appendChild(modal);
+    }
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        modal.classList.add('is-open');
+      });
+    });
+  }
+
+  function closeModal() {
+    const modal = document.getElementById('tmaSettingsModal');
+    if (modal) modal.classList.remove('is-open');
+  }
+
+  function isModalOpen() {
+    const modal = document.getElementById('tmaSettingsModal');
+    return modal ? modal.classList.contains('is-open') : false;
   }
 
   /**
@@ -105,16 +168,42 @@
       document.body.appendChild(nav);
     }
     nav.setAttribute('aria-label', s.mainNav);
-    nav.innerHTML = `
-      <a href="/app/seeker-jobs" class="tma-bottom-nav-item${active === 'jobs' ? ' is-active' : ''}">
-        ${ICON_JOBS}
-        <span>${s.jobSearch}</span>
-      </a>
-      <a href="/app/profile" class="tma-bottom-nav-item${active === 'profile' ? ' is-active' : ''}">
-        ${ICON_SETTINGS}
-        <span>${s.settings}</span>
-      </a>
-    `;
+
+    const jobsEl = document.createElement('span');
+    jobsEl.className = 'tma-bottom-nav-item' + (active === 'jobs' ? ' is-active' : '');
+    jobsEl.setAttribute('role', 'button');
+    jobsEl.innerHTML = ICON_JOBS + `<span>${s.jobSearch}</span>`;
+
+    const settingsEl = document.createElement('span');
+    settingsEl.className = 'tma-bottom-nav-item' + (active === 'profile' ? ' is-active' : '');
+    settingsEl.setAttribute('role', 'button');
+    settingsEl.innerHTML = ICON_SETTINGS + `<span>${s.settings}</span>`;
+
+    nav.innerHTML = '';
+    nav.appendChild(jobsEl);
+    nav.appendChild(settingsEl);
+
+    if (active === 'jobs') {
+      settingsEl.addEventListener('click', function () {
+        if (isModalOpen()) return;
+        openModal();
+        settingsEl.classList.add('is-active');
+        jobsEl.classList.remove('is-active');
+      });
+
+      jobsEl.addEventListener('click', function () {
+        if (isModalOpen()) {
+          closeModal();
+          jobsEl.classList.add('is-active');
+          settingsEl.classList.remove('is-active');
+        }
+      });
+    } else {
+      // On profile page: jobs tab navigates away, settings is already active
+      jobsEl.addEventListener('click', function () {
+        window.location.href = '/app/seeker-jobs';
+      });
+    }
   }
 
   global.TmaBottomNav = { mount };
