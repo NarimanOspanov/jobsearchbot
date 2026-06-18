@@ -803,6 +803,7 @@
   <body>
     <div class="wrap">
       <p id="globalMsg" class="muted"></p>
+      <p id="easyApplyWorkflowBanner" class="muted" style="display:none;margin:0;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(79,124,255,0.12)"></p>
 
       <div id="mainLayout" class="layout">
         <button
@@ -1233,6 +1234,9 @@
       let agents = [];
       let isBotAdminUser = false;
       let isCareerAgentUser = false;
+      let isGlobalEasyApplyAgentUser = false;
+      let agentWorkflowMode = 'external';
+      let effectiveWorkflowMode = 'external';
       let skills = [];
       let positions = [];
       let applications = [];
@@ -1531,12 +1535,44 @@
           pageSize: p.get('pageSize') || '100',
         };
       }
+      function defaultApplyTypesForWorkflow(mode) {
+        if (mode === 'easy_apply') return 'linkedin';
+        if (mode === 'external') return 'external';
+        return '';
+      }
       function ensureDefaultFilterQueryParams() {
         const p = new URLSearchParams(location.search);
         const patch = {};
         if (!p.has('priorities')) patch.priorities = DEFAULT_PRIORITY_FILTER_CSV;
         if (!p.has('statuses')) patch.statuses = DEFAULT_STATUS_FILTER_CSV;
+        const defaultApplyTypes = defaultApplyTypesForWorkflow(effectiveWorkflowMode);
+        if (defaultApplyTypes && !p.has('applyTypes')) {
+          patch.applyTypes = defaultApplyTypes;
+        }
         if (Object.keys(patch).length) setQ(patch);
+      }
+      function applyWorkflowDefaultSourceFilters() {
+        const defaultApplyTypes = defaultApplyTypesForWorkflow(effectiveWorkflowMode);
+        if (!defaultApplyTypes) return;
+        setQ({ applyTypes: defaultApplyTypes, page: 1 });
+        applySelectedApplyTypesCsv(defaultApplyTypes);
+        renderSourcePickerSummary();
+      }
+      function renderWorkflowBanner() {
+        const banner = document.getElementById('easyApplyWorkflowBanner');
+        if (!banner) return;
+        if (effectiveWorkflowMode === 'easy_apply') {
+          banner.style.display = '';
+          banner.textContent = 'LinkedIn Easy Apply pool — all clients with a resume.';
+        } else {
+          banner.style.display = 'none';
+          banner.textContent = '';
+        }
+      }
+      async function loadAgentWorkflow() {
+        const payload = await api('/api/app/agent/workflow');
+        effectiveWorkflowMode = String(payload?.mode || agentWorkflowMode || 'external');
+        renderWorkflowBanner();
       }
       function agentQuerySuffix() {
         if (!isBotAdminUser) return '';
@@ -2047,7 +2083,9 @@
         const canAnalyze = Boolean(canRunApplyPriorityForUser(user) && q().seekerId && positions.length && !isSyncing);
         if (btn) btn.disabled = !canAnalyze || isAnalyzingApplyPriority;
         if (loader) loader.className = isAnalyzingApplyPriority ? 'loader on' : 'loader';
-        const canQueueAll = Boolean(positions.length && !isSyncing && (isBotAdminUser || isCareerAgentUser));
+        const canQueueAll = Boolean(
+          positions.length && !isSyncing && (isBotAdminUser || isCareerAgentUser || isGlobalEasyApplyAgentUser)
+        );
         if (queueBtn) queueBtn.disabled = !canQueueAll || isQueueingApplyPriorityAllClients;
         if (queueLoader) queueLoader.className = isQueueingApplyPriorityAllClients ? 'loader on' : 'loader';
         if (staleHint) {
@@ -2561,7 +2599,10 @@
         }
         row.style.display = '';
         sel.innerHTML = agents
-          .map((a) => `<option value="${esc(a.id)}">${esc(a.displayName || `#${a.id}`)} (${esc(a.telegramChatId)})</option>`)
+          .map((a) => {
+            const suffix = a.isGlobalEasyApplyAgent ? ' · Easy Apply' : '';
+            return `<option value="${esc(a.id)}">${esc(a.displayName || `#${a.id}`)}${suffix} (${esc(a.telegramChatId)})</option>`;
+          })
           .join('');
         const current = String(q().agentUserId || '').trim();
         if (current && agents.some((a) => String(a.id) === current)) {
@@ -2682,7 +2723,10 @@
         const root = document.getElementById('usersList');
         const qs = q();
         if (!users.length) {
-          root.innerHTML = '<p class="muted">No clients with resume data for this agent.</p>';
+          const emptyLabel = effectiveWorkflowMode === 'easy_apply'
+            ? 'No clients with resume data in the Easy Apply pool.'
+            : 'No clients with resume data for this agent.';
+          root.innerHTML = `<p class="muted">${emptyLabel}</p>`;
           return;
         }
         root.innerHTML = users.map((u) => `
@@ -4347,10 +4391,15 @@
         const profile = await api('/api/app/profile');
         isBotAdminUser = !!profile?.isBotAdmin;
         isCareerAgentUser = !!profile?.isCareerAgent;
-        if (!isBotAdminUser && !isCareerAgentUser) {
+        isGlobalEasyApplyAgentUser = !!profile?.isGlobalEasyApplyAgent;
+        agentWorkflowMode = String(profile?.agentWorkflowMode || 'external');
+        effectiveWorkflowMode = agentWorkflowMode;
+        if (!isBotAdminUser && !isCareerAgentUser && !isGlobalEasyApplyAgentUser) {
           throw new Error('You are not assigned as a career agent. Ask an admin to assign clients to you.');
         }
         hydrateStateToInputs();
+        if (isBotAdminUser) await loadAgents();
+        await loadAgentWorkflow();
         ensureDefaultFilterQueryParams();
         renderSourcePickerOptions();
         renderCountryPickerOptions();
@@ -4358,7 +4407,6 @@
         renderStatusPickerOptions();
         renderClientWorkAuthPickerOptionsAll();
         setActiveJobModalTab('job');
-        if (isBotAdminUser) await loadAgents();
         syncAgentPerformanceNavLink();
         await Promise.all([loadPendingHumanRequests(), loadClients(), loadSkills()]);
         const s = q();
@@ -4554,7 +4602,12 @@
         setQ({ agentUserId, seekerId: '', jobId: '', page: 1 });
         clearJobsTableState();
         syncAgentPerformanceNavLink();
-        loadClients().catch((e) => setMsg('globalMsg', e.message, true));
+        loadAgentWorkflow()
+          .then(() => {
+            applyWorkflowDefaultSourceFilters();
+            return loadClients();
+          })
+          .catch((e) => setMsg('globalMsg', e.message, true));
       });
       document.getElementById('statusSel').addEventListener('change', () => {
         if (skipStatusAutoSave) return;

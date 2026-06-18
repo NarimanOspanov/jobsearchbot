@@ -11,7 +11,15 @@ import {
 } from '../../services/userService.js';
 import {
   assertCanAccessClient,
+  listApplyPriorityEnqueueClientUserIds,
+  listResumeReadyClients,
   mapUserToAgentClientPayload,
+  resolveAgentWorkflowMode,
+  resolveGlobalEasyApplyAgentTelegramChatIds,
+  resolveGlobalEasyApplyAgentUserIds,
+  addGlobalEasyApplyAgentUserId,
+  removeGlobalEasyApplyAgentUserId,
+  setGlobalEasyApplyAgentUserIds,
 } from '../../services/agentAccessService.js';
 import { rankJobsForAgentApply } from '../../services/agentApplyPriorityService.js';
 import { persistApplyPriorityForPageJobs } from '../../services/agentApplyPriorityPersistenceService.js';
@@ -158,10 +166,37 @@ function resolveEffectiveAgentUserId(req) {
 export function createAgentClientsRouter() {
   const router = Router();
 
+  router.get('/api/app/agent/workflow', agentMiniAppAuth, async (req, res) => {
+    try {
+      const effectiveAgentId = resolveEffectiveAgentUserId(req);
+      if (!effectiveAgentId) return res.status(403).json({ error: 'Forbidden' });
+      const mode = await resolveAgentWorkflowMode(effectiveAgentId, { isBotAdmin: false });
+      const globalEasyApplyAgentTelegramChatIds = await resolveGlobalEasyApplyAgentTelegramChatIds();
+      const globalEasyApplyAgentUserIds = await resolveGlobalEasyApplyAgentUserIds();
+      const globalEasyApplyAgentUserId = globalEasyApplyAgentUserIds[0] || null;
+      return res.json({
+        mode,
+        actorWorkflowMode: req.agentWorkflowMode || 'none',
+        agentUserId: effectiveAgentId,
+        globalEasyApplyAgentTelegramChatIds,
+        globalEasyApplyAgentUserIds,
+        globalEasyApplyAgentUserId,
+      });
+    } catch (err) {
+      console.error('GET /api/app/agent/workflow:', err);
+      return res.status(500).json({ error: 'Failed to load agent workflow' });
+    }
+  });
+
   router.get('/api/app/agent/clients', agentMiniAppAuth, async (req, res) => {
     try {
       const effectiveAgentId = resolveEffectiveAgentUserId(req);
       if (!effectiveAgentId) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const actorMode = req.agentWorkflowMode || 'none';
+      if (!req.isBotAdmin && actorMode === 'none') {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
@@ -171,31 +206,37 @@ export function createAgentClientsRouter() {
           const agentExists = await models.Users.findByPk(requested, { attributes: ['Id'] });
           if (!agentExists) return res.status(404).json({ error: 'Agent not found' });
         }
-      } else if (!(await models.AgentClients.findOne({
-        where: { AgentUserId: effectiveAgentId },
-        attributes: ['Id'],
-      }))) {
+      } else if (!req.isGlobalEasyApplyAgent && actorMode !== 'external') {
+        return res.status(403).json({ error: 'Forbidden' });
+      } else if (actorMode === 'external' && effectiveAgentId !== req.actorUser.Id) {
         return res.status(403).json({ error: 'Forbidden' });
       }
 
       const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '200'), 10) || 200));
       const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10) || 0);
+      const workflowMode = await resolveAgentWorkflowMode(effectiveAgentId, { isBotAdmin: false });
 
-      const assignments = await models.AgentClients.findAll({
-        where: { AgentUserId: effectiveAgentId },
-        include: [{ model: models.Users, as: 'Client', required: true }],
-        order: [['CreatedAt', 'DESC'], ['Id', 'DESC']],
-        limit,
-        offset,
-      });
-
-      const clients = assignments
-        .map((a) => a.Client)
-        .filter((u) => u && String(u.ResumeURL || '').trim())
-        .map((u) => mapUserToAgentClientPayload(u));
+      let clients = [];
+      if (workflowMode === 'easy_apply') {
+        const users = await listResumeReadyClients({ limit, offset });
+        clients = users.map((u) => mapUserToAgentClientPayload(u));
+      } else {
+        const assignments = await models.AgentClients.findAll({
+          where: { AgentUserId: effectiveAgentId },
+          include: [{ model: models.Users, as: 'Client', required: true }],
+          order: [['CreatedAt', 'DESC'], ['Id', 'DESC']],
+          limit,
+          offset,
+        });
+        clients = assignments
+          .map((a) => a.Client)
+          .filter((u) => u && String(u.ResumeURL || '').trim())
+          .map((u) => mapUserToAgentClientPayload(u));
+      }
 
       return res.json({
         agentUserId: effectiveAgentId,
+        workflowMode,
         clients,
       });
     } catch (err) {
@@ -228,12 +269,19 @@ export function createAgentClientsRouter() {
     try {
       const rows = await models.AgentClients.findAll({ attributes: ['AgentUserId'], raw: true });
       const agentIds = [...new Set(rows.map((r) => Number(r.AgentUserId)).filter((id) => id > 0))];
-      if (!agentIds.length) return res.json([]);
+      const globalEasyApplyAgentTelegramChatIds = await resolveGlobalEasyApplyAgentTelegramChatIds();
+      const globalEasyApplyAgentUserIds = await resolveGlobalEasyApplyAgentUserIds();
+      for (const id of globalEasyApplyAgentUserIds) {
+        agentIds.push(id);
+      }
+      const uniqueAgentIds = [...new Set(agentIds)];
+      if (!uniqueAgentIds.length) return res.json([]);
 
       const users = await models.Users.findAll({
-        where: { Id: { [Sequelize.Op.in]: agentIds } },
+        where: { Id: { [Sequelize.Op.in]: uniqueAgentIds } },
         order: [['Id', 'DESC']],
       });
+      const easyApplyIdSet = new Set(globalEasyApplyAgentUserIds);
 
       return res.json(
         users.map((u) => {
@@ -243,6 +291,9 @@ export function createAgentClientsRouter() {
             telegramChatId: String(u.TelegramChatId),
             telegramUserName: u.TelegramUserName,
             displayName: displayNameFromUser(u, projection),
+            isGlobalEasyApplyAgent:
+              easyApplyIdSet.has(Number(u.Id)) ||
+              globalEasyApplyAgentTelegramChatIds.includes(Number(u.TelegramChatId)),
           };
         })
       );
@@ -251,6 +302,123 @@ export function createAgentClientsRouter() {
       return res.status(500).json({ error: 'Failed to load agents' });
     }
   });
+
+  router.get('/api/app/admin/global-easy-apply-agent', adminMiniAppAuth, async (_req, res) => {
+    try {
+      const globalEasyApplyAgentTelegramChatIds = await resolveGlobalEasyApplyAgentTelegramChatIds();
+      const globalEasyApplyAgentUserIds = await resolveGlobalEasyApplyAgentUserIds();
+      const globalEasyApplyAgentUserId = globalEasyApplyAgentUserIds[0] || null;
+      if (!globalEasyApplyAgentTelegramChatIds.length) {
+        return res.json({
+          globalEasyApplyAgentTelegramChatIds: [],
+          globalEasyApplyAgentUserIds: [],
+          globalEasyApplyAgentUserId: null,
+          agents: [],
+        });
+      }
+      const users = await models.Users.findAll({
+        where: { TelegramChatId: { [Sequelize.Op.in]: globalEasyApplyAgentTelegramChatIds } },
+        order: [['TelegramChatId', 'ASC']],
+      });
+      const byTelegramChatId = new Map(users.map((user) => [Number(user.TelegramChatId), user]));
+      const agents = globalEasyApplyAgentTelegramChatIds
+        .map((telegramChatId) => byTelegramChatId.get(Number(telegramChatId)))
+        .filter(Boolean)
+        .map((user) => {
+          const projection = buildAdminUserContactProjection(user);
+          return {
+            id: user.Id,
+            telegramChatId: String(user.TelegramChatId),
+            telegramUserName: user.TelegramUserName,
+            displayName: displayNameFromUser(user, projection),
+          };
+        });
+      return res.json({
+        globalEasyApplyAgentTelegramChatIds,
+        globalEasyApplyAgentUserIds,
+        globalEasyApplyAgentUserId,
+        agents,
+        agent: agents[0] || null,
+      });
+    } catch (err) {
+      console.error('GET /api/app/admin/global-easy-apply-agent:', err);
+      return res.status(500).json({ error: 'Failed to load global Easy Apply agents' });
+    }
+  });
+
+  router.put('/api/app/admin/global-easy-apply-agent', adminMiniAppAuth, async (req, res) => {
+    try {
+      if (Array.isArray(req.body?.userIds)) {
+        const telegramChatIds = req.body.userIds
+          .map((id) => Number.parseInt(String(id ?? ''), 10))
+          .filter((id) => Number.isSafeInteger(id) && id > 0);
+        const globalEasyApplyAgentTelegramChatIds = await setGlobalEasyApplyAgentUserIds(
+          telegramChatIds
+        );
+        const globalEasyApplyAgentUserIds = await resolveGlobalEasyApplyAgentUserIds();
+        return res.json({
+          ok: true,
+          globalEasyApplyAgentTelegramChatIds,
+          globalEasyApplyAgentUserIds,
+          globalEasyApplyAgentUserId: globalEasyApplyAgentUserIds[0] || null,
+        });
+      }
+
+      const telegramChatId = Number.parseInt(
+        String(req.body?.telegramChatId ?? req.body?.userId ?? ''),
+        10
+      );
+      if (!Number.isSafeInteger(telegramChatId) || telegramChatId <= 0) {
+        return res.status(400).json({ error: 'telegramChatId or userIds is required' });
+      }
+      const user = await models.Users.findOne({ where: { TelegramChatId: telegramChatId } });
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      const globalEasyApplyAgentTelegramChatIds = await addGlobalEasyApplyAgentUserId(telegramChatId);
+      const globalEasyApplyAgentUserIds = await resolveGlobalEasyApplyAgentUserIds();
+      const projection = buildAdminUserContactProjection(user);
+      return res.json({
+        ok: true,
+        globalEasyApplyAgentTelegramChatIds,
+        globalEasyApplyAgentUserIds,
+        globalEasyApplyAgentUserId: globalEasyApplyAgentUserIds[0] || null,
+        agent: {
+          id: user.Id,
+          telegramChatId: String(user.TelegramChatId),
+          telegramUserName: user.TelegramUserName,
+          displayName: displayNameFromUser(user, projection),
+        },
+      });
+    } catch (err) {
+      console.error('PUT /api/app/admin/global-easy-apply-agent:', err);
+      return res.status(500).json({ error: err?.message || 'Failed to set global Easy Apply agent' });
+    }
+  });
+
+  router.delete(
+    '/api/app/admin/global-easy-apply-agent/:telegramChatId',
+    adminMiniAppAuth,
+    async (req, res) => {
+    try {
+      const telegramChatId = Number.parseInt(String(req.params.telegramChatId ?? ''), 10);
+      if (!Number.isSafeInteger(telegramChatId) || telegramChatId <= 0) {
+        return res.status(400).json({ error: 'Invalid telegram chat id' });
+      }
+      const globalEasyApplyAgentTelegramChatIds = await removeGlobalEasyApplyAgentUserId(
+        telegramChatId
+      );
+      const globalEasyApplyAgentUserIds = await resolveGlobalEasyApplyAgentUserIds();
+      return res.json({
+        ok: true,
+        globalEasyApplyAgentTelegramChatIds,
+        globalEasyApplyAgentUserIds,
+        globalEasyApplyAgentUserId: globalEasyApplyAgentUserIds[0] || null,
+      });
+    } catch (err) {
+      console.error('DELETE /api/app/admin/global-easy-apply-agent/:telegramChatId:', err);
+      return res.status(500).json({ error: err?.message || 'Failed to remove global Easy Apply agent' });
+    }
+    }
+  );
 
   router.get('/api/app/admin/human-assistant-requests', adminMiniAppAuth, async (req, res) => {
     try {
@@ -698,16 +866,9 @@ export function createAgentClientsRouter() {
       const jobs = Array.isArray(req.body?.jobs) ? req.body.jobs : [];
       if (!jobs.length) return res.status(400).json({ error: 'jobs array is required' });
 
-      const assignments = await models.AgentClients.findAll({
-        where: { AgentUserId: effectiveAgentId },
-        include: [{ model: models.Users, as: 'Client', required: true }],
+      const clientUserIds = await listApplyPriorityEnqueueClientUserIds({
+        agentUserId: effectiveAgentId,
       });
-      const clientUserIds = assignments
-        .map((row) => row.Client)
-        .filter((u) => u && String(u.ResumeURL || '').trim())
-        .filter((u) => String(u.Comment || '').trim())
-        .filter((u) => normalizeSkillIds(u.skills).length > 0)
-        .map((u) => Number(u.Id));
 
       const queued = await enqueueApplyPriorityJobsForClients({
         clientUserIds,

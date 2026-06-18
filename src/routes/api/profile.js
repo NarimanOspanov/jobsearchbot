@@ -14,7 +14,7 @@ import {
   toWorkAuthCountriesOrNullOrUndefined,
 } from '../../utils/validators.js';
 import { resolveBotLanguage } from '../../utils/userLanguage.js';
-import { isCareerAgentUser } from '../../services/agentAccessService.js';
+import { isCareerAgentUser, isGlobalEasyApplyAgent, resolveAgentWorkflowMode } from '../../services/agentAccessService.js';
 
 export function createProfileRouter() {
   const router = Router();
@@ -35,6 +35,8 @@ export function createProfileRouter() {
         adminIds.size > 0 &&
         adminIds.has(telegramUserId);
       const isCareerAgent = await isCareerAgentUser(user.Id);
+      const isGlobalEasyApplyAgentUser = await isGlobalEasyApplyAgent(user.Id);
+      const agentWorkflowMode = await resolveAgentWorkflowMode(user.Id, { isBotAdmin });
       res.json({
         id: user.Id,
         telegramChatId: String(user.TelegramChatId),
@@ -42,6 +44,8 @@ export function createProfileRouter() {
         language: resolveBotLanguage(req.miniAppUser?.language_code),
         isBotAdmin,
         isCareerAgent,
+        isGlobalEasyApplyAgent: isGlobalEasyApplyAgentUser,
+        agentWorkflowMode,
         resumeUrl: user.ResumeURL,
         skills: user.skills,
         workAuthorizationCountries: user.WorkAuthorizationCountries || '',

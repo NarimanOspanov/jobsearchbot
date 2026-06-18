@@ -5,6 +5,8 @@ import {
   countAgentAssignments,
   countMentorAssignments,
   isBotAdminTelegramId,
+  isGlobalEasyApplyAgent,
+  resolveAgentWorkflowMode,
   resolveUserFromMiniApp,
 } from '../services/agentAccessService.js';
 
@@ -65,6 +67,10 @@ export async function miniAppActorAuth(req, res, next) {
     req.actorUser = actorUser;
     req.isBotAdmin = isBotAdminTelegramId(telegramUserId);
     req.isCareerAgent = (await countAgentAssignments(actorUser.Id)) > 0;
+    req.isGlobalEasyApplyAgent = await isGlobalEasyApplyAgent(actorUser.Id);
+    req.agentWorkflowMode = await resolveAgentWorkflowMode(actorUser.Id, {
+      isBotAdmin: req.isBotAdmin,
+    });
     req.isClientMentor = (await countMentorAssignments(actorUser.Id)) > 0;
     return next();
   });
@@ -101,14 +107,17 @@ export async function agentMiniAppAuth(req, res, next) {
     const isBotAdmin = isBotAdminTelegramId(telegramUserId);
     const assignmentCount = await countAgentAssignments(actorUser.Id);
     const isCareerAgent = assignmentCount > 0;
+    const isGlobalEasyApplyAgentUser = await isGlobalEasyApplyAgent(actorUser.Id);
 
-    if (!isBotAdmin && !isCareerAgent) {
+    if (!isBotAdmin && !isCareerAgent && !isGlobalEasyApplyAgentUser) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
     req.actorUser = actorUser;
     req.isBotAdmin = isBotAdmin;
     req.isCareerAgent = isCareerAgent;
+    req.isGlobalEasyApplyAgent = isGlobalEasyApplyAgentUser;
+    req.agentWorkflowMode = await resolveAgentWorkflowMode(actorUser.Id, { isBotAdmin });
     return next();
   });
 }

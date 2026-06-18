@@ -67,6 +67,7 @@ import {
   countAgentAssignments,
   countMentorAssignments,
   isBotAdminTelegramId,
+  isGlobalEasyApplyAgent,
 } from './services/agentAccessService.js';
 import { tailorResumeForSeeker } from './services/tailoredCvService.js';
 import { notifyPublisherOfNewApplication } from './services/publisherApplyNotificationService.js';
@@ -1616,6 +1617,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       ctx.from?.last_name ?? null
     );
     if (!user) return false;
+    if (await isGlobalEasyApplyAgent(user.Id)) return true;
     return (await countAgentAssignments(user.Id)) > 0;
   }
 

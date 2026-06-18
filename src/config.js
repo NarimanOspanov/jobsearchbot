@@ -117,6 +117,12 @@ export const config = {
     .toLowerCase(),
   /** Test target Telegram chat id (used when delivery mode is test_only). */
   clientDailyReportTestChatId: Number.parseInt(getEnv('CLIENT_DAILY_REPORT_TEST_CHAT_ID') || '0', 10) || 0,
+  /** Users.TelegramChatId values for LinkedIn Easy Apply specialists (global client pool). */
+  globalEasyApplyAgentTelegramChatIds: [
+    ...parseCommaSeparatedIdSet(
+      getEnv('GLOBAL_EASY_APPLY_AGENT_TELEGRAMCHAT_ID') || getEnv('GLOBAL_EASY_APPLY_AGENT_USER_ID')
+    ),
+  ],
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',

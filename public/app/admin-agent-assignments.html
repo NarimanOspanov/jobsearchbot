@@ -47,8 +47,26 @@
         <div id="pendingRequestsList"><p class="muted">Loading…</p></div>
       </section>
 
+      <section class="card" id="globalEasyApplyCard">
+        <h2>Global LinkedIn Easy Apply agents</h2>
+        <p class="muted">These specialists can open all clients in Agent Clients for LinkedIn Easy Apply. Set via <code>GLOBAL_EASY_APPLY_AGENT_TELEGRAMCHAT_ID=12345,67890</code> in env or add users below.</p>
+        <div id="globalEasyApplyList"><p class="muted">Loading…</p></div>
+        <div class="row" style="margin-top:12px">
+          <div style="flex:1;min-width:220px">
+            <label class="muted" style="display:block;margin-bottom:4px">Set specialist user</label>
+            <input id="easyApplyAgentSearch" type="search" placeholder="Search by name, username, or chat id" autocomplete="off" />
+            <div id="easyApplyAgentSearchResults" class="search-results" style="display:none"></div>
+            <p id="easyApplyAgentPicked" class="muted" style="margin:8px 0 0">No user selected.</p>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="saveEasyApplyAgentBtn" type="button">Add Easy Apply agent</button>
+        </div>
+        <p id="easyApplyAgentMsg" class="muted"></p>
+      </section>
+
       <section class="card">
-        <h2 id="formTitle">Add assignment</h2>
+        <h2 id="formTitle">Add external assignment</h2>
         <div class="row">
           <div style="flex:1;min-width:220px">
             <label class="muted" style="display:block;margin-bottom:4px">Career agent</label>
@@ -83,6 +101,7 @@
       let editingId = null;
       let pickedAgent = null;
       let pickedClient = null;
+      let pickedEasyApplyAgent = null;
       let searchTimer = null;
 
       function getTgInitDataString() {
@@ -385,11 +404,76 @@
 
       document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
 
+      async function loadGlobalEasyApplyAgent() {
+        const list = document.getElementById('globalEasyApplyList');
+        try {
+          const payload = await api('/api/app/admin/global-easy-apply-agent');
+          const agents = Array.isArray(payload?.agents) ? payload.agents : [];
+          if (!agents.length) {
+            list.innerHTML = '<p class="muted">Not configured yet. Set GLOBAL_EASY_APPLY_AGENT_TELEGRAMCHAT_ID in env (comma-separated) or add users below.</p>';
+            return;
+          }
+          list.innerHTML = agents.map((agent) => `
+            <div class="assignment-row">
+              <div>${esc(formatUserLabel(agent))} <span class="muted">#${esc(agent.id)}</span></div>
+              <div class="assignment-actions">
+                <button type="button" class="danger ghost-btn" data-remove-easy-apply-id="${esc(agent.telegramChatId)}">Remove</button>
+              </div>
+            </div>
+          `).join('');
+          list.querySelectorAll('[data-remove-easy-apply-id]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              const telegramChatId = btn.getAttribute('data-remove-easy-apply-id');
+              try {
+                await api(`/api/app/admin/global-easy-apply-agent/${encodeURIComponent(telegramChatId)}`, { method: 'DELETE' });
+                setMsg('easyApplyAgentMsg', 'Easy Apply agent removed.');
+                await loadGlobalEasyApplyAgent();
+              } catch (err) {
+                setMsg('easyApplyAgentMsg', err.message, true);
+              }
+            });
+          });
+        } catch (err) {
+          list.innerHTML = `<p class="bad">${esc(err.message || 'Failed to load Easy Apply agents.')}</p>`;
+        }
+      }
+
+      document.getElementById('saveEasyApplyAgentBtn').addEventListener('click', async () => {
+        if (!pickedEasyApplyAgent?.id) {
+          setMsg('easyApplyAgentMsg', 'Select a user first.', true);
+          return;
+        }
+        try {
+          await api('/api/app/admin/global-easy-apply-agent', {
+            method: 'PUT',
+            body: JSON.stringify({ telegramChatId: Number(pickedEasyApplyAgent.telegramChatId) }),
+          });
+          pickedEasyApplyAgent = null;
+          document.getElementById('easyApplyAgentPicked').textContent = 'No user selected.';
+          setMsg('easyApplyAgentMsg', 'Easy Apply agent added.');
+          await loadGlobalEasyApplyAgent();
+        } catch (err) {
+          setMsg('easyApplyAgentMsg', err.message, true);
+        }
+      });
+
+      document.getElementById('easyApplyAgentSearch').addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          searchUsers(e.target.value, 'easyApplyAgentSearchResults', (u) => {
+            pickedEasyApplyAgent = u;
+            document.getElementById('easyApplyAgentPicked').textContent = `Selected: ${formatUserLabel(u)}`;
+            document.getElementById('easyApplyAgentSearch').value = '';
+            document.getElementById('easyApplyAgentSearchResults').style.display = 'none';
+          }).catch((err) => setMsg('easyApplyAgentMsg', err.message, true));
+        }, 300);
+      });
+
       async function boot() {
         if (!getTgInitDataString()) {
           throw new Error('Open from the bot via /admin_assignments (Telegram auth required).');
         }
-        await Promise.all([loadPendingHumanRequests(), loadAssignments()]);
+        await Promise.all([loadPendingHumanRequests(), loadAssignments(), loadGlobalEasyApplyAgent()]);
       }
 
       boot().catch((err) => setMsg('globalMsg', err.message, true));

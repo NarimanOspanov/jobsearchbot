@@ -4,6 +4,7 @@ import { models } from '../db.js';
 import { buildAnyhiresPositionsSearchParams } from '../utils/positionUpstreamQuery.js';
 import { getPendingHumanAssistantUserIds } from './humanAssistantRequestService.js';
 import { clientIsReadyForApplyPriority } from './agentApplyPriorityService.js';
+import { listApplyPriorityEnqueueClientUserIds } from './agentAccessService.js';
 import { enqueueApplyPriorityJobsForClients, getAgentApplyPriorityQueueState } from './agentApplyPriorityQueueService.js';
 
 /** Hard stop when maxPages is unlimited (hasMore loop). */
@@ -201,18 +202,31 @@ export async function enqueueApplyPriorityForDefaultClientSearches({
   const normalizedAgentUserId = Number.isSafeInteger(Number(agentUserId)) && Number(agentUserId) > 0
     ? Number(agentUserId)
     : null;
-  const assignmentWhere = normalizedAgentUserId ? { AgentUserId: normalizedAgentUserId } : undefined;
-  const assignments = await models.AgentClients.findAll({
-    where: assignmentWhere,
-    include: [{ model: models.Users, as: 'Client', required: true }],
-    order: [['Id', 'ASC']],
-  });
+
+  let clients = [];
+  if (normalizedAgentUserId) {
+    const clientUserIds = await listApplyPriorityEnqueueClientUserIds({
+      agentUserId: normalizedAgentUserId,
+    });
+    if (clientUserIds.length) {
+      const users = await models.Users.findAll({
+        where: { Id: { [Sequelize.Op.in]: clientUserIds } },
+        order: [['Id', 'ASC']],
+      });
+      clients = users.filter((client) => clientIsReadyForApplyPriority(client));
+    }
+  } else {
+    const assignments = await models.AgentClients.findAll({
+      include: [{ model: models.Users, as: 'Client', required: true }],
+      order: [['Id', 'ASC']],
+    });
+    clients = assignments
+      .map((row) => row.Client)
+      .filter((client) => client && String(client.ResumeURL || '').trim())
+      .filter((client) => clientIsReadyForApplyPriority(client));
+  }
   const pendingHumanAssistantUserIds = await getPendingHumanAssistantUserIds();
-  const clients = assignments
-    .map((row) => row.Client)
-    .filter((client) => client && String(client.ResumeURL || '').trim())
-    .filter((client) => clientIsReadyForApplyPriority(client))
-    .filter((client) => !pendingHumanAssistantUserIds.has(Number(client.Id)));
+  clients = clients.filter((client) => !pendingHumanAssistantUserIds.has(Number(client.Id)));
 
   const dateRange = getDefaultDateRange();
   const perClient = [];
