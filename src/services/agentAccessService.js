@@ -156,6 +156,24 @@ export async function listResumeReadyClients({ limit = 200, offset = 0 } = {}) {
   return users.filter((u) => clientHasResumeForAgentAccess(u));
 }
 
+export function filterAssignedClientsWithResume(assignments) {
+  return (Array.isArray(assignments) ? assignments : [])
+    .map((row) => row?.Client ?? row)
+    .filter((client) => clientHasResumeForAgentAccess(client));
+}
+
+export async function listAllAgentAssignedClients({ limit = 200, offset = 0 } = {}) {
+  const safeLimit = Math.min(200, Math.max(1, Number.parseInt(String(limit), 10) || 200));
+  const safeOffset = Math.max(0, Number.parseInt(String(offset), 10) || 0);
+  const assignments = await models.AgentClients.findAll({
+    include: [{ model: models.Users, as: 'Client', required: true }],
+    order: [['CreatedAt', 'DESC'], ['Id', 'DESC']],
+    limit: safeLimit,
+    offset: safeOffset,
+  });
+  return filterAssignedClientsWithResume(assignments);
+}
+
 export async function listApplyPriorityEnqueueClientUserIds({ agentUserId = null } = {}) {
   const normalizedAgentUserId =
     Number.isSafeInteger(Number(agentUserId)) && Number(agentUserId) > 0 ? Number(agentUserId) : null;
@@ -165,7 +183,7 @@ export async function listApplyPriorityEnqueueClientUserIds({ agentUserId = null
 
   let clients = [];
   if (mode === 'easy_apply') {
-    clients = await listResumeReadyClients({ limit: 10000, offset: 0 });
+    clients = await listAllAgentAssignedClients({ limit: 10000, offset: 0 });
   } else {
     const assignmentWhere = normalizedAgentUserId ? { AgentUserId: normalizedAgentUserId } : undefined;
     const assignments = await models.AgentClients.findAll({
@@ -279,6 +297,10 @@ export async function assertCanAccessClient({
         if (!clientHasResumeForAgentAccess(client)) {
           return { ok: false, status: 403, error: 'Client has no resume on file' };
         }
+        const assignment = await findAssignmentForClient(clientId);
+        if (!assignment) {
+          return { ok: false, status: 403, error: 'Client is not assigned to any agent' };
+        }
         return { ok: true, client };
       }
       const row = await models.AgentClients.findOne({
@@ -293,6 +315,10 @@ export async function assertCanAccessClient({
   if (await isGlobalEasyApplyAgent(actorUserId)) {
     if (!clientHasResumeForAgentAccess(client)) {
       return { ok: false, status: 403, error: 'Client has no resume on file' };
+    }
+    const assignment = await findAssignmentForClient(clientId);
+    if (!assignment) {
+      return { ok: false, status: 403, error: 'Client is not assigned to any agent' };
     }
     return { ok: true, client };
   }

@@ -1563,7 +1563,7 @@
         if (!banner) return;
         if (effectiveWorkflowMode === 'easy_apply') {
           banner.style.display = '';
-          banner.textContent = 'LinkedIn Easy Apply pool — all clients with a resume.';
+          banner.textContent = 'LinkedIn Easy Apply pool — all agent-assigned clients with a resume.';
         } else {
           banner.style.display = 'none';
           banner.textContent = '';
@@ -2724,7 +2724,7 @@
         const qs = q();
         if (!users.length) {
           const emptyLabel = effectiveWorkflowMode === 'easy_apply'
-            ? 'No clients with resume data in the Easy Apply pool.'
+            ? 'No agent-assigned clients with resume data in the Easy Apply pool.'
             : 'No clients with resume data for this agent.';
           root.innerHTML = `<p class="muted">${emptyLabel}</p>`;
           return;

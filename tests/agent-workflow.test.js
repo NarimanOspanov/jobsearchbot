@@ -6,6 +6,7 @@ import {
 } from '../src/services/applicationAgentAttribution.js';
 import {
   clientHasResumeForAgentAccess,
+  filterAssignedClientsWithResume,
   isGlobalEasyApplyAgentUserId,
   parseGlobalEasyApplyAgentTelegramChatIds,
   resolveAgentWorkflowModeFromFlags,
@@ -56,6 +57,23 @@ test('clientHasResumeForAgentAccess requires non-empty ResumeURL', () => {
   assert.equal(clientHasResumeForAgentAccess({ ResumeURL: 'https://example.com/cv.pdf' }), true);
   assert.equal(clientHasResumeForAgentAccess({ ResumeURL: '   ' }), false);
   assert.equal(clientHasResumeForAgentAccess({ ResumeURL: null }), false);
+});
+
+test('filterAssignedClientsWithResume keeps only agent-assigned clients with resume', () => {
+  const withResume = { Id: 1, ResumeURL: 'https://example.com/cv.pdf' };
+  const noResume = { Id: 2, ResumeURL: '' };
+  const assignments = [
+    { Client: withResume },
+    { Client: noResume },
+    withResume,
+  ];
+  const filtered = filterAssignedClientsWithResume(assignments);
+  assert.deepEqual(filtered, [withResume, withResume]);
+});
+
+test('filterAssignedClientsWithResume returns empty list for missing or empty input', () => {
+  assert.deepEqual(filterAssignedClientsWithResume(null), []);
+  assert.deepEqual(filterAssignedClientsWithResume([]), []);
 });
 
 test('resolveApplyingAgentUserId credits global Easy Apply specialist when they mark applied', async () => {

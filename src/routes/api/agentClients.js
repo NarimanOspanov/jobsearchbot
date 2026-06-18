@@ -12,7 +12,7 @@ import {
 import {
   assertCanAccessClient,
   listApplyPriorityEnqueueClientUserIds,
-  listResumeReadyClients,
+  listAllAgentAssignedClients,
   mapUserToAgentClientPayload,
   resolveAgentWorkflowMode,
   resolveGlobalEasyApplyAgentTelegramChatIds,
@@ -218,7 +218,7 @@ export function createAgentClientsRouter() {
 
       let clients = [];
       if (workflowMode === 'easy_apply') {
-        const users = await listResumeReadyClients({ limit, offset });
+        const users = await listAllAgentAssignedClients({ limit, offset });
         clients = users.map((u) => mapUserToAgentClientPayload(u));
       } else {
         const assignments = await models.AgentClients.findAll({
