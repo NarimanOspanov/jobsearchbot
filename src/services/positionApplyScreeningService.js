@@ -16,6 +16,8 @@ export const OUTREACH_MESSAGE_TYPES = {
   REJECTION_DEFAULT: 'rejection_default',
 };
 
+export const SCREENING_SEE_ALL_POSITIONS_CALLBACK = 'screening_see_all_positions';
+
 const CONFIG_KEY_SCREENING_MIN = 'PositionApplyScreeningResponseMin';
 const DEFAULT_SCREENING_MINUTES = 4320;
 const MAX_SCREENING_MINUTES = 30 * 24 * 60;
@@ -131,8 +133,24 @@ export function buildOpenJobsReplyMarkup(lang, { seekerJobsUrl, canUseSeekerJobs
   return { inline_keyboard: [[button]] };
 }
 
-export function buildScreeningAckText(lang) {
-  return t(lang, 'position_apply_screening_received');
+export function buildScreeningAckText(lang, { previewCount = null } = {}) {
+  const base = t(lang, 'position_apply_screening_received_v2');
+  if (previewCount != null && Number(previewCount) > 0) {
+    return `${base}\n\n${t(lang, 'position_apply_screening_preview_teaser', { count: previewCount })}`;
+  }
+  return base;
+}
+
+export function buildScreeningAckReplyMarkup(lang, { previewUrl = null } = {}) {
+  const rows = [];
+  const url = String(previewUrl || '').trim();
+  if (url) {
+    rows.push([{ text: t(lang, 'btn_view_top_matches'), url }]);
+  }
+  rows.push([
+    { text: t(lang, 'btn_see_all_positions'), callback_data: SCREENING_SEE_ALL_POSITIONS_CALLBACK },
+  ]);
+  return { inline_keyboard: rows };
 }
 
 export function buildRejectionText(lang) {
@@ -241,14 +259,14 @@ export async function recordUserApplicationOutreach({
  * @param {object} opts.applicantUser - Users row
  * @param {number} opts.userApplicationId
  * @param {string} [opts.telegramLanguageCode]
- * @param {{ seekerJobsUrl: string, canUseSeekerJobsWebApp: boolean }} opts.jobsUi
+ * @param {{ previewUrl?: string, previewCount?: number }} [opts.preview]
  */
 export async function sendScreeningAcknowledgment({
   telegram,
   applicantUser,
   userApplicationId,
   telegramLanguageCode = null,
-  jobsUi = null,
+  preview = null,
 }) {
   if (!telegram || !applicantUser) return { ok: false, skipped: true };
 
@@ -256,9 +274,10 @@ export async function sendScreeningAcknowledgment({
   if (!Number.isSafeInteger(chatId) || chatId <= 0) return { ok: false, skipped: true };
 
   const lang = resolveApplicantLanguage(applicantUser, telegramLanguageCode);
-  const text = buildScreeningAckText(lang);
-  const replyMarkup =
-    jobsUi?.seekerJobsUrl != null ? buildOpenJobsReplyMarkup(lang, jobsUi) : null;
+  const previewCount = preview?.previewCount ?? null;
+  const previewUrl = preview?.previewUrl ?? null;
+  const text = buildScreeningAckText(lang, { previewCount });
+  const replyMarkup = buildScreeningAckReplyMarkup(lang, { previewUrl });
 
   try {
     const sent = await telegram.sendMessage(chatId, text, {
@@ -389,10 +408,7 @@ export async function processDueScreeningResponses({
 
     const lang = resolveApplicantLanguage(applicant);
     const text = buildRejectionText(lang);
-    const replyMarkup =
-      jobsUi?.seekerJobsUrl != null
-        ? buildOpenJobsReplyMarkup(lang, jobsUi)
-        : null;
+    const replyMarkup = buildScreeningAckReplyMarkup(lang);
 
     try {
       const sent = await telegram.sendMessage(chatId, text, {

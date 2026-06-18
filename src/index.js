@@ -79,13 +79,17 @@ import { recordCampaignSignup } from './services/campaignSignupService.js';
 import { upsertPendingHumanAssistantRequest } from './services/humanAssistantRequestService.js';
 import {
   buildOpenJobsReplyMarkup,
+  buildScreeningAckReplyMarkup,
   buildScreeningAckText,
   computeScreeningResponseDueAt,
   getPositionApplyScreeningResponseMinutes,
   logRejectionNotificationFilterStartup,
+  resolveApplicantLanguage,
+  SCREENING_SEE_ALL_POSITIONS_CALLBACK,
   sendScreeningAcknowledgment,
   USER_APPLICATION_STATUS,
 } from './services/positionApplyScreeningService.js';
+import { buildApplyAckJobPreviewWithTimeout } from './services/applyAckPreviewService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
 import {
   tr,
@@ -102,6 +106,7 @@ import {
 import {
   hireAgentStateByChatId,
   positionApplyChannelBypassByChatId,
+  screeningSeeAllIntentByChatId,
   setPositionApplyAttribution,
   getPositionApplyAttribution,
   resolvePositionApplyAttribution,
@@ -859,7 +864,33 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     } else {
       await ctx.reply(successLines.join('\n'));
     }
+    if (screeningSeeAllIntentByChatId.has(telegramUserId)) {
+      screeningSeeAllIntentByChatId.delete(telegramUserId);
+      await openJobSearchFromBot(ctx);
+      return;
+    }
     await sendStartIntro(ctx);
+  });
+
+  bot.action(SCREENING_SEE_ALL_POSITIONS_CALLBACK, async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    const telegramUserId = Number(ctx.from?.id || ctx.chat?.id || 0);
+    if (!telegramUserId) {
+      await ctx.reply(tr(ctx, 'start_user_not_found'));
+      return;
+    }
+    const channelsState = await getRequiredChannelsState(telegramUserId);
+    if (!channelsState.ok) {
+      screeningSeeAllIntentByChatId.add(telegramUserId);
+      await sendStartRequiredChannelsGate(ctx, channelsState.channels);
+      return;
+    }
+    await ensureRequiredChannelUserRecords(telegramUserId);
+    await openJobSearchFromBot(ctx);
   });
 
   const openJobSearchFromBot = async (ctx) => {
@@ -1481,20 +1512,26 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
               positionId,
             });
           }
+          const ackLang = resolveApplicantLanguage(user, ctx.from?.language_code);
+          const previewResult = await buildApplyAckJobPreviewWithTimeout({ user, lang: ackLang });
+          if (previewResult?.skipped) {
+            console.log('Apply ack job preview skipped:', previewResult.reason, { chatId, userId: user.Id });
+          }
+          const preview =
+            previewResult && !previewResult.skipped && previewResult.previewUrl
+              ? { previewUrl: previewResult.previewUrl, previewCount: previewResult.previewCount }
+              : null;
           await sendScreeningAcknowledgment({
             telegram: ctx.telegram || runtimeBot.telegram,
             applicantUser: user,
             userApplicationId: application.Id,
             telegramLanguageCode: ctx.from?.language_code,
-            jobsUi: { seekerJobsUrl, canUseSeekerJobsWebApp },
+            preview,
           });
         } else {
           const lang = langFromCtx(ctx);
           const text = buildScreeningAckText(lang);
-          const replyMarkup = buildOpenJobsReplyMarkup(lang, {
-            seekerJobsUrl,
-            canUseSeekerJobsWebApp,
-          });
+          const replyMarkup = buildScreeningAckReplyMarkup(lang);
           await ctx.reply(text, { reply_markup: replyMarkup });
         }
         hireAgentStateByChatId.set(chatId, { step: 'idle' });

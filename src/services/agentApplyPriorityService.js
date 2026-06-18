@@ -2,6 +2,8 @@ import { rankJobsForAgentApplyBatchWithAI } from './aiService.js';
 import { buildJobRequirementsText, getSeekerResumeTextForTailoring } from './tailoredCvService.js';
 import { normalizeSkillIds } from './userService.js';
 
+const SEEKER_PREVIEW_DEFAULT_COMMENT =
+  'Prioritize remote roles that best match the candidate resume and selected skills.';
 const CHUNK_SIZE = 20;
 const MAX_JOBS = 200;
 const CHUNK_CONCURRENCY = 3;
@@ -162,6 +164,59 @@ export async function rankJobsForAgentApply({ clientUser, jobs }) {
   if (!clientHasApplyPrioritySkills(clientUser)) {
     throw new Error('Set client roles/skills before analyzing apply priority');
   }
+
+  const chunks = chunkArray(normalizedJobs, CHUNK_SIZE);
+  const { mergedRows, chunkTimings } = await processChunksInPool({
+    chunks,
+    resumeText,
+    searchMode,
+    agentComment,
+  });
+
+  const rankings = assignGlobalApplyRanks(mergedRows);
+  const chunkDurations = chunkTimings.map((row) => Number(row.durationMs) || 0).filter((n) => n >= 0);
+  const sumChunkDurations = chunkDurations.reduce((sum, n) => sum + n, 0);
+  const maxChunkDurationMs = chunkDurations.length ? Math.max(...chunkDurations) : 0;
+  const avgChunkDurationMs = chunkDurations.length ? Math.round(sumChunkDurations / chunkDurations.length) : 0;
+  return {
+    context: {
+      searchMode,
+      commentLength: agentComment.length,
+      resumeTextLength: String(resumeText).length,
+      jobCount: normalizedJobs.length,
+      chunkCount: chunks.length,
+      chunkSize: CHUNK_SIZE,
+      chunkConcurrency: Math.min(CHUNK_CONCURRENCY, chunks.length),
+      avgChunkDurationMs,
+      maxChunkDurationMs,
+      totalDurationMs: Date.now() - startedAt,
+    },
+    rankings,
+  };
+}
+
+/**
+ * Seeker post-apply preview: same AI ranking as agents, with default comment when Comment is empty.
+ * @param {{ clientUser: object, jobs: unknown[] }}
+ */
+export async function rankJobsForSeekerPreview({ clientUser, jobs }) {
+  const startedAt = Date.now();
+  const normalizedJobs = normalizeIncomingJobs(jobs);
+  if (!normalizedJobs.length) {
+    throw new Error('At least one job is required');
+  }
+
+  const resumeText = await getSeekerResumeTextForTailoring(clientUser);
+  if (!String(resumeText || '').trim()) {
+    throw new Error('Upload client resume before analyzing priority');
+  }
+  if (!clientHasApplyPrioritySkills(clientUser)) {
+    throw new Error('Set client roles/skills before analyzing apply priority');
+  }
+
+  const searchMode = String(clientUser?.SearchMode || 'not_urgent').trim() === 'urgent' ? 'urgent' : 'not_urgent';
+  const agentComment =
+    String(clientUser?.Comment || '').trim() || SEEKER_PREVIEW_DEFAULT_COMMENT;
 
   const chunks = chunkArray(normalizedJobs, CHUNK_SIZE);
   const { mergedRows, chunkTimings } = await processChunksInPool({

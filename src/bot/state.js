@@ -1,3 +1,6 @@
+/** @type {Set<number>} Chats waiting to open job search after channel subscribe confirm */
+export const screeningSeeAllIntentByChatId = new Set();
+
 /** @type {Map<number, { step: string }>} */
 export const hireAgentStateByChatId = new Map();
 

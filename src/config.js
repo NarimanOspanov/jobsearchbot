@@ -27,6 +27,19 @@ export function parseCommaSeparatedIdSet(raw) {
   return set;
 }
 
+/** Comma-separated non-empty strings (deduped, order preserved). */
+export function parseCommaSeparatedStrings(raw) {
+  const out = [];
+  const seen = new Set();
+  for (const part of String(raw || '').split(',')) {
+    const value = part.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
 /** @param {string} raw */
 function parseTelegramUserIdSet(raw) {
   return parseCommaSeparatedIdSet(raw);
@@ -123,6 +136,17 @@ export const config = {
       getEnv('GLOBAL_EASY_APPLY_AGENT_TELEGRAMCHAT_ID') || getEnv('GLOBAL_EASY_APPLY_AGENT_USER_ID')
     ),
   ],
+  telegraphTokens: parseCommaSeparatedStrings(getEnv('TELEGRAPH_TOKEN')),
+  /** @deprecated Use telegraphTokens[0]; first token from TELEGRAPH_TOKEN env. */
+  telegraphToken: parseCommaSeparatedStrings(getEnv('TELEGRAPH_TOKEN'))[0] || '',
+  applyAckPreviewJobCount: Math.min(
+    20,
+    Math.max(1, Number.parseInt(process.env.APPLY_ACK_PREVIEW_JOB_COUNT || '10', 10) || 10)
+  ),
+  applyAckPreviewTimeoutMs: Math.min(
+    60000,
+    Math.max(5000, Number.parseInt(process.env.APPLY_ACK_PREVIEW_TIMEOUT_MS || '20000', 10) || 20000)
+  ),
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',
   azureTailoredResumeContainerName: 'tailoredresumes',
