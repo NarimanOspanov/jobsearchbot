@@ -114,12 +114,9 @@
       iframe.addEventListener('load', function () {
         try {
           const innerDoc = iframe.contentDocument || iframe.contentWindow.document;
-          const innerNav = innerDoc.getElementById('tmaBottomNav');
-          if (innerNav) innerNav.style.display = 'none';
-          if (innerDoc.body) {
-            innerDoc.body.classList.remove('has-tma-bottom-nav');
-            innerDoc.body.style.paddingBottom = '0';
-          }
+          const style = innerDoc.createElement('style');
+          style.textContent = '#tmaBottomNav{display:none!important}body.has-tma-bottom-nav{padding-bottom:0!important}';
+          innerDoc.head.appendChild(style);
         } catch (e) {}
       });
       modal.appendChild(iframe);
