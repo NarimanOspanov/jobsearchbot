@@ -19,6 +19,33 @@ function formatJobLinkLabel(job) {
   return company ? `${title} at ${company}` : title;
 }
 
+function escapeTelegramHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeTelegramHtmlAttr(text) {
+  return escapeTelegramHtml(text).replace(/"/g, '&quot;');
+}
+
+/**
+ * Bulleted clickable job list for Telegram HTML messages.
+ * @param {{ jobs: object[], appBaseUrl?: string, maxJobs?: number }}
+ */
+export function formatTopJobsTelegramHtml({ jobs, appBaseUrl = '', maxJobs = 10 }) {
+  const lines = [];
+  for (const job of (Array.isArray(jobs) ? jobs : []).slice(0, Math.max(1, maxJobs || 10))) {
+    const label = formatJobLinkLabel(job);
+    const href = resolveJobPreviewHref(job, appBaseUrl);
+    lines.push(
+      `- <a href="${escapeTelegramHtmlAttr(href)}">${escapeTelegramHtml(label)}</a>`
+    );
+  }
+  return lines.join('\n\n');
+}
+
 export function resolveJobPreviewHref(job, appBaseUrl) {
   const applyUrl = String(job?.applyUrl || '').trim();
   if (applyUrl) return applyUrl;

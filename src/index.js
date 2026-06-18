@@ -61,6 +61,7 @@ import {
   ensureUser,
   removeUserDataByTelegramChatId,
   runResumeEnrichmentInBackground,
+  runResumeEnrichment,
 } from './services/userService.js';
 import {
   canUseApplyLinkBuilder,
@@ -81,6 +82,7 @@ import {
   buildOpenJobsReplyMarkup,
   buildScreeningAckReplyMarkup,
   buildScreeningAckText,
+  buildScreeningJobsUi,
   computeScreeningResponseDueAt,
   getPositionApplyScreeningResponseMinutes,
   logRejectionNotificationFilterStartup,
@@ -89,7 +91,8 @@ import {
   sendScreeningAcknowledgment,
   USER_APPLICATION_STATUS,
 } from './services/positionApplyScreeningService.js';
-import { buildApplyAckJobPreviewWithTimeout } from './services/applyAckPreviewService.js';
+import { fetchApplyAckQuickJobs } from './services/applyAckPreviewService.js';
+import { clientHasApplyPrioritySkills } from './services/agentApplyPriorityService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
 import {
   tr,
@@ -188,6 +191,9 @@ function checkEnvLoaded() {
   if (!config.azureStorageConnectionString) {
     console.warn('AZURE_STORAGE_CONNECTION_STRING is missing; resume uploads in /hireagent will fail.');
   }
+  console.log(
+    `  Apply ack job list: last ${config.applyAckPreviewDays}d, first skill, top ${config.applyAckPreviewJobCount} (no AI)`
+  );
 }
 
 function registerHandlers(bot, appBaseUrl, options = {}) {
@@ -1393,7 +1399,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     try {
       await ctx.reply(tr(ctx, 'resume_uploading'));
-      await withTypingTelegram(ctx.telegram, chatId, 1200 + Math.floor(Math.random() * 600));
+      if (!isPositionCvFlow) {
+        await withTypingTelegram(ctx.telegram, chatId, 1200 + Math.floor(Math.random() * 600));
+      }
 
       const fileBuffer = await downloadTelegramFileAsBuffer(ctx.telegram, resumeSource.fileId);
       const resumeUrl = await resumeStorage.uploadResumeBuffer({
@@ -1412,30 +1420,45 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       );
       // New upload replaces the user's base resume (Users.ResumeURL) for job search and future CVScore runs.
       await user.update({ ResumeURL: resumeUrl });
-      runResumeEnrichmentInBackground({ userId: user.Id, resumeUrl, includeSkills: true });
-      const totalWithResume = await models.Users.count({
-        where: {
-          ResumeURL: {
-            [Sequelize.Op.ne]: null,
-          },
-        },
-      });
+      const enrichmentPromise = isPositionCvFlow
+        ? runResumeEnrichment({
+            userId: user.Id,
+            resumeUrl,
+            includeSkills: true,
+            previewOnly: true,
+          })
+        : null;
+      if (!isPositionCvFlow) {
+        runResumeEnrichmentInBackground({ userId: user.Id, resumeUrl, includeSkills: true });
+      }
       const resumeUploadMessage = [
         '📄 CV Пользователь загрузил резюме',
         `Имя: ${formatUserDisplayName(user)}`,
         `Username: ${formatUsername(user.TelegramUserName, { withAt: false })}`,
         `ChatId: ${user.TelegramChatId}`,
-        `Всего пользователей загрузило: ${totalWithResume}`,
         `URL: ${resumeUrl}`,
-      ].join('\n');
-      await notifyAdmins(
-        ctx,
-        resumeUploadMessage,
-        'Failed to send CV upload admin notification:',
-        { telegramChatId: user.TelegramChatId }
-      );
+      ];
+      const adminNotifyPromise = (async () => {
+        const totalWithResume = await models.Users.count({
+          where: {
+            ResumeURL: {
+              [Sequelize.Op.ne]: null,
+            },
+          },
+        });
+        resumeUploadMessage.push(`Всего пользователей загрузило: ${totalWithResume}`);
+        await notifyAdmins(
+          ctx,
+          resumeUploadMessage.join('\n'),
+          'Failed to send CV upload admin notification:',
+          { telegramChatId: user.TelegramChatId }
+        );
+      })();
 
-      await withTypingTelegram(ctx.telegram, chatId, 800 + Math.floor(Math.random() * 400));
+      if (!isPositionCvFlow) {
+        await adminNotifyPromise;
+        await withTypingTelegram(ctx.telegram, chatId, 800 + Math.floor(Math.random() * 400));
+      }
       if (isCvRoastFlow || isCvTailorFlow) {
         const mime = String(resumeSource.mimeType || '').toLowerCase();
         const canExtractText =
@@ -1512,27 +1535,68 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
               positionId,
             });
           }
-          const ackLang = resolveApplicantLanguage(user, ctx.from?.language_code);
-          const previewResult = await buildApplyAckJobPreviewWithTimeout({ user, lang: ackLang });
-          if (previewResult?.skipped) {
-            console.log('Apply ack job preview skipped:', previewResult.reason, { chatId, userId: user.Id });
+          const telegram = ctx.telegram || runtimeBot.telegram;
+          if (enrichmentPromise && !clientHasApplyPrioritySkills(user)) {
+            try {
+              await enrichmentPromise;
+            } catch (err) {
+              console.warn('Apply ack skills enrichment failed:', err?.message || err);
+            }
+          } else if (enrichmentPromise) {
+            void enrichmentPromise.catch((err) => {
+              console.warn('Background resume enrichment failed:', err?.message || err);
+            });
+          }
+          const applicantForJobs = (await models.Users.findByPk(user.Id)) || user;
+          const quickJobs = await fetchApplyAckQuickJobs({ user: applicantForJobs });
+          if (quickJobs?.skipped) {
+            console.log('Apply ack quick jobs skipped:', quickJobs.reason, {
+              userId: user.Id,
+              skillId: quickJobs.skillId ?? null,
+            });
           }
           const preview =
-            previewResult && !previewResult.skipped && previewResult.previewUrl
-              ? { previewUrl: previewResult.previewUrl, previewCount: previewResult.previewCount }
+            quickJobs && !quickJobs.skipped && quickJobs.topJobs?.length
+              ? {
+                  previewCount: quickJobs.previewCount,
+                  topJobs: quickJobs.topJobs,
+                  appBaseUrl: quickJobs.appBaseUrl,
+                }
               : null;
+          const channelsState = await getRequiredChannelsState(chatId);
+          const screeningJobsUi = {
+            ...buildScreeningJobsUi(),
+            avatarPath: startAvatarPath,
+            channelSubscribed: channelsState.ok,
+          };
           await sendScreeningAcknowledgment({
-            telegram: ctx.telegram || runtimeBot.telegram,
-            applicantUser: user,
+            telegram,
+            applicantUser: applicantForJobs,
             userApplicationId: application.Id,
             telegramLanguageCode: ctx.from?.language_code,
             preview,
+            jobsUi: screeningJobsUi,
+          });
+          void adminNotifyPromise.catch((err) => {
+            console.warn('Position apply admin notify failed:', err?.message || err);
           });
         } else {
           const lang = langFromCtx(ctx);
+          const channelsState = await getRequiredChannelsState(chatId);
+          const screeningJobsUi = {
+            ...buildScreeningJobsUi(),
+            avatarPath: startAvatarPath,
+            channelSubscribed: channelsState.ok,
+          };
           const text = buildScreeningAckText(lang);
-          const replyMarkup = buildScreeningAckReplyMarkup(lang);
-          await ctx.reply(text, { reply_markup: replyMarkup });
+          const replyMarkup = buildScreeningAckReplyMarkup(lang, screeningJobsUi, {
+            channelSubscribed: channelsState.ok,
+          });
+          if (existsSync(startAvatarPath)) {
+            await ctx.replyWithPhoto({ source: startAvatarPath }, { caption: text, reply_markup: replyMarkup });
+          } else {
+            await ctx.reply(text, { reply_markup: replyMarkup });
+          }
         }
         hireAgentStateByChatId.set(chatId, { step: 'idle' });
         clearPositionApplyChannelBypass(chatId);

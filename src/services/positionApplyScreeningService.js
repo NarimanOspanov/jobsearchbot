@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { Op, QueryTypes } from 'sequelize';
 import { config, parseCommaSeparatedIdSet } from '../config.js';
 import { models, sequelize } from '../db.js';
@@ -5,6 +6,8 @@ import { getConfigInt } from './planService.js';
 import { t } from '../i18n/botI18n.js';
 import { normalizeUserLanguage } from '../utils/userLanguage.js';
 import { isValidTelegramWebAppUrl } from '../utils/telegramUtils.js';
+import { formatTopJobsTelegramHtml } from './telegraphService.js';
+import { getRequiredChannelsState } from './channelService.js';
 
 export const USER_APPLICATION_STATUS = {
   PENDING_SCREENING: 'pending_screening',
@@ -133,24 +136,33 @@ export function buildOpenJobsReplyMarkup(lang, { seekerJobsUrl, canUseSeekerJobs
   return { inline_keyboard: [[button]] };
 }
 
-export function buildScreeningAckText(lang, { previewCount = null } = {}) {
-  const base = t(lang, 'position_apply_screening_received_v2');
+export function buildScreeningAckText(lang, { previewCount = null, jobListHtml = '' } = {}) {
+  const parts = [t(lang, 'position_apply_screening_received_v2')];
   if (previewCount != null && Number(previewCount) > 0) {
-    return `${base}\n\n${t(lang, 'position_apply_screening_preview_teaser', { count: previewCount })}`;
+    parts.push(t(lang, 'position_apply_screening_preview_teaser', { count: previewCount }));
   }
-  return base;
+  const list = String(jobListHtml || '').trim();
+  if (list) parts.push(list);
+  return parts.join('\n\n');
 }
 
-export function buildScreeningAckReplyMarkup(lang, { previewUrl = null } = {}) {
-  const rows = [];
-  const url = String(previewUrl || '').trim();
-  if (url) {
-    rows.push([{ text: t(lang, 'btn_view_top_matches'), url }]);
-  }
-  rows.push([
-    { text: t(lang, 'btn_see_all_positions'), callback_data: SCREENING_SEE_ALL_POSITIONS_CALLBACK },
-  ]);
-  return { inline_keyboard: rows };
+export function buildScreeningAckReplyMarkup(
+  lang,
+  jobsUi = null,
+  { channelSubscribed = false, useJobSearchCallback = false } = {}
+) {
+  const seekerJobsUrl = String(jobsUi?.seekerJobsUrl || '').trim();
+  const canUseWebApp = Boolean(jobsUi?.canUseSeekerJobsWebApp && seekerJobsUrl);
+  const openTmaDirectly = canUseWebApp && channelSubscribed && !useJobSearchCallback;
+  const button = openTmaDirectly
+    ? { text: t(lang, 'btn_see_all_positions'), web_app: { url: seekerJobsUrl } }
+    : {
+        text: t(lang, 'btn_see_all_positions'),
+        callback_data: useJobSearchCallback
+          ? 'start_open_jobsearch'
+          : SCREENING_SEE_ALL_POSITIONS_CALLBACK,
+      };
+  return { inline_keyboard: [[button]] };
 }
 
 export function buildRejectionText(lang) {
@@ -259,7 +271,8 @@ export async function recordUserApplicationOutreach({
  * @param {object} opts.applicantUser - Users row
  * @param {number} opts.userApplicationId
  * @param {string} [opts.telegramLanguageCode]
- * @param {{ previewUrl?: string, previewCount?: number }} [opts.preview]
+ * @param {{ previewCount?: number, topJobs?: object[], appBaseUrl?: string }} [opts.preview]
+ * @param {{ seekerJobsUrl?: string, canUseSeekerJobsWebApp?: boolean, avatarPath?: string, channelSubscribed?: boolean }} [opts.jobsUi]
  */
 export async function sendScreeningAcknowledgment({
   telegram,
@@ -267,6 +280,7 @@ export async function sendScreeningAcknowledgment({
   userApplicationId,
   telegramLanguageCode = null,
   preview = null,
+  jobsUi = null,
 }) {
   if (!telegram || !applicantUser) return { ok: false, skipped: true };
 
@@ -274,15 +288,37 @@ export async function sendScreeningAcknowledgment({
   if (!Number.isSafeInteger(chatId) || chatId <= 0) return { ok: false, skipped: true };
 
   const lang = resolveApplicantLanguage(applicantUser, telegramLanguageCode);
-  const previewCount = preview?.previewCount ?? null;
-  const previewUrl = preview?.previewUrl ?? null;
-  const text = buildScreeningAckText(lang, { previewCount });
-  const replyMarkup = buildScreeningAckReplyMarkup(lang, { previewUrl });
+  const topJobs = Array.isArray(preview?.topJobs) ? preview.topJobs : [];
+  const previewCount =
+    topJobs.length > 0 ? topJobs.length : preview?.previewCount != null ? Number(preview.previewCount) : null;
+  const appBaseUrl =
+    preview?.appBaseUrl ||
+    jobsUi?.seekerJobsUrl?.replace(/\/app\/seeker-jobs\/?$/, '') ||
+    (process.env.ADMIN_APP_URL || config.webhookUrl || '').replace(/\/$/, '');
+  const jobListHtml =
+    topJobs.length > 0
+      ? formatTopJobsTelegramHtml({ jobs: topJobs, appBaseUrl, maxJobs: topJobs.length })
+      : '';
+  const avatarPath = String(jobsUi?.avatarPath || '').trim();
+  const withPhoto = Boolean(avatarPath && existsSync(avatarPath));
+  const text = buildScreeningAckText(lang, {
+    previewCount,
+    jobListHtml,
+  });
+  const replyMarkup = buildScreeningAckReplyMarkup(lang, jobsUi, {
+    channelSubscribed: Boolean(jobsUi?.channelSubscribed),
+  });
+
+  const messageOptions = {
+    parse_mode: topJobs.length > 0 ? 'HTML' : undefined,
+    disable_web_page_preview: topJobs.length > 0 ? true : undefined,
+    reply_markup: replyMarkup,
+  };
 
   try {
-    const sent = await telegram.sendMessage(chatId, text, {
-      reply_markup: replyMarkup || undefined,
-    });
+    const sent = withPhoto
+      ? await telegram.sendPhoto(chatId, { source: avatarPath }, { caption: text, ...messageOptions })
+      : await telegram.sendMessage(chatId, text, messageOptions);
     await recordUserApplicationOutreach({
       userApplicationId,
       userId: applicantUser.Id,
@@ -408,7 +444,10 @@ export async function processDueScreeningResponses({
 
     const lang = resolveApplicantLanguage(applicant);
     const text = buildRejectionText(lang);
-    const replyMarkup = buildScreeningAckReplyMarkup(lang);
+    const channelsState = await getRequiredChannelsState(chatId);
+    const replyMarkup = buildScreeningAckReplyMarkup(lang, jobsUi, {
+      channelSubscribed: channelsState.ok,
+    });
 
     try {
       const sent = await telegram.sendMessage(chatId, text, {

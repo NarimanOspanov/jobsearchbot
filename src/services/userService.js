@@ -204,16 +204,21 @@ export async function runResumeEnrichment({
   resumeUrl,
   includeSkills = false,
   forceWorkAuthRefresh = false,
+  /** Skip contacts/work-auth AI — faster path for post-apply job preview. */
+  previewOnly = false,
 } = {}) {
-  console.info('[resume-enrichment] started', { userId, includeSkills, forceWorkAuthRefresh });
+  console.info('[resume-enrichment] started', { userId, includeSkills, forceWorkAuthRefresh, previewOnly });
   const user = await models.Users.findByPk(userId);
   if (!user) {
-    return { ok: false, hasContacts: false, skillsCount: 0, workAuthCountries: null };
+    return { ok: false, hasContacts: false, skillsCount: 0, workAuthCountries: null, resumeText: '' };
   }
   const resumeText = await extractResumeTextFromUrl(resumeUrl);
   const shouldFillWorkAuth =
-    forceWorkAuthRefresh || !String(user.WorkAuthorizationCountries || '').trim();
-  const contactsPromise = extractResumeContactsWithAI(resumeText);
+    !previewOnly &&
+    (forceWorkAuthRefresh || !String(user.WorkAuthorizationCountries || '').trim());
+  const contactsPromise = previewOnly
+    ? Promise.resolve(null)
+    : extractResumeContactsWithAI(resumeText);
   const skillsPromise = includeSkills
     ? fetchScreenlySkillsCatalog()
         .then((skillsCatalog) => extractResumeSkillIdsWithAI(resumeText, skillsCatalog))
@@ -246,16 +251,24 @@ export async function runResumeEnrichment({
       hasContacts: Boolean(updates.ResumeContactsJson),
       skillsCount: Array.isArray(updates.skills) ? updates.skills.length : 0,
       workAuthCountries: updates.WorkAuthorizationCountries || null,
+      previewOnly,
     });
     return {
       ok: true,
       hasContacts: Boolean(updates.ResumeContactsJson),
       skillsCount: Array.isArray(updates.skills) ? updates.skills.length : 0,
       workAuthCountries: updates.WorkAuthorizationCountries || null,
+      resumeText,
     };
   }
-  console.warn('[resume-enrichment] no parsed data to save', { userId });
-  return { ok: true, hasContacts: false, skillsCount: 0, workAuthCountries: null };
+  console.warn('[resume-enrichment] no parsed data to save', { userId, previewOnly });
+  return {
+    ok: true,
+    hasContacts: false,
+    skillsCount: Array.isArray(resumeSkillIds) ? resumeSkillIds.length : 0,
+    workAuthCountries: null,
+    resumeText,
+  };
 }
 
 export function runResumeEnrichmentInBackground(opts) {

@@ -1,42 +1,77 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCommaSeparatedStrings } from '../src/config.js';
-import { clientHasApplyPrioritySkills } from '../src/services/agentApplyPriorityService.js';
-import { selectTopPreviewJobs } from '../src/services/applyAckPreviewService.js';
+import {
+  firstSkillIdFromUser,
+  getDateRangeForDays,
+  takeFirstPositions,
+} from '../src/services/applyAckPreviewService.js';
 import {
   buildScreeningAckReplyMarkup,
+  buildScreeningAckText,
   SCREENING_SEE_ALL_POSITIONS_CALLBACK,
 } from '../src/services/positionApplyScreeningService.js';
-import {
-  buildTopJobsTelegraphContent,
-  createTelegraphPage,
-  resolveJobPreviewHref,
-  resolveTelegraphAccessTokens,
-} from '../src/services/telegraphService.js';
+import { formatTopJobsTelegramHtml, resolveJobPreviewHref } from '../src/services/telegraphService.js';
 
-test('buildTopJobsTelegraphContent renders date range and grouped job links', () => {
-  const nodes = buildTopJobsTelegraphContent({
+test('getDateRangeForDays defaults to 3-day span', () => {
+  const range = getDateRangeForDays(3);
+  assert.equal(range.days, 3);
+  assert.match(range.from, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(range.to, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('firstSkillIdFromUser returns first normalized skill id', () => {
+  assert.equal(firstSkillIdFromUser({ skills: [42, 99] }), 42);
+  assert.equal(firstSkillIdFromUser({ skills: [] }), null);
+});
+
+test('takeFirstPositions returns first N jobs from API order', () => {
+  const jobs = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }, { id: 6 }];
+  assert.deepEqual(takeFirstPositions(jobs, 5).map((j) => j.id), [1, 2, 3, 4, 5]);
+});
+
+test('formatTopJobsTelegramHtml renders bulleted clickable job lines', () => {
+  const html = formatTopJobsTelegramHtml({
     jobs: [
-      { id: 1, title: 'Engineer', company: 'Acme', source: 'linkedin', applyType: 'easy_apply' },
-      { id: 2, title: 'Designer', company: 'Beta', source: 'company', applyType: 'site' },
+      { id: 1, title: 'Full-Stack Product Engineer', company: 'The Flex' },
+      { id: 2, title: 'Javascript Developer - Remote Work', company: 'BairesDev' },
     ],
-    lang: 'en',
-    dateFrom: '2026-06-11',
-    dateTo: '2026-06-18',
     appBaseUrl: 'https://app.example.com',
   });
+  assert.match(html, /^- <a href="/);
+  assert.ok(html.includes('Full-Stack Product Engineer at The Flex'));
+  assert.ok(html.includes('seeker-jobs-deeplink?jobId=1'));
+  assert.ok(html.includes('</a>\n\n- <a href='));
+});
 
-  assert.equal(nodes[0].tag, 'p');
-  assert.equal(nodes[0].children[0], '2026-06-11 — 2026-06-18');
-  assert.ok(nodes.some((n) => n.tag === 'h4' && n.children[0] === 'LinkedIn'));
-  const linkNode = nodes.find(
-    (n) => n.tag === 'p' && n.children?.[0]?.tag === 'a' && n.children[0].children[0] === 'Engineer at Acme'
+test('buildScreeningAckText includes job list in acceptance message', () => {
+  const text = buildScreeningAckText('en', {
+    previewCount: 5,
+    jobListHtml: '- <a href="https://x">Role at Co</a>',
+  });
+  assert.ok(!text.includes('Get access to 100% remote job listings'));
+  assert.ok(text.includes('Your application is in review'));
+  assert.ok(text.includes('We found 5 strong matches'));
+  assert.ok(text.includes('Role at Co'));
+});
+
+test('buildScreeningAckReplyMarkup opens TMA when subscribed', () => {
+  const markup = buildScreeningAckReplyMarkup(
+    'en',
+    { seekerJobsUrl: 'https://app.example.com/app/seeker-jobs', canUseSeekerJobsWebApp: true },
+    { channelSubscribed: true }
   );
-  assert.ok(linkNode);
-  assert.equal(
-    linkNode.children[0].attrs.href,
-    'https://app.example.com/app/seeker-jobs-deeplink?jobId=1'
+  assert.equal(markup.inline_keyboard[0][0].text, 'See all positions');
+  assert.equal(markup.inline_keyboard[0][0].web_app.url, 'https://app.example.com/app/seeker-jobs');
+});
+
+test('buildScreeningAckReplyMarkup uses subscribe gate callback when not subscribed', () => {
+  const markup = buildScreeningAckReplyMarkup(
+    'en',
+    { seekerJobsUrl: 'https://app.example.com/app/seeker-jobs', canUseSeekerJobsWebApp: true },
+    { channelSubscribed: false }
   );
+  assert.equal(markup.inline_keyboard[0][0].text, 'See all positions');
+  assert.equal(markup.inline_keyboard[0][0].callback_data, SCREENING_SEE_ALL_POSITIONS_CALLBACK);
 });
 
 test('resolveJobPreviewHref prefers applyUrl over deeplink', () => {
@@ -44,78 +79,4 @@ test('resolveJobPreviewHref prefers applyUrl over deeplink', () => {
     resolveJobPreviewHref({ id: 5, applyUrl: 'https://jobs.example.com/5' }, 'https://app.example.com'),
     'https://jobs.example.com/5'
   );
-});
-
-test('selectTopPreviewJobs filters skip and takes top 10 by applyRank', () => {
-  const jobsById = new Map([
-    [1, { id: 1, title: 'A' }],
-    [2, { id: 2, title: 'B' }],
-    [3, { id: 3, title: 'C' }],
-    [4, { id: 4, title: 'D' }],
-  ]);
-  const rankings = [
-    { jobId: 3, applyRank: 1, priority: 'apply_first' },
-    { jobId: 1, applyRank: 2, priority: 'good' },
-    { jobId: 2, applyRank: 3, priority: 'skip' },
-    { jobId: 4, applyRank: 4, priority: 'good' },
-  ];
-  const top = selectTopPreviewJobs(rankings, jobsById, 10);
-  assert.deepEqual(top.map((j) => j.id), [3, 1, 4]);
-});
-
-test('buildScreeningAckReplyMarkup includes url row only when previewUrl is set', () => {
-  const without = buildScreeningAckReplyMarkup('en');
-  assert.equal(without.inline_keyboard.length, 1);
-  assert.equal(without.inline_keyboard[0][0].callback_data, SCREENING_SEE_ALL_POSITIONS_CALLBACK);
-  assert.equal(without.inline_keyboard[0][0].url, undefined);
-
-  const withUrl = buildScreeningAckReplyMarkup('en', { previewUrl: 'https://telegra.ph/top-matches' });
-  assert.equal(withUrl.inline_keyboard.length, 2);
-  assert.equal(withUrl.inline_keyboard[0][0].url, 'https://telegra.ph/top-matches');
-  assert.equal(withUrl.inline_keyboard[1][0].callback_data, SCREENING_SEE_ALL_POSITIONS_CALLBACK);
-});
-
-test('clientHasApplyPrioritySkills is false when user has no skills', () => {
-  assert.equal(clientHasApplyPrioritySkills({ skills: [] }), false);
-  assert.equal(clientHasApplyPrioritySkills({ skills: null }), false);
-  assert.equal(clientHasApplyPrioritySkills({ skills: [1, 2] }), true);
-});
-
-test('parseCommaSeparatedStrings parses comma-separated Telegraph tokens', () => {
-  assert.deepEqual(parseCommaSeparatedStrings('a,b, c'), ['a', 'b', 'c']);
-  assert.deepEqual(parseCommaSeparatedStrings('a,a,b'), ['a', 'b']);
-  assert.deepEqual(parseCommaSeparatedStrings(''), []);
-});
-
-test('resolveTelegraphAccessTokens prefers explicit accessTokens list', () => {
-  assert.deepEqual(resolveTelegraphAccessTokens(null, ['one', 'two']), ['one', 'two']);
-  assert.deepEqual(resolveTelegraphAccessTokens('solo', ['one', 'two']), ['one', 'two']);
-});
-
-test('createTelegraphPage tries next token when first fails', async () => {
-  const originalFetch = globalThis.fetch;
-  let call = 0;
-  globalThis.fetch = async () => {
-    call += 1;
-    if (call === 1) {
-      return { json: async () => ({ ok: false, error: 'ACCESS_TOKEN_INVALID' }) };
-    }
-    return {
-      json: async () => ({
-        ok: true,
-        result: { url: 'https://telegra.ph/top-matches-06-18', path: 'top-matches-06-18' },
-      }),
-    };
-  };
-  try {
-    const page = await createTelegraphPage({
-      title: 'Matches',
-      contentNodes: [{ tag: 'p', children: ['hello'] }],
-      accessTokens: ['bad-token', 'good-token'],
-    });
-    assert.equal(page.url, 'https://telegra.ph/top-matches-06-18');
-    assert.equal(call, 2);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
 });

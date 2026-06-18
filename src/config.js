@@ -140,12 +140,13 @@ export const config = {
   /** @deprecated Use telegraphTokens[0]; first token from TELEGRAPH_TOKEN env. */
   telegraphToken: parseCommaSeparatedStrings(getEnv('TELEGRAPH_TOKEN'))[0] || '',
   applyAckPreviewJobCount: Math.min(
-    20,
-    Math.max(1, Number.parseInt(process.env.APPLY_ACK_PREVIEW_JOB_COUNT || '10', 10) || 10)
+    10,
+    Math.max(1, Number.parseInt(process.env.APPLY_ACK_PREVIEW_JOB_COUNT || '5', 10) || 5)
   ),
-  applyAckPreviewTimeoutMs: Math.min(
-    60000,
-    Math.max(5000, Number.parseInt(process.env.APPLY_ACK_PREVIEW_TIMEOUT_MS || '20000', 10) || 20000)
+  /** Last N calendar days of Anyhires jobs for post-apply inline list. */
+  applyAckPreviewDays: Math.min(
+    14,
+    Math.max(1, Number.parseInt(process.env.APPLY_ACK_PREVIEW_DAYS || '3', 10) || 3)
   ),
   azureStorageConnectionString: getEnv('AZURE_STORAGE_CONNECTION_STRING'),
   azureResumeContainerName: 'resumes',

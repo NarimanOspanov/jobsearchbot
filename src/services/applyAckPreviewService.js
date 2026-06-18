@@ -1,13 +1,6 @@
 import { config } from '../config.js';
 import { buildAnyhiresPositionsSearchParams } from '../utils/positionUpstreamQuery.js';
-import {
-  clientHasApplyPrioritySkills,
-  rankJobsForSeekerPreview,
-} from './agentApplyPriorityService.js';
-import {
-  buildTopJobsTelegraphContent,
-  createTelegraphPage,
-} from './telegraphService.js';
+import { normalizeSkillIds } from './userService.js';
 
 function localIsoDate(date) {
   const y = date.getFullYear();
@@ -16,8 +9,8 @@ function localIsoDate(date) {
   return `${y}-${m}-${day}`;
 }
 
-export function getDateRangeForDays(days = 7) {
-  const span = Math.min(90, Math.max(1, Number.parseInt(String(days || '7'), 10) || 7));
+export function getDateRangeForDays(days = 3) {
+  const span = Math.min(90, Math.max(1, Number.parseInt(String(days || '3'), 10) || 3));
   const now = new Date();
   const to = localIsoDate(now);
   const fromDate = new Date(now);
@@ -26,12 +19,14 @@ export function getDateRangeForDays(days = 7) {
   return { from, to, days: span };
 }
 
-function normalizeSkillIdsCsv(rawSkills) {
-  const list = Array.isArray(rawSkills) ? rawSkills : [];
-  return list
-    .map((id) => Number.parseInt(String(id), 10))
-    .filter((id) => Number.isSafeInteger(id) && id > 0)
-    .join(',');
+export function firstSkillIdFromUser(user) {
+  const ids = normalizeSkillIds(user?.skills);
+  return ids.length ? ids[0] : null;
+}
+
+export function takeFirstPositions(positions, limit = 5) {
+  const safeLimit = Math.max(1, Number(limit) || 5);
+  return (Array.isArray(positions) ? positions : []).slice(0, safeLimit);
 }
 
 function parseCountryCsv(raw) {
@@ -60,111 +55,49 @@ async function fetchPositionsPage(query) {
 }
 
 /**
- * @param {Array<{ jobId: number, applyRank: number, priority: string }>} rankings
- * @param {Map<number, object>} jobsById
- * @param {number} [limit]
+ * Fast post-apply job list: first skill only, last N days, first M API results (no AI / Telegraph).
+ * @param {{ user: object }}
  */
-export function selectTopPreviewJobs(rankings, jobsById, limit = 10) {
-  const safeLimit = Math.max(1, Number(limit) || 10);
-  return rankings
-    .filter((row) => row.priority !== 'skip')
-    .sort((a, b) => a.applyRank - b.applyRank)
-    .slice(0, safeLimit)
-    .map((row) => jobsById.get(Number(row.jobId)))
-    .filter(Boolean);
-}
-
-function previewPageTitle(lang) {
-  return lang === 'ru' ? 'Подходящие удалённые вакансии' : 'Matching remote jobs';
-}
-
-/**
- * @param {{ user: object, lang?: string }}
- */
-export async function buildApplyAckJobPreview({ user, lang = 'en' }) {
+export async function fetchApplyAckQuickJobs({ user }) {
   try {
-    if (!clientHasApplyPrioritySkills(user)) {
-      return { skipped: true, reason: 'no_skills' };
-    }
-    if (!Array.isArray(config.telegraphTokens) || config.telegraphTokens.length === 0) {
-      return { skipped: true, reason: 'no_telegraph_token' };
-    }
-
-    const skillIds = normalizeSkillIdsCsv(user?.skills);
-    if (!skillIds) {
+    const skillId = firstSkillIdFromUser(user);
+    if (!skillId) {
       return { skipped: true, reason: 'no_skills' };
     }
 
-    const dateRange = getDateRangeForDays(7);
+    const previewDays = config.applyAckPreviewDays;
+    const jobCount = config.applyAckPreviewJobCount;
+    const dateRange = getDateRangeForDays(previewDays);
     const country = parseCountryCsv(user?.WorkAuthorizationCountries);
-    const pageSize = 100;
+
     const { positions } = await fetchPositionsPage({
       from: dateRange.from,
       to: dateRange.to,
-      skillIds,
+      skillIds: String(skillId),
       showOnlyHighlyRelevant: false,
       applyTypes: [],
       source: '',
       country,
       page: 1,
-      pageSize,
+      pageSize: jobCount,
     });
 
-    if (!positions.length) {
-      return { skipped: true, reason: 'no_jobs' };
-    }
-
-    const { rankings } = await rankJobsForSeekerPreview({ clientUser: user, jobs: positions });
-    const jobsById = new Map(
-      positions.map((job) => [Number.parseInt(String(job?.id ?? ''), 10), job])
-    );
-    const topJobs = selectTopPreviewJobs(rankings, jobsById, config.applyAckPreviewJobCount);
+    const topJobs = takeFirstPositions(positions, jobCount);
     if (!topJobs.length) {
-      return { skipped: true, reason: 'no_ranked_jobs' };
+      return { skipped: true, reason: 'no_jobs', dateRange, previewDays, skillId };
     }
 
     const appBaseUrl = (process.env.ADMIN_APP_URL || config.webhookUrl || '').replace(/\/$/, '');
-    const contentNodes = buildTopJobsTelegraphContent({
-      jobs: topJobs,
-      lang,
-      dateFrom: dateRange.from,
-      dateTo: dateRange.to,
-      appBaseUrl,
-    });
-    const page = await createTelegraphPage({
-      title: previewPageTitle(lang),
-      contentNodes,
-    });
-
     return {
       skipped: false,
-      previewUrl: page?.url || null,
       previewCount: topJobs.length,
+      topJobs,
+      appBaseUrl,
       dateRange,
+      previewDays,
+      skillId,
     };
   } catch (err) {
-    return { skipped: true, reason: err?.message || 'preview_failed' };
-  }
-}
-
-/**
- * @param {{ user: object, lang?: string, timeoutMs?: number }}
- */
-export async function buildApplyAckJobPreviewWithTimeout({
-  user,
-  lang = 'en',
-  timeoutMs = config.applyAckPreviewTimeoutMs,
-} = {}) {
-  const ms = Math.max(1000, Number(timeoutMs) || config.applyAckPreviewTimeoutMs);
-  let timer = null;
-  try {
-    return await Promise.race([
-      buildApplyAckJobPreview({ user, lang }),
-      new Promise((resolve) => {
-        timer = setTimeout(() => resolve({ skipped: true, reason: 'timeout' }), ms);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
+    return { skipped: true, reason: err?.message || 'fetch_failed' };
   }
 }

@@ -1,4 +1,5 @@
 import { rankJobsForAgentApplyBatchWithAI } from './aiService.js';
+import { config } from '../config.js';
 import { buildJobRequirementsText, getSeekerResumeTextForTailoring } from './tailoredCvService.js';
 import { normalizeSkillIds } from './userService.js';
 
@@ -196,18 +197,29 @@ export async function rankJobsForAgentApply({ clientUser, jobs }) {
 }
 
 /**
- * Seeker post-apply preview: same AI ranking as agents, with default comment when Comment is empty.
- * @param {{ clientUser: object, jobs: unknown[] }}
+ * Seeker post-apply preview: lighter than agent flow — fewer jobs, optional cached resume text.
+ * @param {{ clientUser: object, jobs: unknown[], resumeText?: string | null, maxJobs?: number, chunkSize?: number }}
  */
-export async function rankJobsForSeekerPreview({ clientUser, jobs }) {
+export async function rankJobsForSeekerPreview({
+  clientUser,
+  jobs,
+  resumeText = null,
+  maxJobs = null,
+  chunkSize = null,
+}) {
   const startedAt = Date.now();
-  const normalizedJobs = normalizeIncomingJobs(jobs);
+  const jobCap = Math.max(
+    1,
+    Number(maxJobs) || Number(config.applyAckPreviewFetchLimit) || 30
+  );
+  const normalizedJobs = normalizeIncomingJobs(jobs).slice(0, jobCap);
   if (!normalizedJobs.length) {
     throw new Error('At least one job is required');
   }
 
-  const resumeText = await getSeekerResumeTextForTailoring(clientUser);
-  if (!String(resumeText || '').trim()) {
+  const text =
+    String(resumeText || '').trim() || (await getSeekerResumeTextForTailoring(clientUser));
+  if (!String(text || '').trim()) {
     throw new Error('Upload client resume before analyzing priority');
   }
   if (!clientHasApplyPrioritySkills(clientUser)) {
@@ -218,10 +230,14 @@ export async function rankJobsForSeekerPreview({ clientUser, jobs }) {
   const agentComment =
     String(clientUser?.Comment || '').trim() || SEEKER_PREVIEW_DEFAULT_COMMENT;
 
-  const chunks = chunkArray(normalizedJobs, CHUNK_SIZE);
+  const effectiveChunkSize = Math.max(
+    1,
+    Number(chunkSize) || Number(config.applyAckPreviewRankChunkSize) || 30
+  );
+  const chunks = chunkArray(normalizedJobs, effectiveChunkSize);
   const { mergedRows, chunkTimings } = await processChunksInPool({
     chunks,
-    resumeText,
+    resumeText: text,
     searchMode,
     agentComment,
   });
@@ -235,10 +251,10 @@ export async function rankJobsForSeekerPreview({ clientUser, jobs }) {
     context: {
       searchMode,
       commentLength: agentComment.length,
-      resumeTextLength: String(resumeText).length,
+      resumeTextLength: String(text).length,
       jobCount: normalizedJobs.length,
       chunkCount: chunks.length,
-      chunkSize: CHUNK_SIZE,
+      chunkSize: effectiveChunkSize,
       chunkConcurrency: Math.min(CHUNK_CONCURRENCY, chunks.length),
       avgChunkDurationMs,
       maxChunkDurationMs,
