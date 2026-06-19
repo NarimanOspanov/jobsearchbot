@@ -57,7 +57,7 @@ export const config = {
   geminiApiKey: getEnv('GEMINI_API_KEY'),
   geminiTextModel: getEnv('GEMINI_TEXT_MODEL') || 'gemini-2.5-flash',
   anthropicApiKey: getEnv('ANTHROPIC_API_KEY'),
-  anthropicCvScoreModel: getEnv('ANTHROPIC_CVSCORE_MODEL') || 'claude-sonnet-4-20250514',
+  anthropicCvScoreModel: getEnv('ANTHROPIC_CVSCORE_MODEL') || 'claude-sonnet-4-6',
   botAdminTelegramIds: parseTelegramUserIdSet(getEnv('BOT_ADMIN_TELEGRAM_IDS')),
   /** Job posters who may build tracked apply links (Telegram user ids). */
   botPublisherTelegramIds: parseTelegramUserIdSet(getEnv('BOT_PUBLISHER_TELEGRAM_IDS')),
