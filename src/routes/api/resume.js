@@ -5,7 +5,9 @@ import { markdownToPdfBuffer } from '../../services/resumeService.js';
 import { canUseAiToolsForUser, buildMonetizationStatus } from '../../services/planService.js';
 import {
   assertCanAccessClient,
+  countAgentAssignments,
   isBotAdminTelegramId,
+  isGlobalEasyApplyAgent,
   resolveUserFromMiniApp,
 } from '../../services/agentAccessService.js';
 import { models } from '../../db.js';
@@ -18,14 +20,33 @@ import {
 import { extractMiniAppInitData, verifyInitData } from '../../utils/telegramUtils.js';
 import { getRequiredChannelsState, serializeRequiredChannels } from '../../services/channelService.js';
 
+const AGENT_PORTAL_TAILOR_SOURCES = new Set(['agent-clients', 'admin']);
+
+export function isAgentPortalTailorSource(tailorSource) {
+  return AGENT_PORTAL_TAILOR_SOURCES.has(String(tailorSource || '').trim());
+}
+
+export async function shouldBypassMonetizationForAiGeneration({
+  actorUserId,
+  seekerUserId,
+  tailorSource,
+  isBotAdmin = false,
+}) {
+  const isSelf = Number(actorUserId) === Number(seekerUserId);
+  if (!isSelf) return true;
+  if (!isAgentPortalTailorSource(tailorSource)) return false;
+  if (isBotAdmin) return true;
+  const actorId = Number(actorUserId);
+  if (await isGlobalEasyApplyAgent(actorId)) return true;
+  return (await countAgentAssignments(actorId)) > 0;
+}
+
 async function resolveSeekerUserForAiGeneration(req, seekerId) {
   const actorUser = await resolveUserFromMiniApp(req.miniAppUser);
   if (!actorUser) {
     return { ok: false, status: 403, error: 'Forbidden' };
   }
-  if (Number(actorUser.Id) === seekerId) {
-    return { ok: true, seekerUser: actorUser, bypassMonetization: false };
-  }
+  const tailorSource = String(req.body?.tailorSource || 'api-upload').trim() || 'api-upload';
   const isBotAdmin = isBotAdminTelegramId(req.miniAppUser?.id);
   const impersonateRaw = Number.parseInt(String(req.body?.agentUserId ?? ''), 10);
   const impersonateAgentUserId =
@@ -39,11 +60,18 @@ async function resolveSeekerUserForAiGeneration(req, seekerId) {
   if (!access.ok) {
     return { ok: false, status: access.status, error: access.error };
   }
-  const seekerUser = await models.Users.findByPk(seekerId);
+  const seekerUser =
+    Number(actorUser.Id) === seekerId ? actorUser : await models.Users.findByPk(seekerId);
   if (!seekerUser) {
     return { ok: false, status: 404, error: 'User not found' };
   }
-  return { ok: true, seekerUser, bypassMonetization: true };
+  const bypassMonetization = await shouldBypassMonetizationForAiGeneration({
+    actorUserId: actorUser.Id,
+    seekerUserId: seekerId,
+    tailorSource,
+    isBotAdmin,
+  });
+  return { ok: true, seekerUser, bypassMonetization };
 }
 
 export function createResumeRouter() {
