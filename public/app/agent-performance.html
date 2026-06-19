@@ -223,6 +223,7 @@
       const chartInstances = {};
       let isBotAdminUser = false;
       let isCareerAgentUser = false;
+      let isGlobalEasyApplyAgentUser = false;
       const chartScale = {
         x: { ticks: { color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' } },
         y: { beginAtZero: true, ticks: { precision: 0, color: '#9eb0d1' }, grid: { color: 'rgba(158,176,209,0.15)' } },
@@ -376,8 +377,10 @@
           '<option value="">All agents</option>' +
           (Array.isArray(agents) ? agents : [])
             .map(
-              (agent) =>
-                `<option value="${esc(agent.id)}">${esc(agent.displayName || `#${agent.id}`)} (${esc(agent.telegramChatId)})</option>`
+              (agent) => {
+                const suffix = agent.isGlobalEasyApplyAgent ? ' · Easy Apply' : '';
+                return `<option value="${esc(agent.id)}">${esc(agent.displayName || `#${agent.id}`)}${esc(suffix)} (${esc(agent.telegramChatId)})</option>`;
+              }
             )
             .join('');
         if (current && [...sel.options].some((opt) => opt.value === current)) {
@@ -507,8 +510,11 @@
         const profile = await api('/api/app/profile');
         isBotAdminUser = !!profile?.isBotAdmin;
         isCareerAgentUser = !!profile?.isCareerAgent;
-        if (!isBotAdminUser && !isCareerAgentUser) {
-          throw new Error('You are not assigned as a career agent. Ask an admin to assign clients to you.');
+        isGlobalEasyApplyAgentUser = !!profile?.isGlobalEasyApplyAgent;
+        if (!isBotAdminUser && !isCareerAgentUser && !isGlobalEasyApplyAgentUser) {
+          throw new Error(
+            'You are not assigned as a career agent or LinkedIn Easy Apply specialist. Ask an admin for access.'
+          );
         }
         document.getElementById('periodSel').value = String(
           toInt(new URLSearchParams(location.search).get('period'), 7)

@@ -3,6 +3,7 @@ import { models, sequelize } from '../db.js';
 import { config } from '../config.js';
 import { runtimeBot } from '../bot/state.js';
 import { buildAgentPerformanceStats } from './agentPerformanceStatsService.js';
+import { resolveGlobalEasyApplyAgentUserIds } from './agentAccessService.js';
 import { normalizeChatId } from '../utils/helpers.js';
 
 const DIGEST_PERIODS = [
@@ -76,6 +77,22 @@ export async function listAgentPerformanceDigestRecipientChatIds() {
     for (const row of rows || []) {
       const chatId = normalizeChatId(row.telegramChatId);
       if (chatId != null) chatIds.add(Number(chatId));
+    }
+
+    const globalEasyApplyUserIds = await resolveGlobalEasyApplyAgentUserIds();
+    if (globalEasyApplyUserIds.length) {
+      const easyApplyUsers = await models.Users.findAll({
+        attributes: ['TelegramChatId'],
+        where: {
+          Id: { [Sequelize.Op.in]: globalEasyApplyUserIds },
+          TelegramChatId: { [Sequelize.Op.not]: null },
+          [Sequelize.Op.or]: [{ IsBlocked: false }, { IsBlocked: null }],
+        },
+      });
+      for (const user of easyApplyUsers) {
+        const chatId = normalizeChatId(user.TelegramChatId);
+        if (chatId != null) chatIds.add(Number(chatId));
+      }
     }
   }
 

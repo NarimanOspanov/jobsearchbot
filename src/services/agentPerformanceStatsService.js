@@ -24,13 +24,13 @@ export function parseAgentPerformancePeriod(raw, fallback = 7) {
   return Math.min(365, Math.max(1, Number.parseInt(periodRaw, 10)));
 }
 
-/** Admin: optional filter (null = all agents). Career agent: own user id only. */
+/** Admin: optional filter (null = all agents). Career / global Easy Apply agent: own user id only. */
 export function resolvePerformanceAgentUserId(req) {
   if (req.isBotAdmin) {
     const id = Number.parseInt(String(req.query.agentUserId || ''), 10);
     return Number.isSafeInteger(id) && id > 0 ? id : null;
   }
-  if (req.isCareerAgent) {
+  if (req.isCareerAgent || req.isGlobalEasyApplyAgent) {
     const id = Number(req.actorUser?.Id);
     return Number.isSafeInteger(id) && id > 0 ? id : null;
   }

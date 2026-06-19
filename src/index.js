@@ -2256,7 +2256,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       await ctx.reply('Sending agent performance digest to all agents and admins…');
       const result = await runAgentPerformanceDigestCron(`bot:${fromId}`);
       if (!result?.recipientCount) {
-        await ctx.reply('No recipients found (no assigned agents with Telegram chat ids).');
+        await ctx.reply('No recipients found (no career agents or LinkedIn Easy Apply specialists with Telegram chat ids).');
         return;
       }
       await ctx.reply(

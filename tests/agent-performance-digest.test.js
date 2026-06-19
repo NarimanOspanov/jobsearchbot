@@ -1,6 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatAgentPerformanceDigestMessage } from '../src/services/agentPerformanceDigestService.js';
+import { resolvePerformanceAgentUserId } from '../src/services/agentPerformanceStatsService.js';
+
+function mockPerformanceReq({
+  actorUserId,
+  isBotAdmin = false,
+  isCareerAgent = false,
+  isGlobalEasyApplyAgent = false,
+  agentUserId = null,
+} = {}) {
+  return {
+    actorUser: { Id: actorUserId },
+    isBotAdmin,
+    isCareerAgent,
+    isGlobalEasyApplyAgent,
+    query: agentUserId != null ? { agentUserId: String(agentUserId) } : {},
+  };
+}
 
 test('formatAgentPerformanceDigestMessage renders 24h / 7d / 30d sections', () => {
   const message = formatAgentPerformanceDigestMessage([
@@ -46,4 +63,38 @@ test('formatAgentPerformanceDigestMessage shows placeholder when empty', () => {
     { label: 'Last 24 hours', stats: { byAgent: [] } },
   ]);
   assert.match(message, /Last 24 hours[\s\S]*\(no applications\)/);
+});
+
+test('resolvePerformanceAgentUserId scopes global Easy Apply agents to own stats', () => {
+  assert.equal(
+    resolvePerformanceAgentUserId(
+      mockPerformanceReq({ actorUserId: 99, isGlobalEasyApplyAgent: true })
+    ),
+    99
+  );
+  assert.equal(
+    resolvePerformanceAgentUserId(
+      mockPerformanceReq({ actorUserId: 10, isCareerAgent: true })
+    ),
+    10
+  );
+  assert.equal(
+    resolvePerformanceAgentUserId(mockPerformanceReq({ actorUserId: 10 })),
+    undefined
+  );
+});
+
+test('resolvePerformanceAgentUserId lets admins filter by agentUserId', () => {
+  assert.equal(
+    resolvePerformanceAgentUserId(
+      mockPerformanceReq({ actorUserId: 1, isBotAdmin: true, agentUserId: 42 })
+    ),
+    42
+  );
+  assert.equal(
+    resolvePerformanceAgentUserId(
+      mockPerformanceReq({ actorUserId: 1, isBotAdmin: true })
+    ),
+    null
+  );
 });
