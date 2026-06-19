@@ -91,7 +91,8 @@ import {
   sendScreeningAcknowledgment,
   USER_APPLICATION_STATUS,
 } from './services/positionApplyScreeningService.js';
-import { fetchApplyAckQuickJobs } from './services/applyAckPreviewService.js';
+import { fetchApplyAckQuickJobs, fetchSimilarPositionsByTitle } from './services/applyAckPreviewService.js';
+import { formatTopJobsTelegramHtml } from './services/telegraphService.js';
 import { clientHasApplyPrioritySkills } from './services/agentApplyPriorityService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
 import {
@@ -608,9 +609,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const externalApplyButtonText = companyName
       ? t(lang, 'btn_apply_external', { company: companyName })
       : t(lang, 'btn_apply_external_generic');
-    const openOtherJobsButton = canUseSeekerJobsWebApp
-      ? { text: t(lang, 'btn_open_other_jobs'), web_app: { url: `${seekerJobsUrl}?autoSearch=1` } }
-      : { text: t(lang, 'btn_open_other_jobs'), callback_data: 'start_open_jobsearch' };
+    const openOtherJobsButton = {
+      text: t(lang, 'btn_show_similar_positions'),
+      callback_data: `similar_positions_${positionId}`,
+    };
     const lines = [
       t(lang, 'position_header', { title: position.Title, company: position.CompanyName }),
       ...(website ? [t(lang, 'position_website', { website })] : []),
@@ -1010,6 +1012,58 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     } catch {
       /* ignore */
     }
+    await openJobSearchFromBot(ctx);
+  });
+
+  bot.action(/^similar_positions_([0-9a-f-]{36})$/i, async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    const positionId = String(ctx.match?.[1] || '').trim();
+    if (!positionId) return;
+    const lang = langFromCtx(ctx);
+    if (!models.Positions) {
+      await ctx.reply(tr(ctx, 'position_service_unavailable'));
+      return;
+    }
+    const position = await models.Positions.findByPk(positionId);
+    if (!position) {
+      await ctx.reply(tr(ctx, 'position_not_found'));
+      return;
+    }
+    const { user } = await ensureUser(ctx);
+    const result = await fetchSimilarPositionsByTitle(position.Title, { user });
+    if (result.skipped || !result.topJobs?.length) {
+      const passed = await enforceStartRequiredChannelsGate(ctx);
+      if (!passed) return;
+      await openJobSearchFromBot(ctx);
+      return;
+    }
+    const jobListHtml = formatTopJobsTelegramHtml({
+      jobs: result.topJobs,
+      appBaseUrl: result.appBaseUrl,
+      maxJobs: 5,
+    });
+    const text = `<b>${t(lang, 'similar_positions_header')}</b>\n\n${jobListHtml}`;
+    await ctx.reply(text, {
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      reply_markup: {
+        inline_keyboard: [[{ text: t(lang, 'btn_see_all_positions'), callback_data: 'similar_positions_show_all' }]],
+      },
+    });
+  });
+
+  bot.action('similar_positions_show_all', async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+    } catch {
+      /* ignore */
+    }
+    const passed = await enforceStartRequiredChannelsGate(ctx);
+    if (!passed) return;
     await openJobSearchFromBot(ctx);
   });
 

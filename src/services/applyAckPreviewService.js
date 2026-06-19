@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { buildAnyhiresPositionsSearchParams } from '../utils/positionUpstreamQuery.js';
 import { normalizeSkillIds } from './userService.js';
+import { fetchScreenlySkillsCatalog } from './aiService.js';
 
 function localIsoDate(date) {
   const y = date.getFullYear();
@@ -97,6 +98,60 @@ export async function fetchApplyAckQuickJobs({ user }) {
       previewDays,
       skillId,
     };
+  } catch (err) {
+    return { skipped: true, reason: err?.message || 'fetch_failed' };
+  }
+}
+
+async function inferSkillIdsFromTitle(title) {
+  try {
+    const catalog = await fetchScreenlySkillsCatalog();
+    const normalized = title.toLowerCase();
+    const matches = catalog.filter(
+      (skill) => skill.name.length > 2 && normalized.includes(skill.name.toLowerCase())
+    );
+    matches.sort((a, b) => b.name.length - a.name.length);
+    return matches.slice(0, 3).map((s) => s.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch positions similar to the given position title by matching skill catalog entries.
+ * @param {string} positionTitle
+ * @param {{ user?: object }} [opts]
+ */
+export async function fetchSimilarPositionsByTitle(positionTitle, { user = null } = {}) {
+  try {
+    const skillIds = await inferSkillIdsFromTitle(positionTitle);
+    if (!skillIds.length) {
+      return { skipped: true, reason: 'no_skill_match' };
+    }
+
+    const jobCount = 5;
+    const dateRange = getDateRangeForDays(30);
+    const country = parseCountryCsv(user?.WorkAuthorizationCountries);
+
+    const { positions } = await fetchPositionsPage({
+      from: dateRange.from,
+      to: dateRange.to,
+      skillIds: skillIds.join(','),
+      showOnlyHighlyRelevant: false,
+      applyTypes: [],
+      source: '',
+      country,
+      page: 1,
+      pageSize: jobCount,
+    });
+
+    const topJobs = takeFirstPositions(positions, jobCount);
+    if (!topJobs.length) {
+      return { skipped: true, reason: 'no_jobs', skillIds };
+    }
+
+    const appBaseUrl = (process.env.ADMIN_APP_URL || config.webhookUrl || '').replace(/\/$/, '');
+    return { skipped: false, topJobs, appBaseUrl, skillIds };
   } catch (err) {
     return { skipped: true, reason: err?.message || 'fetch_failed' };
   }
