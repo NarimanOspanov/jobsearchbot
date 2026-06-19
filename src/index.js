@@ -142,6 +142,10 @@ import {
   runClientDailyReportCron,
   startClientDailyReportCronIfNeeded,
 } from './services/clientDailyReportCronScheduler.js';
+import {
+  buildClientDailyReportPreviewForTelegramChatId,
+  isClientDailyReportTestOnlyMode,
+} from './services/clientDailyReportService.js';
 import { initAgentApplyPriorityQueue } from './services/agentApplyPriorityQueueService.js';
 import { startPositionApplyScreeningCronIfNeeded } from './services/positionApplyScreeningCronScheduler.js';
 
@@ -2296,11 +2300,23 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
         );
       }
       if (canUseDailyReportWebApp) {
-        await ctx.reply('Open daily report preview:', {
-          reply_markup: {
-            inline_keyboard: [[{ text: 'Open daily report', web_app: { url: dailyReportUrl } }]],
-          },
-        });
+        const previewChatId =
+          isClientDailyReportTestOnlyMode() &&
+          (Number(config.clientDailyReportTestChatId || 0) > 0 || Number(fallbackTestChatId || 0) > 0)
+            ? Number(fallbackTestChatId || 0) || Number(config.clientDailyReportTestChatId || 0)
+            : Number(ctx.chat?.id || 0);
+        const preview = await buildClientDailyReportPreviewForTelegramChatId(previewChatId);
+        if (preview?.text) {
+          await ctx.reply(preview.text, preview.replyMarkup ? { reply_markup: preview.replyMarkup } : undefined);
+        } else if (preview?.empty) {
+          await ctx.reply('No applications in the last 24 hours to preview.');
+        } else {
+          await ctx.reply('Open report:', {
+            reply_markup: {
+              inline_keyboard: [[{ text: 'Open report', web_app: { url: dailyReportUrl } }]],
+            },
+          });
+        }
       }
     } catch (err) {
       console.error('client_daily_report command failed:', err);

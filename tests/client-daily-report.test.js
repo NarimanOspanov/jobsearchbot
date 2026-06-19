@@ -4,6 +4,7 @@ import {
   formatClientDailyReportMessage,
   isClientDailyReportTestOnlyMode,
   isClientDailyReportTestTarget,
+  parseDailyReportPeriod,
 } from '../src/services/clientDailyReportService.js';
 
 test('formatClientDailyReportMessage renders English greeting with name', () => {
@@ -16,10 +17,11 @@ test('formatClientDailyReportMessage renders English greeting with name', () => 
       { vacancyTitle: 'Backend Engineer', companyName: 'Globex' },
     ],
   });
-  assert.match(message, /Hi, Nikita!/);
-  assert.match(message, /applied to 25 positions/);
-  assert.match(message, /Applied jobs:/);
+  assert.match(message, /Hey, Nikita!/);
+  assert.match(message, /Today we applied to 25 positions/);
+  assert.match(message, /Top applications:/);
   assert.match(message, /Senior Fullstack Developer — Acme/);
+  assert.doesNotMatch(message, /Check report with details here/);
 });
 
 test('formatClientDailyReportMessage renders Russian copy without name', () => {
@@ -30,9 +32,17 @@ test('formatClientDailyReportMessage renders Russian copy without name', () => {
     rows: [{ vacancyTitle: 'Frontend Developer', companyName: 'Ромашка' }],
   });
   assert.match(message, /Привет!/);
-  assert.match(message, /За последний день/);
-  assert.match(message, /Список откликов:/);
+  assert.match(message, /Сегодня мы откликнулись/);
+  assert.match(message, /Топ откликов:/);
   assert.match(message, /Frontend Developer — Ромашка/);
+});
+
+test('parseDailyReportPeriod maps UI period values', () => {
+  assert.equal(parseDailyReportPeriod('24h').period, '24h');
+  assert.equal(parseDailyReportPeriod('7d').period, '7d');
+  assert.equal(parseDailyReportPeriod('30d').period, '30d');
+  assert.equal(parseDailyReportPeriod('all').allTime, true);
+  assert.equal(parseDailyReportPeriod('all').since, null);
 });
 
 test('delivery mode helpers are consistent with config', () => {

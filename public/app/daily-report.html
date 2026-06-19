@@ -44,6 +44,15 @@
       .summary { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: #10182d; white-space: pre-wrap; margin: 0; }
       #screenshotPreview { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; display: none; }
       .empty { padding: 16px; text-align: center; color: var(--muted); }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+      .toolbar select {
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #0f1730;
+        color: var(--text);
+        padding: 8px 10px;
+        font: inherit;
+      }
     </style>
   </head>
   <body>
@@ -51,6 +60,15 @@
       <div class="card">
         <h1 id="titleText">Daily report</h1>
         <div id="subtitleText" class="muted" style="margin-top:6px"></div>
+        <div class="toolbar">
+          <label class="muted" for="periodSel" id="filterLabel">Report for</label>
+          <select id="periodSel" aria-label="Report period">
+            <option value="24h">Last day</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last month</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
       </div>
       <div class="card">
         <div class="table-wrap">
@@ -107,7 +125,15 @@
       const STRINGS = {
         en: {
           pageTitle: 'Daily report',
-          subtitle: 'Applications sent in the last 24 hours.',
+          filterLabel: 'Report for',
+          filterLastDay: 'Last day',
+          filterLast7Days: 'Last 7 days',
+          filterLastMonth: 'Last month',
+          filterAllTime: 'All time',
+          subtitle24h: 'Applications sent in the last 24 hours.',
+          subtitle7d: 'Applications sent in the last 7 days.',
+          subtitle30d: 'Applications sent in the last month.',
+          subtitleAll: 'All applications sent on your behalf.',
           thAppliedAt: 'Applied at',
           thTitle: 'Title',
           thCompany: 'Company',
@@ -140,7 +166,15 @@
         },
         ru: {
           pageTitle: 'Дневной отчет',
-          subtitle: 'Отклики за последние 24 часа.',
+          filterLabel: 'Отчет за',
+          filterLastDay: 'Последний день',
+          filterLast7Days: 'Последние 7 дней',
+          filterLastMonth: 'Последний месяц',
+          filterAllTime: 'Все время',
+          subtitle24h: 'Отклики за последние 24 часа.',
+          subtitle7d: 'Отклики за последние 7 дней.',
+          subtitle30d: 'Отклики за последний месяц.',
+          subtitleAll: 'Все отклики, отправленные за вас.',
           thAppliedAt: 'Время отклика',
           thTitle: 'Вакансия',
           thCompany: 'Компания',
@@ -179,6 +213,30 @@
       const t = (key, params) => (window.TmaI18n ? window.TmaI18n.t(STRINGS, lang, key, params) : key);
 
       let rows = [];
+      let currentPeriod = '24h';
+
+      const PERIOD_SUBTITLE_KEYS = {
+        '24h': 'subtitle24h',
+        '7d': 'subtitle7d',
+        '30d': 'subtitle30d',
+        all: 'subtitleAll',
+      };
+
+      function readPeriodFromUrl() {
+        const raw = String(new URLSearchParams(window.location.search).get('period') || '24h').trim().toLowerCase();
+        if (raw === '7d' || raw === '30d' || raw === 'all') return raw;
+        return '24h';
+      }
+
+      function syncPeriodToUrl(period) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('period', period);
+        window.history.replaceState(null, '', url.toString());
+      }
+
+      function subtitleForPeriod(period) {
+        return t(PERIOD_SUBTITLE_KEYS[period] || 'subtitle24h');
+      }
 
       function api(path, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -288,7 +346,17 @@
       function applyStaticUi() {
         document.title = t('pageTitle');
         document.getElementById('titleText').textContent = t('pageTitle');
-        document.getElementById('subtitleText').textContent = t('subtitle');
+        document.getElementById('subtitleText').textContent = subtitleForPeriod(currentPeriod);
+        document.getElementById('filterLabel').textContent = t('filterLabel');
+        const periodSel = document.getElementById('periodSel');
+        if (periodSel) {
+          periodSel.value = currentPeriod;
+          const options = periodSel.options;
+          if (options[0]) options[0].textContent = t('filterLastDay');
+          if (options[1]) options[1].textContent = t('filterLast7Days');
+          if (options[2]) options[2].textContent = t('filterLastMonth');
+          if (options[3]) options[3].textContent = t('filterAllTime');
+        }
         document.getElementById('thAppliedAt').textContent = t('thAppliedAt');
         document.getElementById('thTitle').textContent = t('thTitle');
         document.getElementById('thCompany').textContent = t('thCompany');
@@ -390,8 +458,10 @@
       async function load() {
         applyStaticUi();
         try {
-          const payload = await api('/api/app/applications/daily-report?period=24h');
+          const payload = await api(`/api/app/applications/daily-report?period=${encodeURIComponent(currentPeriod)}`);
           rows = Array.isArray(payload?.rows) ? payload.rows : [];
+          if (payload?.period) currentPeriod = String(payload.period);
+          document.getElementById('subtitleText').textContent = subtitleForPeriod(currentPeriod);
           renderRows();
         } catch (err) {
           const body = document.getElementById('rowsBody');
@@ -413,6 +483,13 @@
         if (event.key === 'Escape') closeModal();
       });
 
+      document.getElementById('periodSel').addEventListener('change', (event) => {
+        currentPeriod = String(event.target.value || '24h');
+        syncPeriodToUrl(currentPeriod);
+        load();
+      });
+
+      currentPeriod = readPeriodFromUrl();
       load();
     </script>
   </body>

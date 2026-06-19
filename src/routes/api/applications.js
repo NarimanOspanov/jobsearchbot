@@ -15,7 +15,7 @@ import {
   toScoreOrNullOrUndefined,
   toStringOrUndefined,
 } from '../../utils/validators.js';
-import { fetchClientDailyReportRows, fetchMentorClientApplicationChart } from '../../services/clientDailyReportService.js';
+import { fetchClientDailyReportRows, fetchMentorClientApplicationChart, parseDailyReportPeriod } from '../../services/clientDailyReportService.js';
 
 function parseImpersonateAgentUserId(req) {
   const n = Number.parseInt(String(req.query.agentUserId || req.body?.agentUserId || ''), 10);
@@ -172,20 +172,18 @@ export function createApplicationsRouter() {
 
   router.get('/api/app/applications/daily-report', miniAppAuth, async (req, res) => {
     try {
-      const period = String(req.query.period || '24h').trim().toLowerCase();
-      const hours = period === '24h' ? 24 : 24;
-      const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+      const { period, since, allTime } = parseDailyReportPeriod(req.query.period);
       const { user } = await ensureUserByTelegramId(
         req.miniAppUser.id,
         req.miniAppUser.username ?? null,
         req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
         req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
       );
-      const rows = await fetchClientDailyReportRows(user.Id, { since });
+      const rows = await fetchClientDailyReportRows(user.Id, { since, allTime });
       return res.json({
         ok: true,
-        period: '24h',
-        since: since.toISOString(),
+        period,
+        since: since ? since.toISOString() : null,
         count: rows.length,
         rows,
       });

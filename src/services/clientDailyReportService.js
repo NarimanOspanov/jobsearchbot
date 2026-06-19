@@ -9,24 +9,22 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const COPY = {
   en: {
-    noNameGreeting: 'Hi!',
-    greeting: (firstName) => `Hi, ${firstName}!`,
+    noNameGreeting: 'Hey!',
+    greeting: (firstName) => `Hey, ${firstName}!`,
     summary: (count) =>
-      `In last day we have applied to ${count} position${count === 1 ? '' : 's'} for you. We tailored resumes and cover letters for each application.`,
-    listHeader: 'Applied jobs:',
-    moreItems: (count) => `...and ${count} more.`,
-    cta: 'Check report with details here',
-    button: 'Open daily report',
+      `Today we applied to ${count} position${count === 1 ? '' : 's'} for you.`,
+    listHeader: 'Top applications:',
+    moreItems: (count) => `...and ${count} more in the full report.`,
+    button: 'Open report',
   },
   ru: {
     noNameGreeting: 'Привет!',
     greeting: (firstName) => `Привет, ${firstName}!`,
     summary: (count) =>
-      `За последний день мы откликнулись для вас на ${count} ваканси${count % 10 === 1 && count % 100 !== 11 ? 'ю' : 'й'}. Для каждого отклика мы подготовили адаптированные резюме и сопроводительные письма.`,
-    listHeader: 'Список откликов:',
-    moreItems: (count) => `...и еще ${count}.`,
-    cta: 'Подробный отчет по кнопке ниже',
-    button: 'Открыть дневной отчет',
+      `Сегодня мы откликнулись для вас на ${count} ваканси${count % 10 === 1 && count % 100 !== 11 ? 'ю' : 'й'}.`,
+    listHeader: 'Топ откликов:',
+    moreItems: (count) => `...и еще ${count} в полном отчете.`,
+    button: 'Открыть отчет',
   },
 };
 
@@ -176,14 +174,31 @@ export async function listClientDailyReportRecipients(options = {}) {
   return normalizeRecipientRows(rows);
 }
 
-export async function fetchClientDailyReportRows(userId, { since = null } = {}) {
-  const fromDate = since instanceof Date ? since : new Date(Date.now() - DAY_MS);
+export function parseDailyReportPeriod(raw) {
+  const key = String(raw || '24h').trim().toLowerCase();
+  if (key === 'all' || key === 'all-time' || key === 'all_time') {
+    return { period: 'all', since: null, allTime: true };
+  }
+  if (key === '7d' || key === '7days') {
+    return { period: '7d', since: new Date(Date.now() - 7 * DAY_MS), allTime: false };
+  }
+  if (key === '30d' || key === '1m' || key === 'month') {
+    return { period: '30d', since: new Date(Date.now() - 30 * DAY_MS), allTime: false };
+  }
+  return { period: '24h', since: new Date(Date.now() - DAY_MS), allTime: false };
+}
+
+export async function fetchClientDailyReportRows(userId, { since = null, allTime = false } = {}) {
+  const where = {
+    UserId: userId,
+    [Sequelize.Op.and]: Sequelize.where(Sequelize.fn('lower', Sequelize.col('Status')), 'applied'),
+  };
+  if (!allTime) {
+    const fromDate = since instanceof Date ? since : new Date(Date.now() - DAY_MS);
+    where.AppliedAt = { [Sequelize.Op.gte]: fromDate };
+  }
   const rows = await models.Applications.findAll({
-    where: {
-      UserId: userId,
-      AppliedAt: { [Sequelize.Op.gte]: fromDate },
-      [Sequelize.Op.and]: Sequelize.where(Sequelize.fn('lower', Sequelize.col('Status')), 'applied'),
-    },
+    where,
     order: [['AppliedAt', 'DESC'], ['Id', 'DESC']],
     limit: 500,
   });
@@ -296,7 +311,7 @@ export async function fetchMentorClientApplicationChart(clientUserIds, { since }
 function buildAppliedJobsLines(rows, copy) {
   const items = Array.isArray(rows) ? rows : [];
   if (!items.length) return [];
-  const maxItems = 12;
+  const maxItems = 5;
   const visible = items.slice(0, maxItems);
   const lines = visible.map((row) => {
     const title = String(row?.vacancyTitle || '').trim() || '—';
@@ -311,17 +326,34 @@ export function formatClientDailyReportMessage({ firstName, language, appliedCou
   const copy = copyForLanguage(resolveBotLanguage(language));
   const greeting = firstName ? copy.greeting(firstName) : copy.noNameGreeting;
   const jobsLines = buildAppliedJobsLines(rows, copy);
-  return [greeting, '', copy.summary(appliedCount), ...(jobsLines.length ? ['', ...jobsLines] : []), '', copy.cta].join(
-    '\n'
-  );
+  return [greeting, '', copy.summary(appliedCount), ...(jobsLines.length ? ['', ...jobsLines] : [])].join('\n');
 }
 
-function buildClientDailyReportReplyMarkup(language) {
+export function buildClientDailyReportReplyMarkup(language) {
   const url = buildDailyReportWebAppUrl();
   if (!url || !/^https:\/\//i.test(url)) return undefined;
   const copy = copyForLanguage(resolveBotLanguage(language));
   return {
     inline_keyboard: [[{ text: copy.button, web_app: { url } }]],
+  };
+}
+
+export async function buildClientDailyReportPreviewForTelegramChatId(chatId) {
+  const normalized = normalizeChatId(chatId);
+  if (normalized == null || !models.Users) return null;
+  const user = await models.Users.findOne({ where: { TelegramChatId: normalized } });
+  if (!user) return null;
+  const since = new Date(Date.now() - DAY_MS);
+  const rows = await fetchClientDailyReportRows(user.Id, { since });
+  if (!rows.length) return { empty: true };
+  return {
+    text: formatClientDailyReportMessage({
+      firstName: firstNameFromUser(user),
+      language: user.Language,
+      appliedCount: rows.length,
+      rows,
+    }),
+    replyMarkup: buildClientDailyReportReplyMarkup(user.Language),
   };
 }
 
