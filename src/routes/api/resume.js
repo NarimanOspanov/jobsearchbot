@@ -24,7 +24,7 @@ async function resolveSeekerUserForAiGeneration(req, seekerId) {
     return { ok: false, status: 403, error: 'Forbidden' };
   }
   if (Number(actorUser.Id) === seekerId) {
-    return { ok: true, seekerUser: actorUser };
+    return { ok: true, seekerUser: actorUser, bypassMonetization: false };
   }
   const isBotAdmin = isBotAdminTelegramId(req.miniAppUser?.id);
   const impersonateRaw = Number.parseInt(String(req.body?.agentUserId ?? ''), 10);
@@ -43,7 +43,7 @@ async function resolveSeekerUserForAiGeneration(req, seekerId) {
   if (!seekerUser) {
     return { ok: false, status: 404, error: 'User not found' };
   }
-  return { ok: true, seekerUser };
+  return { ok: true, seekerUser, bypassMonetization: true };
 }
 
 export function createResumeRouter() {
@@ -141,14 +141,16 @@ export function createResumeRouter() {
       if (!resolved.ok) {
         return res.status(resolved.status).json({ error: resolved.error });
       }
-      const { seekerUser } = resolved;
-      const canUseAiTools = await canUseAiToolsForUser(seekerUser.Id);
-      if (!canUseAiTools) {
-        return res.status(402).json({
-          error: 'gold_required',
-          message: 'AI-инструменты доступны в Premium или при наличии открытий.',
-          monetization: await buildMonetizationStatus(seekerUser.Id),
-        });
+      const { seekerUser, bypassMonetization } = resolved;
+      if (!bypassMonetization) {
+        const canUseAiTools = await canUseAiToolsForUser(seekerUser.Id);
+        if (!canUseAiTools) {
+          return res.status(402).json({
+            error: 'gold_required',
+            message: 'AI-инструменты доступны в Premium или при наличии открытий.',
+            monetization: await buildMonetizationStatus(seekerUser.Id),
+          });
+        }
       }
 
       const { url: tailoredCvUrl } = await tailorResumeForSeeker({
@@ -185,14 +187,16 @@ export function createResumeRouter() {
       if (!resolved.ok) {
         return res.status(resolved.status).json({ error: resolved.error });
       }
-      const { seekerUser } = resolved;
-      const canUseAiTools = await canUseAiToolsForUser(seekerUser.Id);
-      if (!canUseAiTools) {
-        return res.status(402).json({
-          error: 'gold_required',
-          message: 'AI-инструменты доступны в Premium или при наличии открытий.',
-          monetization: await buildMonetizationStatus(seekerUser.Id),
-        });
+      const { seekerUser, bypassMonetization } = resolved;
+      if (!bypassMonetization) {
+        const canUseAiTools = await canUseAiToolsForUser(seekerUser.Id);
+        if (!canUseAiTools) {
+          return res.status(402).json({
+            error: 'gold_required',
+            message: 'AI-инструменты доступны в Premium или при наличии открытий.',
+            monetization: await buildMonetizationStatus(seekerUser.Id),
+          });
+        }
       }
       const coverLetter = await generateCoverLetterText({ jobTitle, jobDescription, mainResumeText });
       let coverLetterUrl = null;
