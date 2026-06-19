@@ -16,7 +16,7 @@
         --border: #2e2e2e;
       }
       * { box-sizing: border-box; }
-      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
       .wrap { width: 100%; max-width: 100%; margin: 0 auto; padding: 6px 10px 10px; display: grid; gap: 6px; box-sizing: border-box; }
       #globalMsg:empty { display: none; }
       @media (min-width: 769px) {
@@ -645,6 +645,17 @@
       .search-filters-body:not(.is-collapsed) {
         padding-top: 2px;
       }
+      .pager-row {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 0 4px;
+        border-top: 1px solid var(--border);
+        margin-top: 4px;
+      }
+      .pager-row.is-visible {
+        display: flex;
+      }
     </style>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
@@ -721,6 +732,14 @@
             <button id="syncBtn">Поиск</button>
             <button id="clearFiltersBtn" type="button" class="ghost-btn">Сбросить фильтры</button>
             <span id="syncLoader" class="loader" aria-hidden="true"></span>
+          </div>
+          <p id="dashMsg" class="muted"></p>
+            </div>
+          </div>
+          <div class="layout-col-body">
+            <div id="jobsList" class="jobs-list"></div>
+          </div>
+          <div id="pagerRow" class="pager-row" aria-live="polite">
             <span class="pager">
               <button id="prevPageBtn" type="button" class="ghost-btn pager-icon-btn" aria-label="Предыдущая страница">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
@@ -730,12 +749,6 @@
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
               </button>
             </span>
-          </div>
-          <p id="dashMsg" class="muted"></p>
-            </div>
-          </div>
-          <div class="layout-col-body">
-            <div id="jobsList" class="jobs-list"></div>
           </div>
         </section>
       </div>
@@ -1002,7 +1015,7 @@
       let isSyncing = false;
       let isJobBusy = false;
       let openingJobId = null;
-      let pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
+      let pageInfo = { page: 1, pageSize: 50, hasMore: false, count: 0, totalRows: 0 };
       let isJobModalOpen = false;
       let isInsightModalOpen = false;
       let isHighlyRelevantHintModalOpen = false;
@@ -1082,7 +1095,7 @@
           country: pick('country'),
           jobId: pick('jobId'),
           page: pick('page') || '1',
-          pageSize: pick('pageSize') || '100',
+          pageSize: pick('pageSize') || '50',
         };
       }
 
@@ -1207,7 +1220,7 @@
             country: pick('country'),
             jobId: pick('jobId'),
             page: pick('page') || '1',
-            pageSize: pick('pageSize') || '100',
+            pageSize: pick('pageSize') || '50',
           };
         }
 
@@ -1230,7 +1243,7 @@
             country: pick('country'),
             jobId: pick('jobId'),
             page: pick('page') || '1',
-            pageSize: pick('pageSize') || '100',
+            pageSize: pick('pageSize') || '50',
           };
         }
 
@@ -1246,7 +1259,7 @@
           country: p.get('country') || malformedFallback.get('country') || '',
           jobId: p.get('jobId') || malformedFallback.get('jobId') || '',
           page: p.get('page') || malformedFallback.get('page') || '1',
-          pageSize: p.get('pageSize') || malformedFallback.get('pageSize') || '100',
+          pageSize: p.get('pageSize') || malformedFallback.get('pageSize') || '50',
         };
       }
       function isTruthyQueryParam(value) {
@@ -1485,7 +1498,7 @@
       /** Compact range label: «12–24 из 328»; tooltip repeats detail for clarity. */
       function pagerSummaryText(pi) {
         const page = Number(pi.page) || 1;
-        const pageSize = Number(pi.pageSize) || 100;
+        const pageSize = Number(pi.pageSize) || 50;
         const count = Number(pi.count) || 0;
         const total = Number(pi.totalRows) || 0;
         if (total === 0 && count === 0) return sj('pagerNone');
@@ -1497,7 +1510,7 @@
       }
       function pagerSummaryTitle(pi) {
         const page = Number(pi.page) || 1;
-        const pageSize = Number(pi.pageSize) || 100;
+        const pageSize = Number(pi.pageSize) || 50;
         const count = Number(pi.count) || 0;
         const total = Number(pi.totalRows) || 0;
         if (count === 0) return '';
@@ -1512,6 +1525,9 @@
         const info = document.getElementById('pageInfo');
         const prev = document.getElementById('prevPageBtn');
         const next = document.getElementById('nextPageBtn');
+        const pagerRow = document.getElementById('pagerRow');
+        const hasResults = pageInfo.count > 0 || pageInfo.totalRows > 0;
+        if (pagerRow) pagerRow.classList.toggle('is-visible', hasResults);
         if (info) {
           info.textContent = pagerSummaryText(pageInfo);
           const tip = pagerSummaryTitle(pageInfo);
@@ -2115,7 +2131,7 @@
           Boolean(skillIds.trim()) && document.getElementById('showOnlyHighlyRelevant').checked;
         const query = q();
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
-        const pageSize = 100;
+        const pageSize = 50;
         const applyTypes = isBotAdminUser ? getSelectedSources().join(',') : '';
         const countriesCsv = getSelectedCountriesCsv();
         const source = isBotAdminUser
