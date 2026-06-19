@@ -1024,6 +1024,18 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const positionId = String(ctx.match?.[1] || '').trim();
     if (!positionId) return;
     const lang = langFromCtx(ctx);
+
+    // Show loading state by replacing the tapped button in-place (preserve other rows)
+    const originalKeyboard = ctx.callbackQuery?.message?.reply_markup?.inline_keyboard ?? [];
+    const loadingKeyboard = originalKeyboard.map((row) =>
+      row.map((btn) =>
+        String(btn.callback_data || '').startsWith('similar_positions_')
+          ? { text: '⏳ ' + t(lang, 'btn_show_similar_positions'), callback_data: 'noop' }
+          : btn
+      )
+    );
+    await ctx.editMessageReplyMarkup({ inline_keyboard: loadingKeyboard }).catch(() => {});
+
     if (!models.Positions) {
       await ctx.reply(tr(ctx, 'position_service_unavailable'));
       return;
@@ -1046,13 +1058,14 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       appBaseUrl: result.appBaseUrl,
       maxJobs: 5,
     });
+    const showAllButton = canUseSeekerJobsWebApp
+      ? { text: t(lang, 'btn_see_all_positions'), web_app: { url: seekerJobsUrl } }
+      : { text: t(lang, 'btn_see_all_positions'), callback_data: 'similar_positions_show_all' };
     const text = `<b>${t(lang, 'similar_positions_header')}</b>\n\n${jobListHtml}`;
     await ctx.reply(text, {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
-      reply_markup: {
-        inline_keyboard: [[{ text: t(lang, 'btn_see_all_positions'), callback_data: 'similar_positions_show_all' }]],
-      },
+      reply_markup: { inline_keyboard: [[showAllButton]] },
     });
   });
 
@@ -1062,9 +1075,17 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     } catch {
       /* ignore */
     }
+    const lang = langFromCtx(ctx);
     const passed = await enforceStartRequiredChannelsGate(ctx);
     if (!passed) return;
-    await openJobSearchFromBot(ctx);
+    // Subscribed: swap the "show all" button to the web-app button in-place — no extra message needed
+    if (canUseSeekerJobsWebApp) {
+      await ctx.editMessageReplyMarkup({
+        inline_keyboard: [[{ text: t(lang, 'btn_jobsearch'), web_app: { url: seekerJobsUrl } }]],
+      }).catch(() => {});
+    } else {
+      await openJobSearchFromBot(ctx);
+    }
   });
 
   bot.command('plans', async (ctx) => {
