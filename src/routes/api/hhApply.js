@@ -6,19 +6,19 @@ import { importHhApplication, listHhApplyClients } from '../../services/hhApplyC
 export function createHhApplyRouter() {
   const router = Router();
 
-  router.get('/api/cron/hh-apply/clients', hhApplyCronSecretAuth, async (req, res) => {
+  router.get('/api/hh-apply/clients', hhApplyCronSecretAuth, async (req, res) => {
     try {
       const limit = Math.min(500, Math.max(1, Number.parseInt(String(req.query.limit || '200'), 10) || 200));
       const payload = await listHhApplyClients({ limit });
       return res.json(payload);
     } catch (err) {
-      console.error('GET /api/cron/hh-apply/clients:', err);
+      console.error('GET /api/hh-apply/clients:', err);
       return res.status(500).json({ error: 'Failed to load HH apply clients' });
     }
   });
 
   router.post(
-    '/api/cron/hh-apply/applications',
+    '/api/hh-apply/applications',
     express.json({ limit: '1mb' }),
     hhApplyCronSecretAuth,
     async (req, res) => {
@@ -29,7 +29,7 @@ export function createHhApplyRouter() {
         }
         return res.status(result.created ? 201 : 200).json(result);
       } catch (err) {
-        console.error('POST /api/cron/hh-apply/applications:', err);
+        console.error('POST /api/hh-apply/applications:', err);
         return res.status(500).json({ error: 'Failed to import HH application' });
       }
     }

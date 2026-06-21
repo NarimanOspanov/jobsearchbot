@@ -120,18 +120,18 @@ Test each command in a **private chat** with the bot.
 | Cron trigger (no Mini App auth) | Set `SCREENING_CRON_SECRET` on server, then `GET /api/cron/position-apply-screening/run?secret=...&userApplicationId=2763` |
 | Cron status (dry run counts) | `GET /api/cron/position-apply-screening/status?secret=...&userApplicationId=2763` |
 
-**HeadHunter apply cron (external service)**
+**HeadHunter apply service (external)**
 
 | Item | Notes |
 |------|--------|
 | Env | `HH_APPLY_CRON_SECRET` (falls back to `SCREENING_CRON_SECRET`) |
-| List HH clients | `GET /api/cron/hh-apply/clients?secret=...` — agent-assigned users with `HhEnabled=1`, resume, HH cookies/search URLs |
-| Import HH application | `POST /api/cron/hh-apply/applications?secret=...` — dedupe by `userId` + `MetaJson.hhVacancyId` |
+| List HH clients | `GET /api/hh-apply/clients?secret=...` — agent-assigned users with `HhEnabled=1`, resume, HH cookies/search URLs |
+| Import HH application | `POST /api/hh-apply/applications?secret=...` — dedupe by `userId` + `MetaJson.hhVacancyId` |
 
 ```bash
-curl "BASE/api/cron/hh-apply/clients?secret=YOUR_SECRET&limit=200"
+curl "BASE/api/hh-apply/clients?secret=YOUR_SECRET&limit=200"
 
-curl -X POST "BASE/api/cron/hh-apply/applications?secret=YOUR_SECRET" \
+curl -X POST "BASE/api/hh-apply/applications?secret=YOUR_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"userId":3,"hhVacancyId":"12345678","vacancyTitle":"Backend Engineer","companyName":"Acme","applyUrl":"https://hh.ru/vacancy/12345678","status":"applied"}'
 ```
