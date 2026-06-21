@@ -88,6 +88,8 @@ export const BOT_LOCALES = {
     btn_apply_external: 'Откликнуться на сайте {company}',
     btn_apply_external_generic: 'Откликнуться на сайте работодателя',
     btn_open_other_jobs: 'Открыть другие вакансии',
+    btn_show_similar_positions: 'Похожие вакансии',
+    similar_positions_header: 'Похожие вакансии:',
     btn_position_apply: 'Откликнуться',
     position_apply_prompt:
       'Чтобы завершить отклик, отправьте резюме файлом PDF в этот чат. Рекрутер рассмотрит его.',
@@ -324,6 +326,8 @@ export const BOT_LOCALES = {
     btn_apply_external: 'Apply on {company} website',
     btn_apply_external_generic: 'Apply on employer website',
     btn_open_other_jobs: 'Open other jobs',
+    btn_show_similar_positions: 'Similar positions',
+    similar_positions_header: 'Similar positions:',
     btn_position_apply: 'Apply',
     position_apply_prompt:
       'To complete your application, send your resume here as a PDF file. The recruiter will review it.',
