@@ -21,6 +21,7 @@ import defineClientMentor from './ClientMentor.js';
 import defineHumanAssistantRequest from './HumanAssistantRequest.js';
 import definePublisherSignup from './PublisherSignup.js';
 import defineCampaignSignup from './CampaignSignup.js';
+import defineUserHhSearchUrl from './UserHhSearchUrl.js';
 
 /**
  * Initialize only the User model for empty bot runtime.
@@ -49,6 +50,7 @@ export function initModels(sequelize) {
   const HumanAssistantRequest = defineHumanAssistantRequest(sequelize);
   const PublisherSignup = definePublisherSignup(sequelize);
   const CampaignSignup = defineCampaignSignup(sequelize);
+  const UserHhSearchUrl = defineUserHhSearchUrl(sequelize);
 
   User.hasMany(Application, { foreignKey: 'UserId' });
   Application.belongsTo(User, { foreignKey: 'UserId' });
@@ -96,6 +98,8 @@ export function initModels(sequelize) {
   PublisherSignup.belongsTo(Position, { foreignKey: 'PositionId' });
   User.hasOne(CampaignSignup, { foreignKey: 'UserId' });
   CampaignSignup.belongsTo(User, { foreignKey: 'UserId' });
+  User.hasMany(UserHhSearchUrl, { as: 'HhSearchUrls', foreignKey: 'UserId' });
+  UserHhSearchUrl.belongsTo(User, { foreignKey: 'UserId' });
   return {
     User,
     Application,
@@ -143,5 +147,7 @@ export function initModels(sequelize) {
     PublisherSignups: PublisherSignup,
     CampaignSignup,
     CampaignSignups: CampaignSignup,
+    UserHhSearchUrl,
+    UserHhSearchUrls: UserHhSearchUrl,
   };
 }

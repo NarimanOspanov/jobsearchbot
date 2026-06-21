@@ -157,6 +157,10 @@ export default function defineUser(sequelize) {
         type: DataTypes.STRING(512),
         allowNull: true,
       },
+      HhCookies: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
     },
     {
       tableName: 'Users',

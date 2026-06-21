@@ -68,6 +68,8 @@ export const config = {
   rejectionNotificationChatIds: parseCommaSeparatedIdSet(getEnv('REJECTION_NOTIFICATION_IDS')),
   /** Shared secret for POST/GET /api/cron/position-apply-screening/* (manual or external scheduler). */
   screeningCronSecret: getEnv('SCREENING_CRON_SECRET'),
+  /** Shared secret for HeadHunter apply cron integration (/api/cron/hh-apply/*). */
+  hhApplyCronSecret: getEnv('HH_APPLY_CRON_SECRET') || getEnv('SCREENING_CRON_SECRET'),
   /** Run position-apply-screening cron (Redis queue, or in-process fallback without REDIS_URL). */
   screeningCronEnabled: String(process.env.SCREENING_CRON_ENABLED || 'true').toLowerCase() !== 'false',
   screeningCronIntervalMs: Math.max(

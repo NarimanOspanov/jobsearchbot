@@ -129,6 +129,7 @@ import { createCompaniesRouter } from './routes/api/companies.js';
 import { createPositionsRouter } from './routes/api/positions.js';
 import { createAdminRouter } from './routes/api/admin.js';
 import { createCronRouter } from './routes/api/cron.js';
+import { createHhApplyRouter } from './routes/api/hhApply.js';
 import { createAgentClientsRouter } from './routes/api/agentClients.js';
 import { createAgentApplyPriorityJobsRouter } from './routes/api/agentApplyPriorityJobs.js';
 import { createApplyLinkRouter } from './routes/api/applyLink.js';
@@ -2532,6 +2533,7 @@ async function main() {
   app.use(createPositionsRouter());
   app.use(createAdminRouter());
   app.use(createCronRouter());
+  app.use(createHhApplyRouter());
   app.use(createAgentApplyPriorityJobsRouter());
   app.use(createAgentClientsRouter());
   app.use(createApplyLinkRouter());
