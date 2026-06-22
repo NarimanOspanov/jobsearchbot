@@ -1,11 +1,45 @@
 import { Router } from 'express';
 import express from 'express';
+import multer from 'multer';
 import { hhApplyCronSecretAuth } from '../../middleware/hhApplyCronSecretAuth.js';
 import {
   checkHhApplicationApplied,
   importHhApplication,
   listHhApplyClients,
 } from '../../services/hhApplyCronService.js';
+
+const hhApplyUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+});
+
+function fileFromMulterUpload(file) {
+  if (!file) return null;
+  return {
+    buffer: file.buffer,
+    mimeType: file.mimetype,
+    fileName: file.originalname,
+  };
+}
+
+function hhApplyApplicationBodyParser(req, res, next) {
+  const contentType = String(req.headers['content-type'] || '');
+  if (contentType.includes('multipart/form-data')) {
+    return hhApplyUpload.fields([
+      { name: 'artifact', maxCount: 1 },
+      { name: 'tailoredCv', maxCount: 1 },
+    ])(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'Uploaded file exceeds the 15 MB limit.' });
+        }
+        return res.status(400).json({ error: err?.message || 'Invalid multipart upload' });
+      }
+      return next();
+    });
+  }
+  return express.json({ limit: '1mb' })(req, res, next);
+}
 
 export function createHhApplyRouter() {
   const router = Router();
@@ -41,11 +75,13 @@ export function createHhApplyRouter() {
 
   router.post(
     '/api/hh-apply/applications',
-    express.json({ limit: '1mb' }),
     hhApplyCronSecretAuth,
+    hhApplyApplicationBodyParser,
     async (req, res) => {
       try {
-        const result = await importHhApplication(req.body || {});
+        const artifact = fileFromMulterUpload(req.files?.artifact?.[0]);
+        const tailoredCv = fileFromMulterUpload(req.files?.tailoredCv?.[0]);
+        const result = await importHhApplication(req.body || {}, { artifact, tailoredCv });
         if (!result.ok && result.status) {
           return res.status(result.status).json({ error: result.error });
         }

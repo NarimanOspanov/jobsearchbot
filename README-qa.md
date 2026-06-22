@@ -127,7 +127,7 @@ Test each command in a **private chat** with the bot.
 | Env | `HH_APPLY_CRON_SECRET` (falls back to `SCREENING_CRON_SECRET`) |
 | List HH clients | `GET /api/hh-apply/clients?secret=...` — agent-assigned users with `HhEnabled=1`, resume, `skillIds`, `workAuthorizationCountries`, HH cookies/search URLs |
 | Check HH application | `GET /api/hh-apply/applications/check?secret=...&userId=3&hhVacancyId=12345678` — per-client dedupe lookup |
-| Import HH application | `POST /api/hh-apply/applications?secret=...` — dedupe by `userId` + `MetaJson.hhVacancyId` |
+| Import HH application | `POST /api/hh-apply/applications?secret=...` — dedupe by `userId` + `MetaJson.hhVacancyId`; optional multipart files `artifact` (screenshot) and `tailoredCv` (PDF/image → `TailoredCVURL`); optional `applyPriorityJson` |
 
 ```bash
 curl "BASE/api/hh-apply/clients?secret=YOUR_SECRET&limit=200"
@@ -136,7 +136,18 @@ curl "BASE/api/hh-apply/applications/check?secret=YOUR_SECRET&userId=3&hhVacancy
 
 curl -X POST "BASE/api/hh-apply/applications?secret=YOUR_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"userId":3,"hhVacancyId":"12345678","vacancyTitle":"Backend Engineer","companyName":"Acme","applyUrl":"https://hh.ru/vacancy/12345678","status":"applied"}'
+  -d '{"userId":3,"hhVacancyId":"12345678","vacancyTitle":"Backend Engineer","companyName":"Acme","applyUrl":"https://hh.ru/vacancy/12345678","status":"applied","applyPriorityJson":{"rank":1,"score":9.2}}'
+
+curl -X POST "BASE/api/hh-apply/applications?secret=YOUR_SECRET" \
+  -F "userId=3" \
+  -F "hhVacancyId=12345678" \
+  -F "vacancyTitle=Backend Engineer" \
+  -F "companyName=Acme" \
+  -F "applyUrl=https://hh.ru/vacancy/12345678" \
+  -F "status=applied" \
+  -F 'applyPriorityJson={"rank":1,"score":9.2}' \
+  -F "artifact=@/path/to/screenshot.png;type=image/png" \
+  -F "tailoredCv=@/path/to/tailored-cv.pdf;type=application/pdf"
 ```
 
 ---

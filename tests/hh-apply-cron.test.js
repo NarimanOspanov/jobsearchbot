@@ -5,8 +5,11 @@ import {
   buildHhImportMetaJson,
   metaHhVacancyId,
   normalizeHhVacancyId,
+  parseApplyPriorityJsonFromBody,
   validateHhApplicationCheckQuery,
+  validateHhArtifactFile,
   validateHhImportApplicationBody,
+  validateHhTailoredCvFile,
 } from '../src/services/hhApplyCronService.js';
 
 test('normalizeHhVacancyId trims and rejects empty values', () => {
@@ -55,6 +58,49 @@ test('validateHhApplicationCheckQuery requires userId and hhVacancyId', () => {
     userId: 3,
     hhVacancyId: '99',
   });
+});
+
+test('validateHhArtifactFile accepts supported image types and rejects others', () => {
+  assert.equal(validateHhArtifactFile(null).ok, true);
+  assert.equal(validateHhArtifactFile({ buffer: Buffer.alloc(0) }).ok, true);
+
+  const png = validateHhArtifactFile({
+    buffer: Buffer.from('abc'),
+    mimeType: 'image/png',
+    fileName: 'shot.png',
+  });
+  assert.equal(png.ok, true);
+  assert.equal(png.artifact.mimeType, 'image/png');
+
+  assert.equal(
+    validateHhArtifactFile({ buffer: Buffer.from('abc'), mimeType: 'application/pdf' }).ok,
+    false
+  );
+});
+
+test('validateHhTailoredCvFile accepts PDF and image types', () => {
+  assert.equal(validateHhTailoredCvFile(null).ok, true);
+  assert.equal(
+    validateHhTailoredCvFile({ buffer: Buffer.from('abc'), mimeType: 'application/pdf' }).ok,
+    true
+  );
+  assert.equal(
+    validateHhTailoredCvFile({ buffer: Buffer.from('abc'), mimeType: 'text/plain' }).ok,
+    false
+  );
+});
+
+test('parseApplyPriorityJsonFromBody accepts object or JSON string', () => {
+  assert.deepEqual(parseApplyPriorityJsonFromBody(null), { ok: true, applyPriorityJson: null });
+  assert.deepEqual(parseApplyPriorityJsonFromBody({ rank: 1 }), {
+    ok: true,
+    applyPriorityJson: '{"rank":1}',
+  });
+  assert.deepEqual(parseApplyPriorityJsonFromBody('{"rank":1}'), {
+    ok: true,
+    applyPriorityJson: '{"rank":1}',
+  });
+  assert.equal(parseApplyPriorityJsonFromBody('not-json').ok, false);
 });
 
 test('buildHhApplicationBackfillUpdates fills empty fields without overwriting populated ones', () => {

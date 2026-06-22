@@ -2,9 +2,12 @@ import { Sequelize } from 'sequelize';
 import { models, sequelize } from '../db.js';
 import { clientHasResumeForAgentAccess, findAssignmentForClient } from './agentAccessService.js';
 import { getSeekerResumeTextForTailoring } from './tailoredCvService.js';
-import { normalizeSkillIds } from './userService.js';
+import { resumeStorage } from './resumeStorage.js';
+import { isSupportedResumeMimeType, normalizeSkillIds } from './userService.js';
 
 const RESUME_TEXT_CONCURRENCY = 4;
+const HH_ARTIFACT_MAX_BYTES = 10 * 1024 * 1024;
+const HH_TAILORED_CV_MAX_BYTES = 15 * 1024 * 1024;
 
 export function normalizeHhVacancyId(raw) {
   const value = String(raw ?? '').trim();
@@ -53,6 +56,125 @@ export function validateHhImportApplicationBody(body) {
     return { ok: false, status: 400, error: 'vacancyTitle is required' };
   }
   return { ok: true, userId, hhVacancyId, vacancyTitle };
+}
+
+export function validateHhArtifactFile(artifact) {
+  if (!artifact?.buffer?.length) return { ok: true, artifact: null };
+  const mimeType = String(artifact.mimeType || '').trim().toLowerCase();
+  const isSupported =
+    mimeType.includes('png') ||
+    mimeType.includes('jpeg') ||
+    mimeType.includes('jpg') ||
+    mimeType.includes('webp');
+  if (!isSupported) {
+    return { ok: false, status: 400, error: 'Unsupported artifact type. Use PNG, JPEG, or WEBP.' };
+  }
+  if (artifact.buffer.length > HH_ARTIFACT_MAX_BYTES) {
+    return { ok: false, status: 400, error: 'Artifact file exceeds the 10 MB limit.' };
+  }
+  return {
+    ok: true,
+    artifact: {
+      buffer: artifact.buffer,
+      mimeType: mimeType || 'image/png',
+      fileName: String(artifact.fileName || '').trim() || null,
+    },
+  };
+}
+
+async function persistHhApplicationArtifact({ userId, applicationId, hhVacancyId, artifact }) {
+  if (!artifact?.buffer?.length) return null;
+  const screenlyJobId = Number.parseInt(String(hhVacancyId), 10) || 0;
+  return resumeStorage.uploadApplicationScreenshotBuffer({
+    userId,
+    screenlyJobId,
+    applicationId,
+    fileName: artifact.fileName || `hh-artifact-${applicationId}.png`,
+    mimeType: artifact.mimeType || 'image/png',
+    buffer: artifact.buffer,
+  });
+}
+
+export function validateHhTailoredCvFile(tailoredCv) {
+  if (!tailoredCv?.buffer?.length) return { ok: true, tailoredCv: null };
+  const mimeType = String(tailoredCv.mimeType || '').trim().toLowerCase();
+  if (!isSupportedResumeMimeType(mimeType)) {
+    return { ok: false, status: 400, error: 'Unsupported tailored CV type. Use PDF or image (JPG/PNG/WEBP).' };
+  }
+  if (tailoredCv.buffer.length > HH_TAILORED_CV_MAX_BYTES) {
+    return { ok: false, status: 400, error: 'Tailored CV file exceeds the 15 MB limit.' };
+  }
+  return {
+    ok: true,
+    tailoredCv: {
+      buffer: tailoredCv.buffer,
+      mimeType: mimeType || 'application/pdf',
+      fileName: String(tailoredCv.fileName || '').trim() || null,
+    },
+  };
+}
+
+async function persistHhApplicationTailoredCv({ userId, applicationId, hhVacancyId, tailoredCv }) {
+  if (!tailoredCv?.buffer?.length) return null;
+  const screenlyJobId = Number.parseInt(String(hhVacancyId), 10) || applicationId;
+  return resumeStorage.uploadTailoredResumeBuffer({
+    seekerId: userId,
+    screenlyJobId,
+    fileName: tailoredCv.fileName || `tailored-hh-${applicationId}.pdf`,
+    mimeType: tailoredCv.mimeType || 'application/pdf',
+    buffer: tailoredCv.buffer,
+  });
+}
+
+export function parseApplyPriorityJsonFromBody(value) {
+  if (value == null || value === '') return { ok: true, applyPriorityJson: null };
+  if (typeof value === 'object') {
+    return { ok: true, applyPriorityJson: JSON.stringify(value) };
+  }
+  const raw = String(value).trim();
+  if (!raw) return { ok: true, applyPriorityJson: null };
+  try {
+    JSON.parse(raw);
+    return { ok: true, applyPriorityJson: raw };
+  } catch {
+    return { ok: false, status: 400, error: 'Invalid applyPriorityJson' };
+  }
+}
+
+async function applyHhApplicationFileUploads({
+  row,
+  userId,
+  hhVacancyId,
+  artifact,
+  tailoredCv,
+}) {
+  const updates = {};
+  let screenshotArtifactUrl = row.ScreenshotArtifactURL || null;
+  let tailoredCvUrl = row.TailoredCVURL || null;
+
+  if (artifact?.buffer?.length) {
+    screenshotArtifactUrl = await persistHhApplicationArtifact({
+      userId,
+      applicationId: row.Id,
+      hhVacancyId,
+      artifact,
+    });
+    updates.ScreenshotArtifactURL = screenshotArtifactUrl;
+  }
+  if (tailoredCv?.buffer?.length) {
+    tailoredCvUrl = await persistHhApplicationTailoredCv({
+      userId,
+      applicationId: row.Id,
+      hhVacancyId,
+      tailoredCv,
+    });
+    updates.TailoredCVURL = tailoredCvUrl;
+  }
+  if (Object.keys(updates).length) {
+    await row.update(updates);
+    await row.reload();
+  }
+  return { screenshotArtifactUrl, tailoredCvUrl };
 }
 
 export function validateHhApplicationCheckQuery({ userId, hhVacancyId, hhId } = {}) {
@@ -117,6 +239,9 @@ export function buildHhApplicationBackfillUpdates(existing, payload) {
   }
   if (!String(existing.TailoredCVURL || '').trim() && payload.tailoredCvUrl) {
     updates.TailoredCVURL = payload.tailoredCvUrl;
+  }
+  if (!String(existing.ApplyPriorityJson || '').trim() && payload.applyPriorityJson) {
+    updates.ApplyPriorityJson = payload.applyPriorityJson;
   }
   if (!String(existing.CoverLetter || '').trim() && payload.coverLetter) {
     updates.CoverLetter = payload.coverLetter;
@@ -291,9 +416,18 @@ export async function listHhApplyClients({ limit = 200 } = {}) {
   };
 }
 
-export async function importHhApplication(body) {
+export async function importHhApplication(body, { artifact, tailoredCv } = {}) {
   const validated = validateHhImportApplicationBody(body);
   if (!validated.ok) return validated;
+
+  const artifactValidated = validateHhArtifactFile(artifact);
+  if (!artifactValidated.ok) return artifactValidated;
+
+  const tailoredCvValidated = validateHhTailoredCvFile(tailoredCv);
+  if (!tailoredCvValidated.ok) return tailoredCvValidated;
+
+  const applyPriorityParsed = parseApplyPriorityJsonFromBody(body?.applyPriorityJson);
+  if (!applyPriorityParsed.ok) return applyPriorityParsed;
 
   const eligible = await assertEligibleHhApplyClient(validated.userId);
   if (!eligible.ok) return eligible;
@@ -310,6 +444,7 @@ export async function importHhApplication(body) {
     coverLetter: body?.coverLetter != null ? String(body.coverLetter) : null,
     coverLetterUrl: stringOrNull(body?.coverLetterUrl, 2048),
     tailoredCvUrl: stringOrNull(body?.tailoredCvUrl, 2048),
+    applyPriorityJson: applyPriorityParsed.applyPriorityJson,
     appliedAt: parseAppliedAtFromBody(body?.appliedAt),
   };
 
@@ -320,10 +455,19 @@ export async function importHhApplication(body) {
       await existing.update(updates);
       await existing.reload();
     }
+    const uploads = await applyHhApplicationFileUploads({
+      row: existing,
+      userId: validated.userId,
+      hhVacancyId: validated.hhVacancyId,
+      artifact: artifactValidated.artifact,
+      tailoredCv: tailoredCvValidated.tailoredCv,
+    });
     return {
       success: true,
       applicationId: existing.Id,
       created: false,
+      screenshotArtifactUrl: uploads.screenshotArtifactUrl,
+      tailoredCvUrl: uploads.tailoredCvUrl,
       application: existing,
     };
   }
@@ -347,13 +491,24 @@ export async function importHhApplication(body) {
     TailoredCVURL: payload.tailoredCvUrl,
     CoverLetter: payload.coverLetter,
     CoverLetterUrl: payload.coverLetterUrl,
+    ApplyPriorityJson: payload.applyPriorityJson,
     ScreenlyJobId: null,
+  });
+
+  const uploads = await applyHhApplicationFileUploads({
+    row,
+    userId: validated.userId,
+    hhVacancyId: validated.hhVacancyId,
+    artifact: artifactValidated.artifact,
+    tailoredCv: tailoredCvValidated.tailoredCv,
   });
 
   return {
     success: true,
     applicationId: row.Id,
     created: true,
+    screenshotArtifactUrl: uploads.screenshotArtifactUrl,
+    tailoredCvUrl: uploads.tailoredCvUrl,
     application: row,
   };
 }
