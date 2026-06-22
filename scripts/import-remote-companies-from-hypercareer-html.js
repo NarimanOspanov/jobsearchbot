@@ -11,6 +11,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { sequelize } from '../src/db.js';
 import { initModels } from '../src/models/index.js';
 import { findOrCreateIndustryByName, slugifyIndustryName } from '../src/services/companiesService.js';
@@ -63,11 +64,22 @@ function normalizeHeaderToken(value) {
 function detectColumns(headerCells) {
   const headers = headerCells.map((cell) => normalizeHeaderToken(cell.text));
   const findIdx = (tokens) => headers.findIndex((h) => tokens.some((t) => h.includes(t)));
-  return {
-    nameIdx: findIdx(['name', 'company', 'компан', 'назван']),
-    urlIdx: findIdx(['url', 'link', 'ссыл', 'career', 'сайт', 'вакан']),
-    industryIdx: findIdx(['industry', 'индустр', 'отрасл', 'сфера', 'категор']),
-  };
+  const nameIdx = findIdx(['название компании', 'название', 'company name', 'company']);
+  const urlIdx = findIdx(['ссылка', 'карьер', 'career', 'url', 'link', 'сайт']);
+  const industryIdx = findIdx(['индустрия', 'industry', 'отрасл', 'сфера']);
+  if (nameIdx < 0) return null;
+  if (urlIdx < 0 && industryIdx < 0) return null;
+  if (String(headers[nameIdx] || '').length > 48) return null;
+  return { nameIdx, urlIdx, industryIdx };
+}
+
+function expandIndustryNames(raw) {
+  return [...new Set(
+    String(raw || '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+  )];
 }
 
 function looksLikeUrl(value) {
@@ -108,7 +120,7 @@ export function parseCompaniesFromHtml(html) {
 
     if (!headerPassed) {
       const maybeHeader = detectColumns(cells);
-      if (maybeHeader.nameIdx >= 0 || maybeHeader.urlIdx >= 0 || maybeHeader.industryIdx >= 0) {
+      if (maybeHeader) {
         columns = maybeHeader;
         headerPassed = true;
         continue;
@@ -128,11 +140,11 @@ export function parseCompaniesFromHtml(html) {
       name = cells[columns.nameIdx]?.text || '';
       url = cells[columns.urlIdx]?.href || cells[columns.urlIdx]?.text || '';
       const industryCell = columns.industryIdx >= 0 ? cells[columns.industryIdx]?.text : '';
-      if (industryCell) industries.push(industryCell);
+      if (industryCell) industries.push(...expandIndustryNames(industryCell));
     } else {
       name = cells[0]?.text || '';
       url = cells[1]?.href || cells[1]?.text || cells[0]?.href || '';
-      if (cells[2]?.text) industries.push(cells[2].text);
+      if (cells[2]?.text) industries.push(...expandIndustryNames(cells[2].text));
     }
 
     if (!name && cells[0]?.href) {
@@ -145,7 +157,7 @@ export function parseCompaniesFromHtml(html) {
     if (!name) continue;
     if (!looksLikeUrl(url)) continue;
 
-    if (!industries.length && currentIndustry) industries.push(currentIndustry);
+    if (!industries.length && currentIndustry) industries.push(...expandIndustryNames(currentIndustry));
     parsed.push({
       name,
       url,
@@ -178,46 +190,46 @@ async function upsertCompany({ name, url, industryRows }) {
   if (Object.keys(updates).length) await company.update(updates);
 
   if (industryRows.length) {
-    await company.setIndustries(industryRows);
+    const industryIds = [...new Set(industryRows.map((row) => Number(row.Id)).filter((id) => id > 0))];
+    await company.setIndustries(industryIds);
   }
   return { company, created: false };
 }
 
-async function main() {
-  const inputArg = process.argv[2] || 'data/hypercareer-companies.html';
-  let inputPath = resolve(inputArg);
-  let html;
-  try {
-    html = readFileSync(inputPath, 'utf8');
-  } catch (err) {
-    if (err?.code === 'ENOENT' && inputArg === 'data/hypercareer-companies.html') {
-      const fallback = resolve(
-        'data/HyperCareer_ список русскоязычных компаний за границей - Google Диск_files/sheet.html'
-      );
-      inputPath = fallback;
-      html = readFileSync(inputPath, 'utf8');
-    } else {
-      throw err;
-    }
-  }
-  if (!html.includes('<table') && html.includes('sheet.html')) {
-    const sheetPath = resolve(inputPath, '..', `${inputPath.split(/[/\\]/).pop()?.replace('.html', '')}_files`, 'sheet.html');
-    // Saved Google Drive page: read embedded sheet iframe file instead.
-    const driveSheet = resolve(
-      inputPath,
-      '..',
-      'HyperCareer_ список русскоязычных компаний за границей - Google Диск_files',
-      'sheet.html'
-    );
-    if (driveSheet !== inputPath) {
-      try {
-        html = readFileSync(driveSheet, 'utf8');
-        inputPath = driveSheet;
-      } catch {
-        // keep original html
+function resolveImportHtmlPath(inputArg) {
+  const candidates = [
+    inputArg,
+    'data/hypercareer-companies.html',
+    'data/HyperCareer_ список русскоязычных компаний за границей - Google Диск_files/sheet.html',
+    'data/HyperCareer_ список русскоязычных компаний за границей - Google Диск.html',
+  ]
+    .filter(Boolean)
+    .map((item) => resolve(item));
+
+  for (const candidate of candidates) {
+    try {
+      let html = readFileSync(candidate, 'utf8');
+      let inputPath = candidate;
+      if (candidate.endsWith('.html') && !html.includes('<table')) {
+        const sheetPath = resolve(candidate, '..', `${candidate.split(/[/\\]/).pop().replace('.html', '')}_files`, 'sheet.html');
+        try {
+          html = readFileSync(sheetPath, 'utf8');
+          inputPath = sheetPath;
+        } catch {
+          // keep wrapper html
+        }
       }
+      return { inputPath, html };
+    } catch {
+      // try next candidate
     }
   }
+  throw new Error('Import HTML file not found. Place HyperCareer export under data/ and retry.');
+}
+
+async function main() {
+  const inputArg = process.argv[2] || null;
+  const { inputPath, html } = resolveImportHtmlPath(inputArg);
   const rows = parseCompaniesFromHtml(html);
   if (!rows.length) {
     throw new Error(`No companies parsed from ${inputPath}`);
@@ -240,6 +252,7 @@ async function main() {
 
   for (const row of rows) {
     const industryRows = [];
+    const seenIndustryIds = new Set();
     for (const industryName of row.industries) {
       const slug = slugifyIndustryName(industryName);
       let industry = industryBySlug.get(slug);
@@ -247,7 +260,10 @@ async function main() {
         industry = await findOrCreateIndustryByName(industryName, industrySort.get(slug) || 0);
         industryBySlug.set(slug, industry);
       }
-      industryRows.push(industry);
+      if (!seenIndustryIds.has(industry.Id)) {
+        seenIndustryIds.add(industry.Id);
+        industryRows.push(industry);
+      }
     }
 
     const { company, created } = await upsertCompany({
@@ -269,15 +285,19 @@ async function main() {
   console.log(`Industry links written: ${linkedIndustries}`);
 }
 
-main()
-  .catch((err) => {
-    console.error(err);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    try {
-      await sequelize.close();
-    } catch {
-      // ignore
-    }
-  });
+const scriptPath = fileURLToPath(import.meta.url);
+const isMain = process.argv[1] && resolve(process.argv[1]) === scriptPath;
+if (isMain) {
+  main()
+    .catch((err) => {
+      console.error(err);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      try {
+        await sequelize.close();
+      } catch {
+        // ignore
+      }
+    });
+}

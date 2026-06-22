@@ -94,7 +94,7 @@ export async function setCompanyIndustries(companyId, industryIds) {
     return mapCompanyRow(company);
   }
   const industries = await models.Industries.findAll({ where: { Id: { [Op.in]: ids } } });
-  await company.setIndustries(industries);
+  await company.setIndustries(industries.map((row) => row.Id));
   await company.reload({ include: [{ model: models.Industries, as: 'Industries', through: { attributes: [] } }] });
   return mapCompanyRow(company);
 }
