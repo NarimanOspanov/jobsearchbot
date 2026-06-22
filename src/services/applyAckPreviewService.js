@@ -3,6 +3,12 @@ import { buildAnyhiresPositionsSearchParams } from '../utils/positionUpstreamQue
 import { normalizeSkillIds } from './userService.js';
 import { fetchScreenlySkillsCatalog } from './aiService.js';
 
+const similarPositionsCache = new Map();
+
+function todayUtc() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function localIsoDate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -132,6 +138,12 @@ export async function fetchSimilarPositionsByTitle(positionTitle, { user = null 
     const jobCount = 5;
     const dateRange = getDateRangeForDays(30);
     const country = parseCountryCsv(user?.WorkAuthorizationCountries);
+    const today = todayUtc();
+    const cacheKey = skillIds.slice().sort().join(',');
+    const cached = similarPositionsCache.get(cacheKey);
+    if (cached && cached.date === today) {
+      return { skipped: false, topJobs: cached.topJobs, appBaseUrl: cached.appBaseUrl, skillIds };
+    }
 
     const { positions } = await fetchPositionsPage({
       from: dateRange.from,
@@ -151,6 +163,7 @@ export async function fetchSimilarPositionsByTitle(positionTitle, { user = null 
     }
 
     const appBaseUrl = (process.env.ADMIN_APP_URL || config.webhookUrl || '').replace(/\/$/, '');
+    similarPositionsCache.set(cacheKey, { topJobs, appBaseUrl, date: today });
     return { skipped: false, topJobs, appBaseUrl, skillIds };
   } catch (err) {
     return { skipped: true, reason: err?.message || 'fetch_failed' };
