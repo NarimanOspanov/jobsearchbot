@@ -125,7 +125,7 @@ Test each command in a **private chat** with the bot.
 | Item | Notes |
 |------|--------|
 | Env | `HH_APPLY_CRON_SECRET` (falls back to `SCREENING_CRON_SECRET`) |
-| List HH clients | `GET /api/hh-apply/clients?secret=...` — agent-assigned users with `HhEnabled=1`, resume, HH cookies/search URLs |
+| List HH clients | `GET /api/hh-apply/clients?secret=...` — agent-assigned users with `HhEnabled=1`, resume, `skillIds`, HH cookies/search URLs |
 | Check HH application | `GET /api/hh-apply/applications/check?secret=...&userId=3&hhVacancyId=12345678` — per-client dedupe lookup |
 | Import HH application | `POST /api/hh-apply/applications?secret=...` — dedupe by `userId` + `MetaJson.hhVacancyId` |
 

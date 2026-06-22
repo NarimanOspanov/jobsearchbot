@@ -2,6 +2,7 @@ import { Sequelize } from 'sequelize';
 import { models, sequelize } from '../db.js';
 import { clientHasResumeForAgentAccess, findAssignmentForClient } from './agentAccessService.js';
 import { getSeekerResumeTextForTailoring } from './tailoredCvService.js';
+import { normalizeSkillIds } from './userService.js';
 
 const RESUME_TEXT_CONCURRENCY = 4;
 
@@ -264,6 +265,7 @@ export async function listHhApplyClients({ limit = 200 } = {}) {
         firstName: row.firstName || null,
         lastName: row.lastName || null,
         preferences: row.preferences ?? null,
+        skillIds: normalizeSkillIds(user.skills),
         resumeUrl: row.resumeUrl || null,
         resumeText: String(resumeText),
         hhCookies: row.hhCookies ?? null,
