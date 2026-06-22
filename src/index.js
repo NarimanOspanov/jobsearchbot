@@ -62,6 +62,7 @@ import {
   removeUserDataByTelegramChatId,
   runResumeEnrichmentInBackground,
   runResumeEnrichment,
+  normalizeSkillIds,
 } from './services/userService.js';
 import {
   canUseApplyLinkBuilder,
@@ -91,7 +92,7 @@ import {
   sendScreeningAcknowledgment,
   USER_APPLICATION_STATUS,
 } from './services/positionApplyScreeningService.js';
-import { fetchApplyAckQuickJobs, fetchSimilarPositionsByTitle } from './services/applyAckPreviewService.js';
+import { fetchApplyAckQuickJobs, fetchSimilarPositionsByTitle, inferSkillIdsFromTitle } from './services/applyAckPreviewService.js';
 import { formatTopJobsTelegramHtml } from './services/telegraphService.js';
 import { clientHasApplyPrioritySkills } from './services/agentApplyPriorityService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
@@ -603,6 +604,17 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     if (!position || position.IsArchived) {
       await ctx.reply(tr(ctx, 'position_not_found'));
       return;
+    }
+    try {
+      const { user } = await ensureUser(ctx);
+      if (user && !normalizeSkillIds(user.skills).length) {
+        const inferredIds = await inferSkillIdsFromTitle(position.Title);
+        if (inferredIds.length) {
+          await user.update({ skills: inferredIds });
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to infer skills from apply link position:', err?.message || err);
     }
     const website = String(position.CompanyWebsite || '').trim();
     const externalApplyUrl = String(position.ExternalApplyURL || '').trim();

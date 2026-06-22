@@ -109,13 +109,21 @@ export async function fetchApplyAckQuickJobs({ user }) {
   }
 }
 
-async function inferSkillIdsFromTitle(title) {
+export async function inferSkillIdsFromTitle(title) {
   try {
     const catalog = await fetchScreenlySkillsCatalog();
-    const normalized = title.toLowerCase();
-    const matches = catalog.filter(
-      (skill) => skill.name.length > 2 && normalized.includes(skill.name.toLowerCase())
-    );
+    const tokens = title.toLowerCase().split(/[\s/]+/).filter(Boolean);
+    const tokenSet = new Set(tokens);
+    const matches = catalog.filter((skill) => {
+      if (!skill.name) return false;
+      const skillTokens = skill.name.toLowerCase().split(/\s+/);
+      if (skillTokens.length === 1) {
+        return tokenSet.has(skillTokens[0]);
+      }
+      return skillTokens.every((skillToken) =>
+        tokens.some((t) => t === skillToken || t.startsWith(skillToken) || skillToken.startsWith(t))
+      );
+    });
     matches.sort((a, b) => b.name.length - a.name.length);
     return matches.slice(0, 3).map((s) => s.id);
   } catch {
