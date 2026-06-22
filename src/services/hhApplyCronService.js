@@ -29,7 +29,7 @@ export function buildHhImportMetaJson({ hhVacancyId, applyUrl = null, hhSearchUr
   const next = {
     ...base,
     hhVacancyId: normalizeHhVacancyId(hhVacancyId),
-    source: 'headhunter',
+    source: 'hh',
   };
   const url = String(applyUrl || '').trim();
   if (url) next.applyUrl = url;
@@ -54,6 +54,38 @@ export function validateHhImportApplicationBody(body) {
   return { ok: true, userId, hhVacancyId, vacancyTitle };
 }
 
+export function validateHhApplicationCheckQuery({ userId, hhVacancyId, hhId } = {}) {
+  const parsedUserId = Number.parseInt(String(userId ?? ''), 10);
+  const normalizedVacancyId = normalizeHhVacancyId(hhVacancyId ?? hhId);
+  if (!Number.isSafeInteger(parsedUserId) || parsedUserId <= 0) {
+    return { ok: false, status: 400, error: 'userId is required and must be a positive integer' };
+  }
+  if (!normalizedVacancyId) {
+    return { ok: false, status: 400, error: 'hhVacancyId is required' };
+  }
+  return { ok: true, userId: parsedUserId, hhVacancyId: normalizedVacancyId };
+}
+
+export async function checkHhApplicationApplied({ userId, hhVacancyId, hhId } = {}) {
+  const validated = validateHhApplicationCheckQuery({ userId, hhVacancyId, hhId });
+  if (!validated.ok) return validated;
+
+  const existing = await findHhApplicationByVacancyId(validated.userId, validated.hhVacancyId);
+  if (!existing) {
+    return { ok: true, applied: false };
+  }
+
+  return {
+    ok: true,
+    applied: true,
+    applicationId: existing.Id,
+    status: existing.Status || null,
+    appliedAt: existing.AppliedAt || null,
+    vacancyTitle: existing.VacancyTitle || null,
+    companyName: existing.CompanyName || null,
+  };
+}
+
 function parseAppliedAtFromBody(value) {
   if (value == null || value === '') return new Date();
   const d = new Date(value);
@@ -74,7 +106,7 @@ export function buildHhApplicationBackfillUpdates(existing, payload) {
     updates.CompanyName = payload.companyName;
   }
   if (!String(existing.Source || '').trim()) {
-    updates.Source = 'headhunter';
+    updates.Source = 'hh';
   }
   if (!String(existing.ApplyType || '').trim()) {
     updates.ApplyType = 'hh';
@@ -96,9 +128,6 @@ export function buildHhApplicationBackfillUpdates(existing, payload) {
   }
   if (!existing.AppliedAt && payload.appliedAt) {
     updates.AppliedAt = payload.appliedAt;
-  }
-  if (!Number(existing.AgentUserId) && payload.agentUserId) {
-    updates.AgentUserId = payload.agentUserId;
   }
 
   const existingMeta = parseApplicationMetaJson(existing.MetaJson);
@@ -266,10 +295,6 @@ export async function importHhApplication(body) {
   const eligible = await assertEligibleHhApplyClient(validated.userId);
   if (!eligible.ok) return eligible;
 
-  const agentUserIdRaw = Number.parseInt(String(body?.agentUserId ?? ''), 10);
-  const agentUserId =
-    Number.isSafeInteger(agentUserIdRaw) && agentUserIdRaw > 0 ? agentUserIdRaw : eligible.agentUserId;
-
   const payload = {
     userId: validated.userId,
     hhVacancyId: validated.hhVacancyId,
@@ -283,7 +308,6 @@ export async function importHhApplication(body) {
     coverLetterUrl: stringOrNull(body?.coverLetterUrl, 2048),
     tailoredCvUrl: stringOrNull(body?.tailoredCvUrl, 2048),
     appliedAt: parseAppliedAtFromBody(body?.appliedAt),
-    agentUserId,
   };
 
   const existing = await findHhApplicationByVacancyId(validated.userId, validated.hhVacancyId);
@@ -309,10 +333,9 @@ export async function importHhApplication(body) {
 
   const row = await models.Applications.create({
     UserId: validated.userId,
-    AgentUserId: agentUserId,
     VacancyTitle: payload.vacancyTitle,
     CompanyName: payload.companyName,
-    Source: 'headhunter',
+    Source: 'hh',
     ApplyType: 'hh',
     Status: payload.status,
     AppliedAt: payload.appliedAt,
