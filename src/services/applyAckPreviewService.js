@@ -113,9 +113,11 @@ async function inferSkillIdsFromTitle(title) {
   try {
     const catalog = await fetchScreenlySkillsCatalog();
     const normalized = title.toLowerCase();
-    const matches = catalog.filter(
-      (skill) => skill.name.length > 2 && normalized.includes(skill.name.toLowerCase())
-    );
+    const matches = catalog.filter((skill) => {
+      if (skill.name.length <= 2) return false;
+      const escaped = skill.name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`\\b${escaped}\\b`).test(normalized);
+    });
     matches.sort((a, b) => b.name.length - a.name.length);
     return matches.slice(0, 3).map((s) => s.id);
   } catch {
