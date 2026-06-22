@@ -93,7 +93,7 @@ function normalizeUrl(url) {
   }
 }
 
-function parseCompaniesFromHtml(html) {
+export function parseCompaniesFromHtml(html) {
   const rows = extractTableRows(html);
   const parsed = [];
   let currentIndustry = null;
@@ -184,8 +184,40 @@ async function upsertCompany({ name, url, industryRows }) {
 }
 
 async function main() {
-  const inputPath = resolve(process.argv[2] || 'data/hypercareer-companies.html');
-  const html = readFileSync(inputPath, 'utf8');
+  const inputArg = process.argv[2] || 'data/hypercareer-companies.html';
+  let inputPath = resolve(inputArg);
+  let html;
+  try {
+    html = readFileSync(inputPath, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT' && inputArg === 'data/hypercareer-companies.html') {
+      const fallback = resolve(
+        'data/HyperCareer_ список русскоязычных компаний за границей - Google Диск_files/sheet.html'
+      );
+      inputPath = fallback;
+      html = readFileSync(inputPath, 'utf8');
+    } else {
+      throw err;
+    }
+  }
+  if (!html.includes('<table') && html.includes('sheet.html')) {
+    const sheetPath = resolve(inputPath, '..', `${inputPath.split(/[/\\]/).pop()?.replace('.html', '')}_files`, 'sheet.html');
+    // Saved Google Drive page: read embedded sheet iframe file instead.
+    const driveSheet = resolve(
+      inputPath,
+      '..',
+      'HyperCareer_ список русскоязычных компаний за границей - Google Диск_files',
+      'sheet.html'
+    );
+    if (driveSheet !== inputPath) {
+      try {
+        html = readFileSync(driveSheet, 'utf8');
+        inputPath = driveSheet;
+      } catch {
+        // keep original html
+      }
+    }
+  }
   const rows = parseCompaniesFromHtml(html);
   if (!rows.length) {
     throw new Error(`No companies parsed from ${inputPath}`);
