@@ -50,23 +50,38 @@ export async function listIndustries() {
   return rows.map(mapIndustryRow);
 }
 
-export async function listRemoteCompanies({ industryId = null, industrySlug = null } = {}) {
+export async function listRemoteCompanies({ industryIds = [], industryId = null, industrySlug = null } = {}) {
+  const normalizedIds = [
+    ...new Set(
+      [
+        ...(Array.isArray(industryIds) ? industryIds : []),
+        ...(Number.isSafeInteger(Number(industryId)) && Number(industryId) > 0 ? [Number(industryId)] : []),
+      ]
+        .map((id) => Number.parseInt(String(id), 10))
+        .filter((id) => Number.isSafeInteger(id) && id > 0)
+    ),
+  ];
+  const slug = String(industrySlug || '').trim();
+  const hasIndustryFilter = normalizedIds.length > 0 || Boolean(slug);
+
   const include = {
     model: models.Industries,
     as: 'Industries',
     through: { attributes: [] },
-    required: Boolean(industryId || industrySlug),
+    required: hasIndustryFilter,
   };
-  if (industryId) {
-    include.where = { Id: Number(industryId) };
-  } else if (industrySlug) {
-    include.where = { Slug: String(industrySlug).trim() };
+  if (normalizedIds.length) {
+    include.where = { Id: { [Op.in]: normalizedIds } };
+  } else if (slug) {
+    include.where = { Slug: slug };
   }
 
   const rows = await models.RemoteCompanies.findAll({
     include: [include],
     order: [['Name', 'ASC']],
     limit: 2000,
+    distinct: true,
+    col: 'Id',
   });
 
   const mapped = rows.map(mapCompanyRow);

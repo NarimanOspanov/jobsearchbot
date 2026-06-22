@@ -23,6 +23,25 @@ const companyInclude = {
   through: { attributes: [] },
 };
 
+function parseIndustryIdsFromQuery(req) {
+  const parts = [];
+  if (req.query.industryIds != null && req.query.industryIds !== '') {
+    parts.push(String(req.query.industryIds));
+  }
+  const repeated = req.query.industryId;
+  if (Array.isArray(repeated)) parts.push(...repeated.map(String));
+  else if (repeated != null && repeated !== '') parts.push(String(repeated));
+
+  const ids = new Set();
+  for (const chunk of parts) {
+    for (const token of String(chunk).split(',')) {
+      const id = Number.parseInt(String(token).trim(), 10);
+      if (Number.isSafeInteger(id) && id > 0) ids.add(id);
+    }
+  }
+  return [...ids];
+}
+
 export function createCompaniesRouter() {
   const router = Router();
 
@@ -37,11 +56,11 @@ export function createCompaniesRouter() {
 
   router.get('/api/app/companies', miniAppAuth, async (req, res) => {
     try {
-      const industryId = Number.parseInt(String(req.query.industryId || ''), 10);
+      const industryIds = parseIndustryIdsFromQuery(req);
       const industrySlug = String(req.query.industrySlug || '').trim();
       const rows = await listRemoteCompanies({
-        industryId: Number.isSafeInteger(industryId) && industryId > 0 ? industryId : null,
-        industrySlug: industrySlug || null,
+        industryIds,
+        industrySlug: industryIds.length ? null : industrySlug || null,
       });
       res.json(rows);
     } catch (err) {
