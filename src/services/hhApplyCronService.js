@@ -266,6 +266,7 @@ export async function listHhApplyClients({ limit = 200 } = {}) {
         lastName: row.lastName || null,
         preferences: row.preferences ?? null,
         skillIds: normalizeSkillIds(user.skills),
+        workAuthorizationCountries: String(user.WorkAuthorizationCountries || '').trim(),
         resumeUrl: row.resumeUrl || null,
         resumeText: String(resumeText),
         hhCookies: row.hhCookies ?? null,
