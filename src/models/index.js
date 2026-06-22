@@ -1,6 +1,8 @@
 import defineUser from './User.js';
 import defineApplication from './Application.js';
 import defineRemoteCompany from './RemoteCompany.js';
+import defineIndustry from './Industry.js';
+import defineRemoteCompanyIndustry from './RemoteCompanyIndustry.js';
 import defineConfig from './Config.js';
 import defineSearchClick from './SearchClick.js';
 import defineJobDetailsOpen from './JobDetailsOpen.js';
@@ -30,6 +32,8 @@ export function initModels(sequelize) {
   const User = defineUser(sequelize);
   const Application = defineApplication(sequelize);
   const RemoteCompany = defineRemoteCompany(sequelize);
+  const Industry = defineIndustry(sequelize);
+  const RemoteCompanyIndustry = defineRemoteCompanyIndustry(sequelize);
   const Config = defineConfig(sequelize);
   const SearchClick = defineSearchClick(sequelize);
   const JobDetailsOpen = defineJobDetailsOpen(sequelize);
@@ -100,6 +104,20 @@ export function initModels(sequelize) {
   CampaignSignup.belongsTo(User, { foreignKey: 'UserId' });
   User.hasMany(UserHhSearchUrl, { as: 'HhSearchUrls', foreignKey: 'UserId' });
   UserHhSearchUrl.belongsTo(User, { foreignKey: 'UserId' });
+
+  RemoteCompany.belongsToMany(Industry, {
+    through: RemoteCompanyIndustry,
+    foreignKey: 'RemoteCompanyId',
+    otherKey: 'IndustryId',
+    as: 'Industries',
+  });
+  Industry.belongsToMany(RemoteCompany, {
+    through: RemoteCompanyIndustry,
+    foreignKey: 'IndustryId',
+    otherKey: 'RemoteCompanyId',
+    as: 'Companies',
+  });
+
   return {
     User,
     Application,
@@ -107,6 +125,10 @@ export function initModels(sequelize) {
     Applications: Application,
     RemoteCompany,
     RemoteCompanies: RemoteCompany,
+    Industry,
+    Industries: Industry,
+    RemoteCompanyIndustry,
+    RemoteCompanyIndustries: RemoteCompanyIndustry,
     Config,
     Configs: Config,
     SearchClick,

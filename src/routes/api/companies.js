@@ -2,16 +2,46 @@ import { Router } from 'express';
 import { Sequelize } from 'sequelize';
 import { miniAppAuth, adminMiniAppAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
+import {
+  listIndustries,
+  listRemoteCompanies,
+  mapCompanyRow,
+  setCompanyIndustries,
+} from '../../services/companiesService.js';
 import { toStringOrUndefined, toValidUrlOrUndefined } from '../../utils/validators.js';
+
+function parseIndustryIds(body) {
+  if (!Object.prototype.hasOwnProperty.call(body || {}, 'industryIds')) return undefined;
+  if (body.industryIds == null) return [];
+  if (!Array.isArray(body.industryIds)) return null;
+  return body.industryIds;
+}
+
+const companyInclude = {
+  model: models.Industries,
+  as: 'Industries',
+  through: { attributes: [] },
+};
 
 export function createCompaniesRouter() {
   const router = Router();
 
-  router.get('/api/app/companies', miniAppAuth, async (_req, res) => {
+  router.get('/api/app/companies/industries', miniAppAuth, async (_req, res) => {
     try {
-      const rows = await models.RemoteCompanies.findAll({
-        order: [['DateAdded', 'DESC'], ['Id', 'DESC']],
-        limit: 500,
+      res.json(await listIndustries());
+    } catch (err) {
+      console.error('GET /api/app/companies/industries:', err);
+      res.status(500).json({ error: 'Failed to load industries' });
+    }
+  });
+
+  router.get('/api/app/companies', miniAppAuth, async (req, res) => {
+    try {
+      const industryId = Number.parseInt(String(req.query.industryId || ''), 10);
+      const industrySlug = String(req.query.industrySlug || '').trim();
+      const rows = await listRemoteCompanies({
+        industryId: Number.isSafeInteger(industryId) && industryId > 0 ? industryId : null,
+        industrySlug: industrySlug || null,
       });
       res.json(rows);
     } catch (err) {
@@ -20,13 +50,18 @@ export function createCompaniesRouter() {
     }
   });
 
+  router.get('/api/app/admin/companies/industries', adminMiniAppAuth, async (_req, res) => {
+    try {
+      res.json(await listIndustries());
+    } catch (err) {
+      console.error('GET /api/app/admin/companies/industries:', err);
+      res.status(500).json({ error: 'Failed to load industries' });
+    }
+  });
+
   router.get('/api/app/admin/companies', adminMiniAppAuth, async (_req, res) => {
     try {
-      const rows = await models.RemoteCompanies.findAll({
-        order: [['DateAdded', 'DESC'], ['Id', 'DESC']],
-        limit: 1000,
-      });
-      res.json(rows);
+      res.json(await listRemoteCompanies());
     } catch (err) {
       console.error('GET /api/app/admin/companies:', err);
       res.status(500).json({ error: 'Failed to load companies' });
@@ -39,13 +74,20 @@ export function createCompaniesRouter() {
       const url = toValidUrlOrUndefined(req.body.url);
       if (!name || !url) return res.status(400).json({ error: 'name and valid url are required' });
       const notes = toStringOrUndefined(req.body.notes, 1000);
+      const industryIds = parseIndustryIds(req.body);
+      if (industryIds === null) return res.status(400).json({ error: 'industryIds must be an array' });
+
       const row = await models.RemoteCompanies.create({
         Name: name,
         Url: url,
         Notes: notes ?? null,
         DateAdded: Sequelize.literal('GETUTCDATE()'),
       });
-      res.status(201).json(row);
+      if (industryIds !== undefined) {
+        const mapped = await setCompanyIndustries(row.Id, industryIds);
+        return res.status(201).json(mapped);
+      }
+      res.status(201).json(mapCompanyRow(row));
     } catch (err) {
       console.error('POST /api/app/admin/companies:', err);
       res.status(500).json({ error: 'Failed to create company' });
@@ -76,11 +118,18 @@ export function createCompaniesRouter() {
           updates.Notes = notes;
         }
       }
-      if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ error: 'At least one valid field is required' });
+      const industryIds = parseIndustryIds(req.body);
+      if (industryIds === null) return res.status(400).json({ error: 'industryIds must be an array' });
+
+      if (Object.keys(updates).length) {
+        await row.update(updates);
       }
-      await row.update(updates);
-      res.json(row);
+      if (industryIds !== undefined) {
+        const mapped = await setCompanyIndustries(id, industryIds);
+        return res.json(mapped);
+      }
+      await row.reload({ include: [companyInclude] });
+      res.json(mapCompanyRow(row));
     } catch (err) {
       console.error('PATCH /api/app/admin/companies/:id:', err);
       res.status(500).json({ error: 'Failed to update company' });

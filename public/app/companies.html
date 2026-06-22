@@ -21,6 +21,33 @@
       .title { margin: 0; font-size: 22px; }
       .muted { color: var(--muted); }
       a { color: var(--accent); word-break: break-all; }
+      .filters { display: flex; flex-wrap: wrap; gap: 8px; }
+      .chip {
+        border: 1px solid var(--border);
+        background: #0f1730;
+        color: var(--text);
+        border-radius: 999px;
+        padding: 8px 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .section-title {
+        margin: 8px 0 0;
+        font-size: 16px;
+        color: var(--muted);
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      .industry-tag {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 12px;
+      }
     </style>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
@@ -38,12 +65,17 @@
   <body>
     <div class="wrap">
       <h1 class="title">Компании с удаленкой</h1>
-      <p class="muted">Компании, которые нанимают на полностью удаленные роли.</p>
+      <p class="muted">Компании, которые нанимают на полностью удаленные роли. Фильтр по отрасли.</p>
+      <div id="filters" class="filters"></div>
       <div id="companiesList"></div>
     </div>
     <script>
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
+
+      let allCompanies = [];
+      let industries = [];
+      let selectedIndustrySlug = '';
 
       async function api(path) {
         const headers = {};
@@ -57,23 +89,96 @@
         return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       }
 
-      function render(rows) {
-        const list = document.getElementById('companiesList');
-        if (!rows.length) {
-          list.innerHTML = '<div class="card"><p class="muted">Пока нет компаний.</p></div>';
-          return;
-        }
-        list.innerHTML = rows.map((row) => `
+      function companyCard(row) {
+        const tags = (row.industries || [])
+          .map((item) => `<span class="industry-tag">${esc(item.name)}</span>`)
+          .join('');
+        return `
           <article class="card">
             <h3 style="margin:0 0 8px">${esc(row.Name)}</h3>
             <a href="${esc(row.Url)}" target="_blank" rel="noopener noreferrer">${esc(row.Url)}</a>
+            ${tags}
             ${row.Notes ? `<p class="muted" style="margin:8px 0 0; white-space:pre-wrap">${esc(row.Notes)}</p>` : ''}
           </article>
-        `).join('');
+        `;
       }
 
-      api('/api/app/companies')
-        .then(render)
+      function filteredCompanies() {
+        if (!selectedIndustrySlug) return allCompanies;
+        return allCompanies.filter((row) =>
+          (row.industries || []).some((item) => item.slug === selectedIndustrySlug)
+        );
+      }
+
+      function renderFilters() {
+        const root = document.getElementById('filters');
+        const chips = [
+          `<button type="button" class="chip ${selectedIndustrySlug ? '' : 'on'}" data-slug="">Все отрасли</button>`,
+          ...industries.map(
+            (item) =>
+              `<button type="button" class="chip ${selectedIndustrySlug === item.slug ? 'on' : ''}" data-slug="${esc(item.slug)}">${esc(item.name)}</button>`
+          ),
+        ];
+        root.innerHTML = chips.join('');
+        for (const btn of root.querySelectorAll('.chip')) {
+          btn.addEventListener('click', () => {
+            selectedIndustrySlug = btn.getAttribute('data-slug') || '';
+            renderCompanies();
+            renderFilters();
+          });
+        }
+      }
+
+      function renderCompanies() {
+        const list = document.getElementById('companiesList');
+        const rows = filteredCompanies();
+        if (!rows.length) {
+          list.innerHTML = '<div class="card"><p class="muted">Пока нет компаний для выбранного фильтра.</p></div>';
+          return;
+        }
+
+        if (selectedIndustrySlug) {
+          list.innerHTML = rows.map((row) => companyCard(row)).join('');
+          return;
+        }
+
+        const groups = new Map();
+        for (const row of rows) {
+          const key = row.primaryIndustry?.slug || 'other';
+          const label = row.primaryIndustry?.name || 'Без отрасли';
+          if (!groups.has(key)) groups.set(key, { label, rows: [] });
+          groups.get(key).rows.push(row);
+        }
+
+        const orderedKeys = [...groups.keys()].sort((a, b) => {
+          const labelA = groups.get(a).label;
+          const labelB = groups.get(b).label;
+          if (labelA === 'Без отрасли') return 1;
+          if (labelB === 'Без отрасли') return -1;
+          return labelA.localeCompare(labelB, 'ru');
+        });
+
+        list.innerHTML = orderedKeys
+          .map((key) => {
+            const group = groups.get(key);
+            group.rows.sort((a, b) => String(a.Name).localeCompare(String(b.Name), 'ru'));
+            return `
+              <section>
+                <h2 class="section-title">${esc(group.label)}</h2>
+                ${group.rows.map((row) => companyCard(row)).join('')}
+              </section>
+            `;
+          })
+          .join('');
+      }
+
+      Promise.all([api('/api/app/companies'), api('/api/app/companies/industries')])
+        .then(([companies, industryRows]) => {
+          allCompanies = companies;
+          industries = industryRows;
+          renderFilters();
+          renderCompanies();
+        })
         .catch((err) => alert(`Не удалось загрузить компании: ${err.message}`));
     </script>
 </body>

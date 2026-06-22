@@ -30,6 +30,27 @@
       .row-actions { display: flex; gap: 8px; margin-top: 8px; }
       .row-actions button { width: auto; }
       a { color: var(--accent); word-break: break-all; }
+      .industry-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+      .industry-grid label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 6px 10px;
+        background: #0f1730;
+        font-size: 13px;
+      }
+      .industry-tag {
+        display: inline-block;
+        margin-right: 6px;
+        margin-top: 6px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 12px;
+      }
     </style>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
@@ -58,6 +79,7 @@
         <div style="margin-top:8px">
           <textarea id="notesInput" maxlength="1000" placeholder="Notes (optional, up to 1000 chars)"></textarea>
         </div>
+        <div id="industryPicker" class="industry-grid"></div>
         <div class="row-actions" style="margin-top:8px">
           <button id="cancelEditBtn" style="display:none">Cancel edit</button>
         </div>
@@ -75,6 +97,8 @@
       if (tg) tg.ready();
 
       let editingId = null;
+      let industries = [];
+      let companies = [];
 
       async function api(path, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -88,6 +112,31 @@
         return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       }
 
+      function selectedIndustryIds() {
+        return [...document.querySelectorAll('#industryPicker input[type="checkbox"]:checked')]
+          .map((el) => Number(el.value))
+          .filter((id) => Number.isFinite(id));
+      }
+
+      function renderIndustryPicker(selectedIds = []) {
+        const selected = new Set(selectedIds);
+        const root = document.getElementById('industryPicker');
+        if (!industries.length) {
+          root.innerHTML = '<p class="muted">No industries yet. Import HTML data first.</p>';
+          return;
+        }
+        root.innerHTML = industries
+          .map(
+            (item) => `
+              <label>
+                <input type="checkbox" value="${item.id}" ${selected.has(item.id) ? 'checked' : ''} />
+                ${esc(item.name)}
+              </label>
+            `
+          )
+          .join('');
+      }
+
       function resetForm() {
         editingId = null;
         document.getElementById('formTitle').textContent = 'Add company';
@@ -95,6 +144,7 @@
         document.getElementById('urlInput').value = '';
         document.getElementById('notesInput').value = '';
         document.getElementById('cancelEditBtn').style.display = 'none';
+        renderIndustryPicker([]);
       }
 
       function startEdit(row) {
@@ -104,32 +154,45 @@
         document.getElementById('urlInput').value = row.Url || '';
         document.getElementById('notesInput').value = row.Notes || '';
         document.getElementById('cancelEditBtn').style.display = 'inline-block';
+        renderIndustryPicker((row.industries || []).map((item) => item.id));
       }
 
       async function loadRows() {
-        const rows = await api('/api/app/admin/companies');
+        [companies, industries] = await Promise.all([
+          api('/api/app/admin/companies'),
+          api('/api/app/admin/companies/industries'),
+        ]);
+        renderIndustryPicker(selectedIndustryIds());
         const list = document.getElementById('list');
-        if (!rows.length) {
+        if (!companies.length) {
           list.innerHTML = '<p class="muted">No companies yet.</p>';
           return;
         }
-        list.innerHTML = rows.map((row) => `
-          <article class="row">
-            <strong>${esc(row.Name)}</strong>
-            <div><a href="${esc(row.Url)}" target="_blank" rel="noopener noreferrer">${esc(row.Url)}</a></div>
-            ${row.Notes ? `<div style="margin-top:8px; white-space:pre-wrap">${esc(row.Notes)}</div>` : ''}
-            <div class="muted">Added: ${row.DateAdded ? new Date(row.DateAdded).toLocaleString() : '-'}</div>
-            <div class="row-actions">
-              <button data-edit="${row.Id}">Edit</button>
-              <button class="danger" data-delete="${row.Id}">Delete</button>
-            </div>
-          </article>
-        `).join('');
+        list.innerHTML = companies
+          .map((row) => {
+            const tags = (row.industries || [])
+              .map((item) => `<span class="industry-tag">${esc(item.name)}</span>`)
+              .join('');
+            return `
+              <article class="row">
+                <strong>${esc(row.Name)}</strong>
+                <div><a href="${esc(row.Url)}" target="_blank" rel="noopener noreferrer">${esc(row.Url)}</a></div>
+                ${tags}
+                ${row.Notes ? `<div style="margin-top:8px; white-space:pre-wrap">${esc(row.Notes)}</div>` : ''}
+                <div class="muted">Added: ${row.DateAdded ? new Date(row.DateAdded).toLocaleString() : '-'}</div>
+                <div class="row-actions">
+                  <button data-edit="${row.Id}">Edit</button>
+                  <button class="danger" data-delete="${row.Id}">Delete</button>
+                </div>
+              </article>
+            `;
+          })
+          .join('');
 
         for (const btn of list.querySelectorAll('[data-edit]')) {
           btn.addEventListener('click', () => {
             const id = Number(btn.getAttribute('data-edit'));
-            const row = rows.find((x) => x.Id === id);
+            const row = companies.find((x) => x.Id === id);
             if (row) startEdit(row);
           });
         }
@@ -152,6 +215,7 @@
             name: document.getElementById('nameInput').value.trim(),
             url: document.getElementById('urlInput').value.trim(),
             notes: document.getElementById('notesInput').value.trim(),
+            industryIds: selectedIndustryIds(),
           };
           if (!payload.name || !payload.url) throw new Error('Name and URL are required');
           if (editingId) {
