@@ -62,7 +62,7 @@ import {
   removeUserDataByTelegramChatId,
   runResumeEnrichmentInBackground,
   runResumeEnrichment,
-  normalizeSkillIds,
+  mergePositionSkillsIntoUser,
 } from './services/userService.js';
 import {
   canUseApplyLinkBuilder,
@@ -607,14 +607,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     try {
       const { user } = await ensureUser(ctx);
-      if (user && !normalizeSkillIds(user.skills).length) {
-        const positionSkills = normalizeSkillIds(position.Skills);
-        if (positionSkills.length) {
-          await user.update({ skills: positionSkills });
-        }
+      if (user) {
+        await mergePositionSkillsIntoUser(user, position);
       }
     } catch (err) {
-      console.warn('Failed to infer skills from apply link position:', err?.message || err);
+      console.warn('Failed to apply position skills on apply link join:', err?.message || err);
     }
     const website = String(position.CompanyWebsite || '').trim();
     const externalApplyUrl = String(position.ExternalApplyURL || '').trim();

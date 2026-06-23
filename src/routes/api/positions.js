@@ -16,6 +16,19 @@ import {
   sendPositionsListPayload,
 } from '../../utils/positionUpstreamQuery.js';
 import { checkAnyhiresHealth } from '../../services/anyhiresHealthService.js';
+import {
+  normalizePositionSkillIds,
+  serializePositionSkillsForDb,
+} from '../../services/userService.js';
+
+function formatPositionRow(row, extra = {}) {
+  const plain = row?.toJSON ? row.toJSON() : { ...row };
+  return {
+    ...plain,
+    Skills: normalizePositionSkillIds(plain.Skills),
+    ...extra,
+  };
+}
 
 export function createPositionsRouter() {
   const router = Router();
@@ -91,7 +104,7 @@ export function createPositionsRouter() {
       const botUsername = String(runtimeBot.username || '').trim();
       const withLinks = rows.map((row) => {
         const applyLink = botUsername ? `https://t.me/${botUsername}?start=apply_${row.Id}` : '';
-        return { ...row.toJSON(), applyLink };
+        return formatPositionRow(row, { applyLink });
       });
       res.json(withLinks);
     } catch (err) {
@@ -128,9 +141,9 @@ export function createPositionsRouter() {
         ExternalApplyURL: externalApplyUrl,
         DateCreated: Sequelize.literal('GETUTCDATE()'),
         IsArchived: isArchived ?? false,
-        Skills: skills && skills.length > 0 ? skills : null,
+        Skills: serializePositionSkillsForDb(skills),
       });
-      res.status(201).json(row);
+      res.status(201).json(formatPositionRow(row));
     } catch (err) {
       console.error('POST /api/app/admin/positions:', err);
       res.status(500).json({ error: 'Failed to create position' });
@@ -188,14 +201,14 @@ export function createPositionsRouter() {
         const skills = Array.isArray(req.body.skills)
           ? req.body.skills.map((id) => Number.parseInt(String(id), 10)).filter((id) => Number.isSafeInteger(id) && id > 0)
           : [];
-        updates.Skills = skills.length > 0 ? skills : null;
+        updates.Skills = serializePositionSkillsForDb(skills);
       }
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: 'No valid fields to update' });
       }
 
       await row.update(updates);
-      return res.json(row);
+      return res.json(formatPositionRow(row));
     } catch (err) {
       console.error('PATCH /api/app/admin/positions/:id:', err);
       return res.status(500).json({ error: 'Failed to update position' });

@@ -7,6 +7,47 @@ import { resumeStorage } from './resumeStorage.js';
 
 export { normalizeSkillIds };
 
+/** @param {unknown} raw */
+export function normalizePositionSkillIds(raw) {
+  if (Array.isArray(raw)) return normalizeSkillIds(raw);
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+    try {
+      return normalizeSkillIds(JSON.parse(trimmed));
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+/** @param {unknown} raw */
+export function serializePositionSkillsForDb(raw) {
+  const normalized = normalizePositionSkillIds(raw);
+  return normalized.length > 0 ? JSON.stringify(normalized) : null;
+}
+
+/**
+ * Merge position skills into the user profile (e.g. when opening a tracked apply link).
+ * CV upload enrichment may still replace skills later.
+ * @param {import('../models/User.js').default | null | undefined} user
+ * @param {{ Skills?: unknown } | null | undefined} position
+ */
+export async function mergePositionSkillsIntoUser(user, position) {
+  if (!user || !position) return user;
+  const positionSkills = normalizePositionSkillIds(position.Skills);
+  if (!positionSkills.length) return user;
+
+  const existing = normalizeSkillIds(user.skills);
+  const merged = normalizeSkillIds([...existing, ...positionSkills]);
+  const hasNewSkill = positionSkills.some((id) => !existing.includes(id));
+  if (!hasNewSkill) return user;
+
+  await user.update({ skills: merged });
+  return user;
+}
+
 const SUPPORTED_RESUME_MIME_FRAGMENTS = ['pdf', 'jpeg', 'jpg', 'png', 'webp'];
 
 export function isSupportedResumeMimeType(mimeType) {

@@ -39,7 +39,7 @@ export default function definePosition(sequelize) {
         allowNull: false,
       },
       Skills: {
-        type: DataTypes.JSON,
+        type: DataTypes.TEXT,
         allowNull: true,
       },
     },
