@@ -92,7 +92,7 @@ import {
   sendScreeningAcknowledgment,
   USER_APPLICATION_STATUS,
 } from './services/positionApplyScreeningService.js';
-import { fetchApplyAckQuickJobs, fetchSimilarPositionsByTitle } from './services/applyAckPreviewService.js';
+import { fetchApplyAckQuickJobs, fetchSimilarPositionsBySkills } from './services/applyAckPreviewService.js';
 import { formatTopJobsTelegramHtml } from './services/telegraphService.js';
 import { clientHasApplyPrioritySkills } from './services/agentApplyPriorityService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
@@ -1056,7 +1056,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     const { user } = await ensureUser(ctx);
-    const result = await fetchSimilarPositionsByTitle(position.Title, { user });
+    const result = await fetchSimilarPositionsBySkills(position.Skills, { user });
     if (result.skipped || !result.topJobs?.length) {
       const passed = await enforceStartRequiredChannelsGate(ctx);
       if (!passed) return;
