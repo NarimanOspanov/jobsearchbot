@@ -117,6 +117,9 @@ export function createPositionsRouter() {
       if (req.body.externalApplyUrl != null && !externalApplyUrl) {
         return res.status(400).json({ error: 'externalApplyUrl must be a valid URL' });
       }
+      const skills = Array.isArray(req.body.skills)
+        ? req.body.skills.map((id) => Number.parseInt(String(id), 10)).filter((id) => Number.isSafeInteger(id) && id > 0)
+        : null;
       const row = await models.Positions.create({
         Title: title,
         Description: description,
@@ -125,6 +128,7 @@ export function createPositionsRouter() {
         ExternalApplyURL: externalApplyUrl,
         DateCreated: Sequelize.literal('GETUTCDATE()'),
         IsArchived: isArchived ?? false,
+        Skills: skills && skills.length > 0 ? skills : null,
       });
       res.status(201).json(row);
     } catch (err) {
@@ -179,6 +183,12 @@ export function createPositionsRouter() {
         const isArchived = toBoolOrUndefined(req.body.isArchived);
         if (isArchived === undefined) return res.status(400).json({ error: 'isArchived must be boolean' });
         updates.IsArchived = isArchived;
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body, 'skills')) {
+        const skills = Array.isArray(req.body.skills)
+          ? req.body.skills.map((id) => Number.parseInt(String(id), 10)).filter((id) => Number.isSafeInteger(id) && id > 0)
+          : [];
+        updates.Skills = skills.length > 0 ? skills : null;
       }
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: 'No valid fields to update' });
