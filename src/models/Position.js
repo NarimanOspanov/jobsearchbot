@@ -38,6 +38,10 @@ export default function definePosition(sequelize) {
         type: DataTypes.BOOLEAN,
         allowNull: false,
       },
+      Skills: {
+        type: DataTypes.JSON,
+        allowNull: true,
+      },
     },
     {
       tableName: 'Positions',

@@ -41,6 +41,7 @@ import {
 } from './services/resumeService.js';
 import {
   reviewResumeWithAI,
+  fetchScreenlySkillsCatalog,
 } from './services/aiService.js';
 import {
   getConfigInt,
@@ -92,7 +93,7 @@ import {
   sendScreeningAcknowledgment,
   USER_APPLICATION_STATUS,
 } from './services/positionApplyScreeningService.js';
-import { fetchApplyAckQuickJobs, fetchSimilarPositionsByTitle, inferSkillIdsFromTitle } from './services/applyAckPreviewService.js';
+import { fetchApplyAckQuickJobs, fetchSimilarPositionsByTitle } from './services/applyAckPreviewService.js';
 import { formatTopJobsTelegramHtml } from './services/telegraphService.js';
 import { clientHasApplyPrioritySkills } from './services/agentApplyPriorityService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
@@ -608,9 +609,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     try {
       const { user } = await ensureUser(ctx);
       if (user && !normalizeSkillIds(user.skills).length) {
-        const inferredIds = await inferSkillIdsFromTitle(position.Title);
-        if (inferredIds.length) {
-          await user.update({ skills: inferredIds });
+        const positionSkills = normalizeSkillIds(position.Skills);
+        if (positionSkills.length) {
+          await user.update({ skills: positionSkills });
         }
       }
     } catch (err) {
@@ -2006,25 +2007,55 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     await openAdminCompanies(ctx);
   });
 
+  const ADMIN_POS_PAGE_SIZE = 10;
+  const ADMIN_SKILLS_PAGE_SIZE = 8;
+
+  const isAdminUser = (ctx) => {
+    const adminIds = config.botAdminTelegramIds;
+    return adminIds.size === 0 || (ctx.from?.id && adminIds.has(ctx.from.id));
+  };
+
+  const buildAdminPosListKeyboard = async (page) => {
+    if (!models.Positions) return null;
+    const offset = page * ADMIN_POS_PAGE_SIZE;
+    const { count, rows } = await models.Positions.findAndCountAll({
+      where: { IsArchived: false },
+      order: [['DateCreated', 'DESC']],
+      limit: ADMIN_POS_PAGE_SIZE,
+      offset,
+    });
+    const totalPages = Math.ceil(count / ADMIN_POS_PAGE_SIZE);
+    const posButtons = rows.map((p) => [
+      { text: `${p.Title} @ ${p.CompanyName}`, callback_data: `a_pp_${p.Id}` },
+    ]);
+    const navRow = [];
+    if (page > 0) navRow.push({ text: '← Prev', callback_data: `a_pl_${page - 1}` });
+    navRow.push({ text: `${page + 1}/${totalPages || 1}`, callback_data: 'noop' });
+    if (offset + ADMIN_POS_PAGE_SIZE < count) navRow.push({ text: 'Next →', callback_data: `a_pl_${page + 1}` });
+    return { keyboard: [...posButtons, navRow], count };
+  };
+
   const openAdminPositions = async (ctx) => {
     if (ctx.chat?.type !== 'private') {
       await ctx.reply('Admin positions page is available only in private chat.');
       return;
     }
-    const adminIds = config.botAdminTelegramIds;
-    if (adminIds.size > 0 && (!ctx.from?.id || !adminIds.has(ctx.from.id))) {
+    if (!isAdminUser(ctx)) {
       await ctx.reply('Unauthorized.');
       return;
     }
-    if (canUseAdminPositionsWebApp) {
-      await ctx.reply('Open admin positions:', {
-        reply_markup: {
-          inline_keyboard: [[{ text: 'Admin Positions', web_app: { url: adminPositionsUrl } }]],
-        },
-      });
+    const result = await buildAdminPosListKeyboard(0);
+    if (!result) {
+      await ctx.reply('Positions DB is not available.');
       return;
     }
-    await ctx.reply('Admin positions page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
+    const buttons = result.keyboard;
+    if (canUseAdminPositionsWebApp) {
+      buttons.push([{ text: 'Open Web App', web_app: { url: adminPositionsUrl } }]);
+    }
+    await ctx.reply(`Positions (${result.count} total). Select one to manage skills:`, {
+      reply_markup: { inline_keyboard: buttons },
+    });
   };
 
   bot.command('admin_positions', async (ctx) => {
@@ -2033,6 +2064,141 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
 
   bot.hears(/^\/admin-positions(?:@\w+)?$/, async (ctx) => {
     await openAdminPositions(ctx);
+  });
+
+  // Admin position list pagination
+  bot.action(/^a_pl_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    if (!isAdminUser(ctx)) return;
+    const page = parseInt(ctx.match[1], 10);
+    const result = await buildAdminPosListKeyboard(page);
+    if (!result) return;
+    const buttons = result.keyboard;
+    if (canUseAdminPositionsWebApp) {
+      buttons.push([{ text: 'Open Web App', web_app: { url: adminPositionsUrl } }]);
+    }
+    await ctx.editMessageText(`Positions (${result.count} total). Select one to manage skills:`, {
+      reply_markup: { inline_keyboard: buttons },
+    }).catch(() => {});
+  });
+
+  // Admin position detail view
+  bot.action(/^a_pp_([0-9a-f-]{36})$/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    if (!isAdminUser(ctx)) return;
+    const positionId = ctx.match[1];
+    if (!models.Positions) return;
+    const position = await models.Positions.findByPk(positionId);
+    if (!position) {
+      await ctx.answerCbQuery('Position not found').catch(() => {});
+      return;
+    }
+    const skillIds = Array.isArray(position.Skills) ? position.Skills : [];
+    const skillLabel = skillIds.length ? skillIds.join(', ') : 'None';
+    const text = `*${position.Title}*\n${position.CompanyName}\n\nAssigned skill IDs: ${skillLabel}`;
+    await ctx.editMessageText(text, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Edit Skills', callback_data: `a_pse_${positionId}_0` }],
+          [{ text: '← Back', callback_data: 'a_pl_0' }],
+        ],
+      },
+    }).catch(() => {});
+  });
+
+  // Admin position skills edit (paginated)
+  bot.action(/^a_pse_([0-9a-f-]{36})_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    if (!isAdminUser(ctx)) return;
+    const positionId = ctx.match[1];
+    const page = parseInt(ctx.match[2], 10);
+    if (!models.Positions) return;
+    const position = await models.Positions.findByPk(positionId);
+    if (!position) return;
+    const assignedIds = new Set(Array.isArray(position.Skills) ? position.Skills : []);
+    const catalog = await fetchScreenlySkillsCatalog().catch(() => []);
+    const offset = page * ADMIN_SKILLS_PAGE_SIZE;
+    const pageSkills = catalog.slice(offset, offset + ADMIN_SKILLS_PAGE_SIZE);
+    const totalPages = Math.ceil(catalog.length / ADMIN_SKILLS_PAGE_SIZE);
+    const skillButtons = pageSkills.map((s) => [
+      {
+        text: `${assignedIds.has(s.id) ? '✅' : '⬜'} ${s.name} (${s.id})`,
+        callback_data: `a_pst_${positionId}_${s.id}`,
+      },
+    ]);
+    const navRow = [];
+    if (page > 0) navRow.push({ text: '← Prev', callback_data: `a_pse_${positionId}_${page - 1}` });
+    navRow.push({ text: `${page + 1}/${totalPages || 1}`, callback_data: 'noop' });
+    if (offset + ADMIN_SKILLS_PAGE_SIZE < catalog.length) {
+      navRow.push({ text: 'Next →', callback_data: `a_pse_${positionId}_${page + 1}` });
+    }
+    const assignedLabel = assignedIds.size ? [...assignedIds].join(', ') : 'None';
+    await ctx.editMessageText(
+      `*${position.Title}*\nAssigned: ${assignedLabel}\n\nToggle skills (page ${page + 1}/${totalPages || 1}):`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            ...skillButtons,
+            navRow,
+            [{ text: '← Back to position', callback_data: `a_pp_${positionId}` }],
+          ],
+        },
+      }
+    ).catch(() => {});
+  });
+
+  // Admin toggle skill for position
+  bot.action(/^a_pst_([0-9a-f-]{36})_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    if (!isAdminUser(ctx)) return;
+    const positionId = ctx.match[1];
+    const skillId = parseInt(ctx.match[2], 10);
+    if (!models.Positions) return;
+    const position = await models.Positions.findByPk(positionId);
+    if (!position) return;
+    const current = new Set(Array.isArray(position.Skills) ? position.Skills : []);
+    if (current.has(skillId)) {
+      current.delete(skillId);
+    } else {
+      current.add(skillId);
+    }
+    await position.update({ Skills: [...current] });
+    // Determine which page this skill is on to refresh the same page
+    const catalog = await fetchScreenlySkillsCatalog().catch(() => []);
+    const skillIndex = catalog.findIndex((s) => s.id === skillId);
+    const page = skillIndex >= 0 ? Math.floor(skillIndex / ADMIN_SKILLS_PAGE_SIZE) : 0;
+    const assignedIds = current;
+    const offset = page * ADMIN_SKILLS_PAGE_SIZE;
+    const pageSkills = catalog.slice(offset, offset + ADMIN_SKILLS_PAGE_SIZE);
+    const totalPages = Math.ceil(catalog.length / ADMIN_SKILLS_PAGE_SIZE);
+    const skillButtons = pageSkills.map((s) => [
+      {
+        text: `${assignedIds.has(s.id) ? '✅' : '⬜'} ${s.name} (${s.id})`,
+        callback_data: `a_pst_${positionId}_${s.id}`,
+      },
+    ]);
+    const navRow = [];
+    if (page > 0) navRow.push({ text: '← Prev', callback_data: `a_pse_${positionId}_${page - 1}` });
+    navRow.push({ text: `${page + 1}/${totalPages || 1}`, callback_data: 'noop' });
+    if (offset + ADMIN_SKILLS_PAGE_SIZE < catalog.length) {
+      navRow.push({ text: 'Next →', callback_data: `a_pse_${positionId}_${page + 1}` });
+    }
+    const assignedLabel = assignedIds.size ? [...assignedIds].join(', ') : 'None';
+    await ctx.editMessageText(
+      `*${position.Title}*\nAssigned: ${assignedLabel}\n\nToggle skills (page ${page + 1}/${totalPages || 1}):`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            ...skillButtons,
+            navRow,
+            [{ text: '← Back to position', callback_data: `a_pp_${positionId}` }],
+          ],
+        },
+      }
+    ).catch(() => {});
   });
 
   const openApplyLinkBuilder = async (ctx) => {
