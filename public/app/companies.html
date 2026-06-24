@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Компании с удаленкой</title>
+    <title>Remote companies</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="/app/tma-i18n.js"></script>
     <style>
       :root {
         --bg: #0d1222;
@@ -125,6 +126,7 @@
         color: var(--muted);
         padding: 8px 0;
       }
+      .loading[hidden] { display: none !important; }
       .spinner {
         width: 18px;
         height: 18px;
@@ -151,21 +153,21 @@
   </head>
   <body>
     <div class="wrap">
-      <h1 class="title">Компании с удаленкой</h1>
-      <p class="muted">Выберите одну или несколько отраслей — список обновится автоматически.</p>
+      <h1 class="title" id="pageTitle">Remote companies</h1>
+      <p class="muted" id="pageSubtitle">Select one or more industries — the list updates automatically.</p>
 
       <section class="card toolbar">
-        <label class="muted" for="industryPickerBtn">Отрасли</label>
+        <label class="muted" for="industryPickerBtn" id="industryLabel">Industries</label>
         <div class="toolbar-row">
           <div class="picker" id="industryPicker">
             <button id="industryPickerBtn" type="button" class="picker-btn" aria-haspopup="listbox" aria-expanded="false">
-              <span class="label" id="industryPickerLabel">Все отрасли</span>
+              <span class="label" id="industryPickerLabel">All industries</span>
               <span class="chev">▾</span>
             </button>
             <div id="industryPickerMenu" class="picker-menu" role="listbox" aria-multiselectable="true">
-              <input id="industrySearch" class="picker-search" type="search" placeholder="Поиск отрасли..." />
+              <input id="industrySearch" class="picker-search" type="search" placeholder="Search industry..." />
               <div class="picker-actions">
-                <button type="button" class="ghost-btn" id="clearIndustriesBtn">Сбросить</button>
+                <button type="button" class="ghost-btn" id="clearIndustriesBtn">Clear</button>
               </div>
               <div id="industryOptions" class="picker-list"></div>
             </div>
@@ -176,12 +178,52 @@
 
       <div id="status" class="loading" hidden>
         <div class="spinner"></div>
-        <span>Загрузка компаний...</span>
+        <span id="loadingText">Loading companies...</span>
       </div>
       <div id="companiesList"></div>
     </div>
     <script>
+      const STRINGS = {
+        en: {
+          pageTitle: 'Remote companies',
+          pageSubtitle: 'Select one or more industries — the list updates automatically.',
+          industryLabel: 'Industries',
+          allIndustries: 'All industries',
+          searchPlaceholder: 'Search industry...',
+          clear: 'Clear',
+          loading: 'Loading companies...',
+          count: '{n} companies',
+          noSearchResults: 'Nothing found',
+          noCompanies: 'No companies for the selected industries.',
+          noIndustry: 'No industry',
+          loadCompaniesError: 'Failed to load companies',
+          loadIndustriesError: 'Failed to load industries',
+          requestTimeout: 'Request timed out. Please try again.',
+        },
+        ru: {
+          pageTitle: 'Компании с удаленкой',
+          pageSubtitle: 'Выберите одну или несколько отраслей — список обновится автоматически.',
+          industryLabel: 'Отрасли',
+          allIndustries: 'Все отрасли',
+          searchPlaceholder: 'Поиск отрасли...',
+          clear: 'Сбросить',
+          loading: 'Загрузка компаний...',
+          count: '{n} компаний',
+          noSearchResults: 'Ничего не найдено',
+          noCompanies: 'Нет компаний для выбранных отраслей.',
+          noIndustry: 'Без отрасли',
+          loadCompaniesError: 'Не удалось загрузить компании',
+          loadIndustriesError: 'Не удалось загрузить отрасли',
+          requestTimeout: 'Превышено время ожидания. Попробуйте ещё раз.',
+        },
+      };
+
       const tg = window.Telegram?.WebApp;
+      const urlParams = new URLSearchParams(window.location.search);
+      const lang = window.TmaI18n ? window.TmaI18n.resolveLang(tg, urlParams) : 'en';
+      const t = (key, params) => (window.TmaI18n ? window.TmaI18n.t(STRINGS, lang, key, params) : key);
+      const API_TIMEOUT_MS = 30000;
+
       if (tg) tg.ready();
 
       let industries = [];
@@ -190,30 +232,93 @@
       let loadSeq = 0;
       let pickerOpen = false;
 
+      function applyI18n() {
+        document.documentElement.lang = lang;
+        document.title = t('pageTitle');
+        document.getElementById('pageTitle').textContent = t('pageTitle');
+        document.getElementById('pageSubtitle').textContent = t('pageSubtitle');
+        document.getElementById('industryLabel').textContent = t('industryLabel');
+        document.getElementById('industrySearch').placeholder = t('searchPlaceholder');
+        document.getElementById('clearIndustriesBtn').textContent = t('clear');
+        document.getElementById('loadingText').textContent = t('loading');
+      }
+
+      function getTgInitDataString() {
+        const direct = String(tg?.initData || '').trim();
+        if (direct) return direct;
+        try {
+          const hash = String(window.location.hash || '').replace(/^#/, '');
+          if (hash) {
+            const params = new URLSearchParams(hash);
+            const fromHash = String(params.get('tgWebAppData') || '').trim();
+            if (fromHash) return fromHash;
+          }
+        } catch {
+          // ignore
+        }
+        return String(window.Telegram?.WebView?.initParams?.tgWebAppData || '').trim();
+      }
+
+      function attachMiniAppAuthHeaders(headers) {
+        const data = getTgInitDataString();
+        if (data) {
+          headers['x-init-data'] = data;
+          headers.Authorization = `tma ${data}`;
+        }
+      }
+
+      async function waitForTelegramInitData(maxMs = 15000) {
+        if (tg?.expand) {
+          try { tg.expand(); } catch { /* ignore */ }
+        }
+        const start = Date.now();
+        while (Date.now() - start < maxMs) {
+          if (String(getTgInitDataString()).trim()) return;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+
       async function api(path) {
         const headers = {};
-        if (tg?.initData) headers['x-init-data'] = tg.initData;
-        const response = await fetch(path, { headers });
-        if (!response.ok) throw new Error(await response.text());
-        return response.json();
+        attachMiniAppAuthHeaders(headers);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+        try {
+          const response = await fetch(path, { headers, signal: controller.signal });
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        } catch (err) {
+          if (err?.name === 'AbortError') throw new Error(t('requestTimeout'));
+          throw err;
+        } finally {
+          clearTimeout(timer);
+        }
       }
 
       function esc(value) {
         return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       }
 
+      function apiLangQuery() {
+        return `lang=${encodeURIComponent(lang)}`;
+      }
+
       function companiesUrl() {
         const ids = [...selectedIndustryIds];
-        if (!ids.length) return '/api/app/companies';
         const params = new URLSearchParams();
-        params.set('industryIds', ids.join(','));
+        params.set('lang', lang);
+        if (ids.length) params.set('industryIds', ids.join(','));
         return `/api/app/companies?${params.toString()}`;
+      }
+
+      function industriesUrl() {
+        return `/api/app/companies/industries?${apiLangQuery()}`;
       }
 
       function updatePickerLabel() {
         const label = document.getElementById('industryPickerLabel');
         if (!selectedIndustryIds.size) {
-          label.textContent = 'Все отрасли';
+          label.textContent = t('allIndustries');
           return;
         }
         const names = industries
@@ -231,7 +336,7 @@
         const q = String(filterText || '').trim().toLowerCase();
         const visible = industries.filter((item) => !q || item.name.toLowerCase().includes(q));
         if (!visible.length) {
-          root.innerHTML = '<p class="muted" style="padding:8px 10px">Ничего не найдено</p>';
+          root.innerHTML = `<p class="muted" style="padding:8px 10px">${esc(t('noSearchResults'))}</p>`;
           return;
         }
         root.innerHTML = visible
@@ -285,23 +390,24 @@
       function renderCompanies() {
         const list = document.getElementById('companiesList');
         const countEl = document.getElementById('resultCount');
-        countEl.textContent = `${companies.length} компаний`;
+        countEl.textContent = t('count', { n: companies.length });
 
         if (!companies.length) {
-          list.innerHTML = '<div class="card"><p class="muted">Нет компаний для выбранных отраслей.</p></div>';
+          list.innerHTML = `<div class="card"><p class="muted">${esc(t('noCompanies'))}</p></div>`;
           return;
         }
 
         if (selectedIndustryIds.size > 0) {
-          const sorted = [...companies].sort((a, b) => String(a.Name).localeCompare(String(b.Name), 'ru'));
+          const sorted = [...companies].sort((a, b) => String(a.Name).localeCompare(String(b.Name), lang));
           list.innerHTML = sorted.map((row) => companyCard(row)).join('');
           return;
         }
 
+        const noIndustryLabel = t('noIndustry');
         const groups = new Map();
         for (const row of companies) {
           const key = row.primaryIndustry?.slug || 'other';
-          const label = row.primaryIndustry?.name || 'Без отрасли';
+          const label = row.primaryIndustry?.name || noIndustryLabel;
           if (!groups.has(key)) groups.set(key, { label, rows: [] });
           groups.get(key).rows.push(row);
         }
@@ -309,15 +415,15 @@
         const orderedKeys = [...groups.keys()].sort((a, b) => {
           const labelA = groups.get(a).label;
           const labelB = groups.get(b).label;
-          if (labelA === 'Без отрасли') return 1;
-          if (labelB === 'Без отрасли') return -1;
-          return labelA.localeCompare(labelB, 'ru');
+          if (labelA === noIndustryLabel) return 1;
+          if (labelB === noIndustryLabel) return -1;
+          return labelA.localeCompare(labelB, lang);
         });
 
         list.innerHTML = orderedKeys
           .map((key) => {
             const group = groups.get(key);
-            group.rows.sort((a, b) => String(a.Name).localeCompare(String(b.Name), 'ru'));
+            group.rows.sort((a, b) => String(a.Name).localeCompare(String(b.Name), lang));
             return `
               <section>
                 <h2 class="section-title">${esc(group.label)}</h2>
@@ -341,7 +447,7 @@
           renderCompanies();
         } catch (err) {
           if (seq !== loadSeq) return;
-          list.innerHTML = `<div class="card"><p class="error">Не удалось загрузить компании: ${esc(err.message)}</p></div>`;
+          list.innerHTML = `<div class="card"><p class="error">${esc(t('loadCompaniesError'))}: ${esc(err.message)}</p></div>`;
           document.getElementById('resultCount').textContent = '—';
         } finally {
           if (seq === loadSeq) status.hidden = true;
@@ -368,17 +474,22 @@
         if (!picker.contains(event.target)) setPickerOpen(false);
       });
 
-      api('/api/app/companies/industries')
-        .then((rows) => {
+      applyI18n();
+
+      (async () => {
+        try {
+          await waitForTelegramInitData();
+          const rows = await api(industriesUrl());
           industries = rows;
           updatePickerLabel();
           renderIndustryOptions('');
-          return loadCompanies();
-        })
-        .catch((err) => {
+          await loadCompanies();
+        } catch (err) {
           document.getElementById('companiesList').innerHTML =
-            `<div class="card"><p class="error">Не удалось загрузить отрасли: ${esc(err.message)}</p></div>`;
-        });
+            `<div class="card"><p class="error">${esc(t('loadIndustriesError'))}: ${esc(err.message)}</p></div>`;
+          document.getElementById('status').hidden = true;
+        }
+      })();
     </script>
 </body>
 </html>

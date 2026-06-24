@@ -12,7 +12,9 @@
     "test": "node --test tests/*.test.js",
     "menus:refresh": "node scripts/refresh-bot-menus.js",
     "companies:import-html": "node scripts/import-remote-companies-from-hypercareer-html.js",
-    "companies:fix-urls": "node scripts/fix-remote-company-urls.js"
+    "companies:fix-urls": "node scripts/fix-remote-company-urls.js",
+    "companies:translate-industries": "node scripts/translate-industries-name-eng.js",
+    "companies:ai-assign-industries": "node scripts/ai-assign-company-industries.js"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -9,6 +9,7 @@ import {
   setCompanyIndustries,
 } from '../../services/companiesService.js';
 import { toStringOrUndefined, toNormalizedCareerUrlOrUndefined } from '../../utils/validators.js';
+import { resolveBotLanguage } from '../../utils/userLanguage.js';
 
 function parseIndustryIds(body) {
   if (!Object.prototype.hasOwnProperty.call(body || {}, 'industryIds')) return undefined;
@@ -22,6 +23,12 @@ const companyInclude = {
   as: 'Industries',
   through: { attributes: [] },
 };
+
+function resolveRequestLang(req) {
+  const fromQuery = String(req.query.lang || '').trim().toLowerCase();
+  if (fromQuery === 'ru' || fromQuery === 'en') return fromQuery;
+  return resolveBotLanguage(req.miniAppUser?.language_code);
+}
 
 function parseIndustryIdsFromQuery(req) {
   const parts = [];
@@ -45,9 +52,9 @@ function parseIndustryIdsFromQuery(req) {
 export function createCompaniesRouter() {
   const router = Router();
 
-  router.get('/api/app/companies/industries', miniAppAuth, async (_req, res) => {
+  router.get('/api/app/companies/industries', miniAppAuth, async (req, res) => {
     try {
-      res.json(await listIndustries());
+      res.json(await listIndustries({ lang: resolveRequestLang(req) }));
     } catch (err) {
       console.error('GET /api/app/companies/industries:', err);
       res.status(500).json({ error: 'Failed to load industries' });
@@ -61,6 +68,7 @@ export function createCompaniesRouter() {
       const rows = await listRemoteCompanies({
         industryIds,
         industrySlug: industryIds.length ? null : industrySlug || null,
+        lang: resolveRequestLang(req),
       });
       res.json(rows);
     } catch (err) {

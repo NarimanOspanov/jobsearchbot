@@ -14,6 +14,10 @@ export default function defineIndustry(sequelize) {
         type: DataTypes.STRING(255),
         allowNull: false,
       },
+      NameEng: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
       Slug: {
         type: DataTypes.STRING(255),
         allowNull: false,

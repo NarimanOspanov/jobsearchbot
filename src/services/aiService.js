@@ -511,3 +511,147 @@ Rules:
     };
   });
 }
+
+const INDUSTRY_TRANSLATE_BATCH_SIZE = 30;
+const COMPANY_INDUSTRY_BATCH_SIZE = 15;
+const MAX_INDUSTRIES_PER_COMPANY = 3;
+
+export function normalizeIndustryTranslationRow(row) {
+  const id = Number.parseInt(String(row?.id ?? row?.Id), 10);
+  const nameEng = String(row?.nameEng ?? row?.NameEng ?? '').trim();
+  if (!Number.isSafeInteger(id) || id <= 0 || !nameEng) return null;
+  return { id, nameEng: nameEng.slice(0, 255) };
+}
+
+export function normalizeCompanyIndustryAssignmentRow(row, { allowedCompanyIds, allowedIndustryIds }) {
+  const companyId = Number.parseInt(String(row?.companyId ?? row?.CompanyId), 10);
+  if (!Number.isSafeInteger(companyId) || companyId <= 0 || !allowedCompanyIds.has(companyId)) return null;
+  const rawIds = Array.isArray(row?.industryIds) ? row.industryIds : [];
+  const industryIds = [...new Set(
+    rawIds
+      .map((id) => Number.parseInt(String(id), 10))
+      .filter((id) => Number.isSafeInteger(id) && id > 0 && allowedIndustryIds.has(id))
+  )].slice(0, MAX_INDUSTRIES_PER_COMPANY);
+  return { companyId, industryIds };
+}
+
+export function normalizeCompanyIndustryAssignments(parsed, { allowedCompanyIds, allowedIndustryIds }) {
+  if (!Array.isArray(parsed)) return [];
+  const results = [];
+  for (const row of parsed) {
+    const normalized = normalizeCompanyIndustryAssignmentRow(row, { allowedCompanyIds, allowedIndustryIds });
+    if (normalized) results.push(normalized);
+  }
+  return results;
+}
+
+/**
+ * @param {{ industries: Array<{ id: number, name: string, nameEng?: string|null, slug: string }> }}
+ */
+export async function translateIndustriesNameEngBatchWithAI({ industries = [] }) {
+  if (!genAI) throw new Error('GEMINI_API_KEY is not configured');
+  if (!Array.isArray(industries) || !industries.length) return [];
+
+  const blocks = industries
+    .map((item) => `id: ${item.id}\nname: ${String(item.name || '').trim()}\nslug: ${String(item.slug || '').trim()}`)
+    .join('\n\n');
+
+  const prompt = `Translate these industry/sector labels (mostly Russian) into concise English career-sector names suitable for a job seeker filter UI.
+
+Industries:
+${blocks}
+
+Return strict JSON only as an array:
+[
+  { "id": number, "nameEng": "string" }
+]
+
+Rules:
+- One object per id listed above
+- nameEng: short English label (1-4 words), title case where natural (e.g. "FinTech", "Game Development")
+- Keep well-known English names as-is
+- Do not invent extra ids`;
+
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const raw = response.text?.trim();
+  if (!raw) throw new Error('AI response is empty');
+
+  const jsonText = extractFirstJsonArray(raw);
+  const parsed = JSON.parse(jsonText);
+  if (!Array.isArray(parsed)) throw new Error('AI translation response must be an array');
+
+  const allowedIds = new Set(industries.map((item) => Number(item.id)).filter((id) => Number.isSafeInteger(id) && id > 0));
+  const byId = new Map();
+  for (const row of parsed) {
+    const normalized = normalizeIndustryTranslationRow(row);
+    if (normalized && allowedIds.has(normalized.id)) byId.set(normalized.id, normalized);
+  }
+  return industries
+    .map((item) => byId.get(Number(item.id)))
+    .filter(Boolean);
+}
+
+/**
+ * @param {{
+ *   industries: Array<{ id: number, name: string, nameEng?: string|null, slug: string }>,
+ *   companies: Array<{ id: number, name: string, url: string }>
+ * }}
+ */
+export async function classifyCompaniesIndustriesBatchWithAI({ industries = [], companies = [] }) {
+  if (!genAI) throw new Error('GEMINI_API_KEY is not configured');
+  if (!Array.isArray(companies) || !companies.length) return [];
+
+  const catalog = industries
+    .map((item) => {
+      const eng = String(item.nameEng || '').trim();
+      const label = eng ? `${item.name} / ${eng}` : item.name;
+      return `id: ${item.id} | ${label} | slug: ${item.slug}`;
+    })
+    .join('\n');
+
+  const companyBlocks = companies
+    .map((item) => `companyId: ${item.id}\nname: ${String(item.name || '').trim()}\nurl: ${String(item.url || '').trim()}`)
+    .join('\n\n---\n\n');
+
+  const prompt = `You classify remote-friendly companies into relevant industry sectors for a job board filter.
+
+Industry catalog (use only these ids):
+${catalog}
+
+Companies to classify:
+${companyBlocks}
+
+Return strict JSON only as an array:
+[
+  { "companyId": number, "industryIds": [number, ...] }
+]
+
+Rules:
+- Include every companyId listed above exactly once
+- industryIds: 0 to ${MAX_INDUSTRIES_PER_COMPANY} ids from the catalog that genuinely match the company's business
+- Prefer precision over coverage — omit weak matches
+- Use company name and careers URL domain/path as signals
+- Do not invent ids outside the catalog`;
+
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const raw = response.text?.trim();
+  if (!raw) throw new Error('AI response is empty');
+
+  const jsonText = extractFirstJsonArray(raw);
+  const parsed = JSON.parse(jsonText);
+  const allowedCompanyIds = new Set(
+    companies.map((item) => Number(item.id)).filter((id) => Number.isSafeInteger(id) && id > 0)
+  );
+  const allowedIndustryIds = new Set(
+    industries.map((item) => Number(item.id)).filter((id) => Number.isSafeInteger(id) && id > 0)
+  );
+  return normalizeCompanyIndustryAssignments(parsed, { allowedCompanyIds, allowedIndustryIds });
+}
+
+export { INDUSTRY_TRANSLATE_BATCH_SIZE, COMPANY_INDUSTRY_BATCH_SIZE, MAX_INDUSTRIES_PER_COMPANY };

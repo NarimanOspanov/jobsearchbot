@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import { models } from '../db.js';
+import { normalizeUserLanguage } from '../utils/userLanguage.js';
 
 export function slugifyIndustryName(name) {
   const base = String(name || '')
@@ -12,21 +13,31 @@ export function slugifyIndustryName(name) {
   return base.slice(0, 200) || 'other';
 }
 
-export function mapIndustryRow(row) {
+export function industryDisplayName(row, lang = 'ru') {
+  const locale = normalizeUserLanguage(lang);
+  const name = String(row?.Name ?? row?.name ?? '').trim();
+  const nameEng = String(row?.NameEng ?? row?.nameEng ?? '').trim();
+  if (locale === 'en' && nameEng) return nameEng;
+  return name;
+}
+
+export function mapIndustryRow(row, lang = 'ru') {
+  const nameEng = row.NameEng ? String(row.NameEng).trim() : null;
   return {
     id: row.Id,
-    name: row.Name,
+    name: industryDisplayName(row, lang),
+    nameEng,
     slug: row.Slug,
     sortOrder: Number(row.SortOrder) || 0,
   };
 }
 
-export function mapCompanyRow(row) {
+export function mapCompanyRow(row, lang = 'ru') {
   const industries = (row.Industries || [])
-    .map(mapIndustryRow)
+    .map((item) => mapIndustryRow(item, lang))
     .sort((a, b) => {
       if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-      return a.name.localeCompare(b.name, 'ru');
+      return a.name.localeCompare(b.name, normalizeUserLanguage(lang));
     });
   return {
     Id: row.Id,
@@ -40,17 +51,17 @@ export function mapCompanyRow(row) {
   };
 }
 
-export async function listIndustries() {
+export async function listIndustries({ lang = 'ru' } = {}) {
   const rows = await models.Industries.findAll({
     order: [
       ['SortOrder', 'ASC'],
       ['Name', 'ASC'],
     ],
   });
-  return rows.map(mapIndustryRow);
+  return rows.map((row) => mapIndustryRow(row, lang));
 }
 
-export async function listRemoteCompanies({ industryIds = [], industryId = null, industrySlug = null } = {}) {
+export async function listRemoteCompanies({ industryIds = [], industryId = null, industrySlug = null, lang = 'ru' } = {}) {
   const normalizedIds = [
     ...new Set(
       [
@@ -63,6 +74,7 @@ export async function listRemoteCompanies({ industryIds = [], industryId = null,
   ];
   const slug = String(industrySlug || '').trim();
   const hasIndustryFilter = normalizedIds.length > 0 || Boolean(slug);
+  const locale = normalizeUserLanguage(lang);
 
   const include = {
     model: models.Industries,
@@ -84,13 +96,13 @@ export async function listRemoteCompanies({ industryIds = [], industryId = null,
     col: 'Id',
   });
 
-  const mapped = rows.map(mapCompanyRow);
+  const mapped = rows.map((row) => mapCompanyRow(row, locale));
   mapped.sort((a, b) => {
     const industryA = a.primaryIndustry?.name || 'яяя';
     const industryB = b.primaryIndustry?.name || 'яяя';
-    const byIndustry = industryA.localeCompare(industryB, 'ru');
+    const byIndustry = industryA.localeCompare(industryB, locale);
     if (byIndustry !== 0) return byIndustry;
-    return String(a.Name || '').localeCompare(String(b.Name || ''), 'ru');
+    return String(a.Name || '').localeCompare(String(b.Name || ''), locale);
   });
   return mapped;
 }
@@ -120,7 +132,7 @@ export async function findOrCreateIndustryByName(name, sortOrder = 0) {
   const slug = slugifyIndustryName(trimmed);
   const [row] = await models.Industries.findOrCreate({
     where: { Slug: slug },
-    defaults: { Name: trimmed, Slug: slug, SortOrder: sortOrder },
+    defaults: { Name: trimmed, Slug: slug, SortOrder: sortOrder, NameEng: null },
   });
   if (row.Name !== trimmed && row.Name.toLowerCase() !== trimmed.toLowerCase()) {
     // Keep first canonical spelling; slug collision handled by findOrCreate on slug.
