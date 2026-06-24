@@ -62,7 +62,7 @@ import {
   removeUserDataByTelegramChatId,
   runResumeEnrichmentInBackground,
   runResumeEnrichment,
-  normalizeSkillIds,
+  mergePositionSkillsIntoUser,
 } from './services/userService.js';
 import {
   canUseApplyLinkBuilder,
@@ -92,7 +92,7 @@ import {
   sendScreeningAcknowledgment,
   USER_APPLICATION_STATUS,
 } from './services/positionApplyScreeningService.js';
-import { fetchApplyAckQuickJobs, fetchSimilarPositionsByTitle, inferSkillIdsFromTitle } from './services/applyAckPreviewService.js';
+import { fetchApplyAckQuickJobs, fetchSimilarPositionsBySkills } from './services/applyAckPreviewService.js';
 import { formatTopJobsTelegramHtml } from './services/telegraphService.js';
 import { clientHasApplyPrioritySkills } from './services/agentApplyPriorityService.js';
 import { resolveBotLanguage } from './utils/userLanguage.js';
@@ -607,14 +607,11 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     }
     try {
       const { user } = await ensureUser(ctx);
-      if (user && !normalizeSkillIds(user.skills).length) {
-        const inferredIds = await inferSkillIdsFromTitle(position.Title);
-        if (inferredIds.length) {
-          await user.update({ skills: inferredIds });
-        }
+      if (user) {
+        await mergePositionSkillsIntoUser(user, position);
       }
     } catch (err) {
-      console.warn('Failed to infer skills from apply link position:', err?.message || err);
+      console.warn('Failed to apply position skills on apply link join:', err?.message || err);
     }
     const website = String(position.CompanyWebsite || '').trim();
     const externalApplyUrl = String(position.ExternalApplyURL || '').trim();
@@ -1059,7 +1056,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     const { user } = await ensureUser(ctx);
-    const result = await fetchSimilarPositionsByTitle(position.Title, { user });
+    const result = await fetchSimilarPositionsBySkills(position.Skills, { user });
     if (result.skipped || !result.topJobs?.length) {
       const passed = await enforceStartRequiredChannelsGate(ctx);
       if (!passed) return;
@@ -1904,11 +1901,14 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       await ctx.reply('Unauthorized.');
       return;
     }
-    if (!canUseAgentClientsWebApp && !canUseAdminAgentAssignmentsWebApp && !canUseAdminMentorAssignmentsWebApp) {
+    if (!canUseAgentClientsWebApp && !canUseAdminAgentAssignmentsWebApp && !canUseAdminMentorAssignmentsWebApp && !canUseAdminPositionsWebApp) {
       await ctx.reply('Admin pages require public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).');
       return;
     }
     const rows = [];
+    if (canUseAdminPositionsWebApp) {
+      rows.push([{ text: 'Admin Positions', web_app: { url: adminPositionsUrl } }]);
+    }
     if (canUseAgentClientsWebApp) {
       rows.push([{ text: 'Agent clients', web_app: { url: agentClientsUrl } }]);
     }

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  fetchSimilarPositionsBySkills,
   firstSkillIdFromUser,
   getDateRangeForDays,
   takeFirstPositions,
@@ -11,6 +12,12 @@ import {
   SCREENING_SEE_ALL_POSITIONS_CALLBACK,
 } from '../src/services/positionApplyScreeningService.js';
 import { formatTopJobsTelegramHtml, resolveJobPreviewHref } from '../src/services/telegraphService.js';
+
+test('fetchSimilarPositionsBySkills skips when position has no skills', async () => {
+  const result = await fetchSimilarPositionsBySkills('[]');
+  assert.equal(result.skipped, true);
+  assert.equal(result.reason, 'no_skills');
+});
 
 test('getDateRangeForDays defaults to 3-day span', () => {
   const range = getDateRangeForDays(3);

@@ -1,7 +1,6 @@
 import { config } from '../config.js';
 import { buildAnyhiresPositionsSearchParams } from '../utils/positionUpstreamQuery.js';
-import { normalizeSkillIds } from './userService.js';
-import { fetchScreenlySkillsCatalog } from './aiService.js';
+import { normalizePositionSkillIds, normalizeSkillIds } from './userService.js';
 
 const similarPositionsCache = new Map();
 
@@ -109,45 +108,23 @@ export async function fetchApplyAckQuickJobs({ user }) {
   }
 }
 
-export async function inferSkillIdsFromTitle(title) {
-  try {
-    const catalog = await fetchScreenlySkillsCatalog();
-    const tokens = title.toLowerCase().split(/[\s/]+/).filter(Boolean);
-    const tokenSet = new Set(tokens);
-    const matches = catalog.filter((skill) => {
-      if (!skill.name) return false;
-      const skillTokens = skill.name.toLowerCase().split(/\s+/);
-      if (skillTokens.length === 1) {
-        return tokenSet.has(skillTokens[0]);
-      }
-      return skillTokens.every((skillToken) =>
-        tokens.some((t) => t === skillToken || t.startsWith(skillToken) || skillToken.startsWith(t))
-      );
-    });
-    matches.sort((a, b) => b.name.length - a.name.length);
-    return matches.slice(0, 3).map((s) => s.id);
-  } catch {
-    return [];
-  }
-}
-
 /**
- * Fetch positions similar to the given position title by matching skill catalog entries.
- * @param {string} positionTitle
+ * Fetch positions similar to a job by its skill ids.
+ * @param {unknown} rawSkillIds
  * @param {{ user?: object }} [opts]
  */
-export async function fetchSimilarPositionsByTitle(positionTitle, { user = null } = {}) {
+export async function fetchSimilarPositionsBySkills(rawSkillIds, { user = null } = {}) {
   try {
-    const skillIds = await inferSkillIdsFromTitle(positionTitle);
+    const skillIds = normalizePositionSkillIds(rawSkillIds);
     if (!skillIds.length) {
-      return { skipped: true, reason: 'no_skill_match' };
+      return { skipped: true, reason: 'no_skills' };
     }
 
     const jobCount = 5;
     const dateRange = getDateRangeForDays(30);
     const country = parseCountryCsv(user?.WorkAuthorizationCountries);
     const today = todayUtc();
-    const cacheKey = skillIds.slice().sort().join(',');
+    const cacheKey = skillIds.slice().sort((a, b) => a - b).join(',');
     const cached = similarPositionsCache.get(cacheKey);
     if (cached && cached.date === today) {
       return { skipped: false, topJobs: cached.topJobs, appBaseUrl: cached.appBaseUrl, skillIds };

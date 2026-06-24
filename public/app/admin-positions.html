@@ -32,6 +32,13 @@
       .row-actions button { width: auto; }
       a { color: #9ec5ff; word-break: break-all; }
       .checkbox { display: inline-flex; gap: 8px; align-items: center; margin-top: 8px; color: var(--muted); }
+      .skills-wrap { position: relative; }
+      .skills-dropdown { position: absolute; z-index: 10; top: 100%; left: 0; right: 0; background: #0f1730; border: 1px solid var(--border); border-radius: 8px; max-height: 200px; overflow-y: auto; margin-top: 2px; }
+      .skills-dropdown div { padding: 8px 10px; cursor: pointer; color: var(--text); font-size: 14px; }
+      .skills-dropdown div:hover { background: #1a2540; }
+      .skills-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .skill-tag { display: inline-flex; align-items: center; gap: 4px; background: #1e2f55; border: 1px solid var(--accent); border-radius: 6px; padding: 3px 8px; font-size: 13px; }
+      .skill-tag button { background: none; border: none; color: var(--muted); padding: 0; width: auto; font-size: 14px; line-height: 1; cursor: pointer; }
     </style>
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
@@ -66,6 +73,11 @@
         <div style="margin-top:8px">
           <textarea id="descriptionInput" placeholder="Описание вакансии"></textarea>
         </div>
+        <div style="margin-top:8px" class="skills-wrap">
+          <input id="skillsSearchInput" placeholder="Навыки (начните вводить для поиска)..." autocomplete="off" />
+          <div id="skillsDropdown" class="skills-dropdown" style="display:none"></div>
+          <div id="selectedSkillsTags" class="skills-tags"></div>
+        </div>
         <div class="row-actions" style="margin-top:8px">
           <button id="saveBtn">Сохранить</button>
           <button id="cancelEditBtn" class="ghost-btn" style="display:none">Отменить редактирование</button>
@@ -83,6 +95,57 @@
       const tg = window.Telegram?.WebApp;
       if (tg) tg.ready();
       let editingId = null;
+      let skillsCatalog = [];
+      let selectedSkillIds = new Set();
+
+      async function loadSkillsCatalog() {
+        try {
+          const data = await api('/api/admin/skills');
+          skillsCatalog = Array.isArray(data.skills) ? data.skills : [];
+        } catch (e) {
+          console.warn('Failed to load skills catalog:', e);
+        }
+      }
+
+      function renderSkillTags() {
+        const container = document.getElementById('selectedSkillsTags');
+        container.innerHTML = '';
+        for (const id of selectedSkillIds) {
+          const skill = skillsCatalog.find((s) => s.id === id);
+          const label = skill ? skill.name : String(id);
+          const tag = document.createElement('span');
+          tag.className = 'skill-tag';
+          tag.innerHTML = `${esc(label)} <button type="button" data-sid="${id}" title="Удалить">×</button>`;
+          tag.querySelector('button').addEventListener('click', () => {
+            selectedSkillIds.delete(id);
+            renderSkillTags();
+          });
+          container.appendChild(tag);
+        }
+      }
+
+      function initSkillsSearch() {
+        const input = document.getElementById('skillsSearchInput');
+        const dropdown = document.getElementById('skillsDropdown');
+        input.addEventListener('input', () => {
+          const q = input.value.trim().toLowerCase();
+          if (!q) { dropdown.style.display = 'none'; return; }
+          const matches = skillsCatalog.filter((s) => s.name.toLowerCase().includes(q) && !selectedSkillIds.has(s.id)).slice(0, 20);
+          if (!matches.length) { dropdown.style.display = 'none'; return; }
+          dropdown.innerHTML = matches.map((s) => `<div data-sid="${s.id}">${esc(s.name)} <span style="color:var(--muted);font-size:12px">${esc(s.roleName)}</span></div>`).join('');
+          dropdown.style.display = 'block';
+          for (const item of dropdown.querySelectorAll('[data-sid]')) {
+            item.addEventListener('mousedown', (e) => {
+              e.preventDefault();
+              selectedSkillIds.add(Number(item.getAttribute('data-sid')));
+              renderSkillTags();
+              input.value = '';
+              dropdown.style.display = 'none';
+            });
+          }
+        });
+        input.addEventListener('blur', () => setTimeout(() => { dropdown.style.display = 'none'; }, 150));
+      }
 
       async function api(path, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -106,6 +169,8 @@
         document.getElementById('descriptionInput').value = '';
         document.getElementById('isArchivedInput').checked = false;
         document.getElementById('cancelEditBtn').style.display = 'none';
+        selectedSkillIds = new Set();
+        renderSkillTags();
       }
 
       function startEdit(row) {
@@ -118,6 +183,8 @@
         document.getElementById('descriptionInput').value = row.Description || '';
         document.getElementById('isArchivedInput').checked = !!row.IsArchived;
         document.getElementById('cancelEditBtn').style.display = 'inline-block';
+        selectedSkillIds = new Set(Array.isArray(row.Skills) ? row.Skills : []);
+        renderSkillTags();
       }
 
       async function loadRows() {
@@ -133,6 +200,7 @@
             <div class="muted">${esc(row.CompanyName)}${row.IsArchived ? ' · Архив' : ''}</div>
             ${row.CompanyWebsite ? `<div><a href="${esc(row.CompanyWebsite)}" target="_blank" rel="noopener noreferrer">${esc(row.CompanyWebsite)}</a></div>` : ''}
             ${row.ExternalApplyURL ? `<div style="margin-top:6px"><span class="muted">Внешний отклик:</span> <a href="${esc(row.ExternalApplyURL)}" target="_blank" rel="noopener noreferrer">${esc(row.ExternalApplyURL)}</a></div>` : ''}
+            ${Array.isArray(row.Skills) && row.Skills.length ? `<div style="margin-top:6px"><span class="muted">Навыки:</span> ${row.Skills.map((id) => { const s = skillsCatalog.find((x) => x.id === id); return esc(s ? s.name : String(id)); }).join(', ')}</div>` : ''}
             <div style="margin-top:8px; white-space:pre-wrap">${esc(row.Description || '')}</div>
             <div style="margin-top:8px"><span class="muted">Apply link:</span> ${row.applyLink ? `<a href="${esc(row.applyLink)}" target="_blank" rel="noopener noreferrer">${esc(row.applyLink)}</a>` : '<span class="muted">недоступно</span>'}</div>
             <div class="row-actions">
@@ -191,6 +259,7 @@
             externalApplyUrl: document.getElementById('externalApplyUrlInput').value.trim(),
             description: document.getElementById('descriptionInput').value.trim(),
             isArchived: document.getElementById('isArchivedInput').checked,
+            skills: [...selectedSkillIds],
           };
           if (!payload.title || !payload.companyName || !payload.description) {
             throw new Error('Заполните название, компанию и описание');
@@ -221,8 +290,12 @@
         resetForm();
       });
 
+      initSkillsSearch();
       resetForm();
-      loadRows().catch((err) => {
+      loadSkillsCatalog().then(() => {
+        renderSkillTags();
+        loadRows();
+      }).catch((err) => {
         document.getElementById('status').textContent = `Ошибка: ${err.message}`;
       });
     </script>
