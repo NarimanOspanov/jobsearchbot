@@ -8,7 +8,7 @@ import {
   mapCompanyRow,
   setCompanyIndustries,
 } from '../../services/companiesService.js';
-import { toStringOrUndefined, toValidUrlOrUndefined } from '../../utils/validators.js';
+import { toStringOrUndefined, toNormalizedCareerUrlOrUndefined } from '../../utils/validators.js';
 
 function parseIndustryIds(body) {
   if (!Object.prototype.hasOwnProperty.call(body || {}, 'industryIds')) return undefined;
@@ -90,7 +90,7 @@ export function createCompaniesRouter() {
   router.post('/api/app/admin/companies', adminMiniAppAuth, async (req, res) => {
     try {
       const name = toStringOrUndefined(req.body.name, 255);
-      const url = toValidUrlOrUndefined(req.body.url);
+      const url = toNormalizedCareerUrlOrUndefined(req.body.url);
       if (!name || !url) return res.status(400).json({ error: 'name and valid url are required' });
       const notes = toStringOrUndefined(req.body.notes, 1000);
       const industryIds = parseIndustryIds(req.body);
@@ -123,7 +123,7 @@ export function createCompaniesRouter() {
 
       const updates = {};
       const name = toStringOrUndefined(req.body.name, 255);
-      const url = toValidUrlOrUndefined(req.body.url);
+      const url = toNormalizedCareerUrlOrUndefined(req.body.url);
       if (name) updates.Name = name;
       if (url) updates.Url = url;
       if (Object.prototype.hasOwnProperty.call(req.body, 'notes')) {

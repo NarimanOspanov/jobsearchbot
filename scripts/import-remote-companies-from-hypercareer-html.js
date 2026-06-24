@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { sequelize } from '../src/db.js';
 import { initModels } from '../src/models/index.js';
 import { findOrCreateIndustryByName, slugifyIndustryName } from '../src/services/companiesService.js';
+import { normalizeCareerUrl } from '../src/utils/urlNormalize.js';
 
 const models = initModels(sequelize);
 
@@ -94,15 +95,7 @@ function looksLikeSectionRow(cells) {
 }
 
 function normalizeUrl(url) {
-  const value = String(url || '').trim();
-  if (!value) return '';
-  try {
-    const parsed = new URL(value);
-    parsed.hash = '';
-    return parsed.toString().replace(/\/$/, '');
-  } catch {
-    return value.replace(/\/$/, '');
-  }
+  return normalizeCareerUrl(url);
 }
 
 export function parseCompaniesFromHtml(html) {

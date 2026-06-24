@@ -11,7 +11,8 @@
     "db:seed": "sequelize-cli db:seed:all",
     "test": "node --test tests/*.test.js",
     "menus:refresh": "node scripts/refresh-bot-menus.js",
-    "companies:import-html": "node scripts/import-remote-companies-from-hypercareer-html.js"
+    "companies:import-html": "node scripts/import-remote-companies-from-hypercareer-html.js",
+    "companies:fix-urls": "node scripts/fix-remote-company-urls.js"
   },
   "engines": {
     "node": ">=20.0.0"

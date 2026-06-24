@@ -70,6 +70,8 @@ export function toStringOrUndefined(value, maxLen = 255) {
   return trimmed.slice(0, maxLen);
 }
 
+import { normalizeCareerUrl } from './urlNormalize.js';
+
 export function toValidUrlOrUndefined(value) {
   if (typeof value !== 'string') return undefined;
   const raw = value.trim();
@@ -81,6 +83,13 @@ export function toValidUrlOrUndefined(value) {
   } catch {
     return undefined;
   }
+}
+
+export function toNormalizedCareerUrlOrUndefined(value) {
+  if (typeof value !== 'string') return undefined;
+  const normalized = normalizeCareerUrl(value);
+  if (!normalized) return undefined;
+  return toValidUrlOrUndefined(normalized);
 }
 
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
