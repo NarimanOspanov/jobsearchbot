@@ -1068,7 +1068,9 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       appBaseUrl: result.appBaseUrl,
       maxJobs: 5,
     });
-    const showAllButton = { text: t(lang, 'btn_see_all_positions'), callback_data: 'similar_positions_show_all' };
+    const showAllButton = canUseSeekerJobsWebApp
+      ? { text: t(lang, 'btn_see_all_positions'), web_app: { url: seekerJobsUrl } }
+      : { text: t(lang, 'btn_see_all_positions'), callback_data: 'similar_positions_show_all' };
     const text = `<b>${t(lang, 'similar_positions_header')}</b>\n\n${jobListHtml}`;
     await ctx.reply(text, {
       parse_mode: 'HTML',
@@ -1086,14 +1088,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
     const lang = langFromCtx(ctx);
     const passed = await enforceStartRequiredChannelsGate(ctx);
     if (!passed) return;
-    // Subscribed: swap the "show all" button to the web-app button in-place — no extra message needed
-    if (canUseSeekerJobsWebApp) {
-      await ctx.editMessageReplyMarkup({
-        inline_keyboard: [[{ text: t(lang, 'btn_jobsearch'), web_app: { url: seekerJobsUrl } }]],
-      }).catch(() => {});
-    } else {
-      await openJobSearchFromBot(ctx);
-    }
+    await openJobSearchFromBot(ctx);
   });
 
   bot.command('plans', async (ctx) => {
