@@ -78,6 +78,7 @@
                 <th id="thAppliedAt">Applied at</th>
                 <th id="thTitle">Title</th>
                 <th id="thCompany">Company</th>
+                <th id="thApplyType">Apply type</th>
                 <th id="thLocation">Location</th>
               </tr>
             </thead>
@@ -137,6 +138,7 @@
           thAppliedAt: 'Applied at',
           thTitle: 'Title',
           thCompany: 'Company',
+          thApplyType: 'Apply type',
           thLocation: 'Location',
           empty: 'No applied jobs in the selected period.',
           modalTitle: 'Job details',
@@ -178,6 +180,7 @@
           thAppliedAt: 'Время отклика',
           thTitle: 'Вакансия',
           thCompany: 'Компания',
+          thApplyType: 'Тип отклика',
           thLocation: 'Локация',
           empty: 'За выбранный период нет откликов.',
           modalTitle: 'Детали вакансии',
@@ -343,6 +346,23 @@
         return date.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US');
       }
 
+      function formatApplyTypeDisplay(row) {
+        const applyType = String(row?.applyType || '').trim().toLowerCase();
+        const source = String(row?.source || '').trim().toLowerCase();
+        if (!applyType) return t('noData');
+        if (applyType === 'easy_apply') {
+          if (source === 'linkedin') return 'LinkedIn';
+          if (source === 'indeed') return 'Indeed';
+          return 'Easy Apply';
+        }
+        if (applyType === 'hh') return 'HH';
+        if (applyType === 'telegram') return 'Telegram';
+        if (applyType === 'external') return lang === 'ru' ? 'Сторонний сайт' : 'Third party';
+        if (applyType === 'linkedin') return 'LinkedIn';
+        if (applyType === 'indeed') return 'Indeed';
+        return row.applyType || t('noData');
+      }
+
       function applyStaticUi() {
         document.title = t('pageTitle');
         document.getElementById('titleText').textContent = t('pageTitle');
@@ -360,6 +380,7 @@
         document.getElementById('thAppliedAt').textContent = t('thAppliedAt');
         document.getElementById('thTitle').textContent = t('thTitle');
         document.getElementById('thCompany').textContent = t('thCompany');
+        document.getElementById('thApplyType').textContent = t('thApplyType');
         document.getElementById('thLocation').textContent = t('thLocation');
         document.getElementById('jobModalTitle').textContent = t('modalTitle');
         document.getElementById('closeModalBtn').textContent = t('close');
@@ -375,7 +396,7 @@
       function renderRows() {
         const body = document.getElementById('rowsBody');
         if (!rows.length) {
-          body.innerHTML = `<tr><td colspan="4" class="empty">${esc(t('empty'))}</td></tr>`;
+          body.innerHTML = `<tr><td colspan="5" class="empty">${esc(t('empty'))}</td></tr>`;
           return;
         }
         body.innerHTML = rows
@@ -391,6 +412,7 @@
               <td>${esc(fmtDateTime(row.appliedAt))}</td>
               <td>${titleHtml}</td>
               <td>${esc(row.companyName || t('noData'))}</td>
+              <td>${esc(formatApplyTypeDisplay(row))}</td>
               <td>${esc(location)}</td>
             </tr>`;
           })
@@ -424,7 +446,7 @@
         document.getElementById('jobCompanyLine').textContent =
           `${row.companyName || t('noData')} · ${meta?.location || t('noLocation')} · ${row.source || t('noData')}`;
         document.getElementById('jobAppliedAtLine').textContent = `${t('appliedAt')}: ${fmtDateTime(row.appliedAt)}`;
-        document.getElementById('jobApplyTypeLine').textContent = `${t('applyType')}: ${row.applyType || t('noData')}`;
+        document.getElementById('jobApplyTypeLine').textContent = `${t('applyType')}: ${formatApplyTypeDisplay(row)}`;
         document.getElementById('summaryText').textContent = String(meta?.shortSummary || '').trim() || t('noSummary');
         renderApplyPrioritySection(rowApplyPriority(row));
         document.getElementById('coverLetterText').textContent = String(row.coverLetter || '').trim() || t('noCover');
