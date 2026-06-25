@@ -390,6 +390,7 @@ export async function listHhApplyClients({ limit = 200 } = {}) {
         firstName: row.firstName || null,
         lastName: row.lastName || null,
         preferences: row.preferences ?? null,
+        searchMode: String(user.SearchMode || 'not_urgent').trim() === 'urgent' ? 'urgent' : 'not_urgent',
         skillIds: normalizeSkillIds(user.skills),
         workAuthorizationCountries: String(user.WorkAuthorizationCountries || '').trim(),
         resumeUrl: row.resumeUrl || null,
