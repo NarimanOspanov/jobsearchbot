@@ -1068,9 +1068,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       appBaseUrl: result.appBaseUrl,
       maxJobs: 5,
     });
-    const showAllButton = canUseSeekerJobsWebApp
-      ? { text: t(lang, 'btn_see_all_positions'), web_app: { url: seekerJobsUrl } }
-      : { text: t(lang, 'btn_see_all_positions'), callback_data: 'similar_positions_show_all' };
+    const showAllButton = { text: t(lang, 'btn_see_all_positions'), callback_data: 'similar_positions_show_all' };
     const text = `<b>${t(lang, 'similar_positions_header')}</b>\n\n${jobListHtml}`;
     await ctx.reply(text, {
       parse_mode: 'HTML',
