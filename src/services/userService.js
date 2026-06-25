@@ -139,6 +139,7 @@ export async function ensureUserByTelegramId(telegramId, username = null, firstN
         TelegramUserName: username,
         FirstName: firstName,
         LastName: lastName,
+        HhEnabled: false,
         DateJoined: Sequelize.literal('GETUTCDATE()'),
       });
       wasCreated = true;

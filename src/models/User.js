@@ -70,7 +70,7 @@ export default function defineUser(sequelize) {
       HhEnabled: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
-        defaultValue: true,
+        defaultValue: false,
       },
       LinkedInEnabled: {
         type: DataTypes.BOOLEAN,
