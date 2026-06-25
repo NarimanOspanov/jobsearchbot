@@ -260,7 +260,8 @@ export async function runResumeEnrichment({
   const contactsPromise = previewOnly
     ? Promise.resolve(null)
     : extractResumeContactsWithAI(resumeText);
-  const skillsPromise = includeSkills
+  const existingSkills = normalizeSkillIds(user.skills);
+  const skillsPromise = includeSkills && existingSkills.length === 0
     ? fetchScreenlySkillsCatalog()
         .then((skillsCatalog) => extractResumeSkillIdsWithAI(resumeText, skillsCatalog))
         .catch((skillsErr) => {
@@ -281,7 +282,7 @@ export async function runResumeEnrichment({
   ]);
   const updates = {};
   if (resumeContacts) updates.ResumeContactsJson = JSON.stringify(resumeContacts);
-  if (includeSkills && Array.isArray(resumeSkillIds)) updates.skills = resumeSkillIds;
+  if (includeSkills && existingSkills.length === 0 && Array.isArray(resumeSkillIds)) updates.skills = resumeSkillIds;
   if (shouldFillWorkAuth && Array.isArray(resumeWorkAuthCountries) && resumeWorkAuthCountries.length > 0) {
     updates.WorkAuthorizationCountries = normalizeWorkAuthCountries(resumeWorkAuthCountries).join(',');
   }
