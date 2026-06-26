@@ -162,7 +162,7 @@ export function filterAssignedClientsWithResume(assignments) {
     .filter((client) => clientHasResumeForAgentAccess(client));
 }
 
-export async function listAllAgentAssignedClients({ limit = 200, offset = 0 } = {}) {
+export async function listAllAgentAssignedClients({ limit = 200, offset = 0, requireResume = true } = {}) {
   const safeLimit = Math.min(200, Math.max(1, Number.parseInt(String(limit), 10) || 200));
   const safeOffset = Math.max(0, Number.parseInt(String(offset), 10) || 0);
   const assignments = await models.AgentClients.findAll({
@@ -171,7 +171,12 @@ export async function listAllAgentAssignedClients({ limit = 200, offset = 0 } = 
     limit: safeLimit,
     offset: safeOffset,
   });
-  return filterAssignedClientsWithResume(assignments);
+  if (requireResume) {
+    return filterAssignedClientsWithResume(assignments);
+  }
+  return (Array.isArray(assignments) ? assignments : [])
+    .map((row) => row?.Client ?? row)
+    .filter(Boolean);
 }
 
 export async function listApplyPriorityEnqueueClientUserIds({ agentUserId = null } = {}) {

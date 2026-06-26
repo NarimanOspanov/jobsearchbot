@@ -218,7 +218,7 @@ export function createAgentClientsRouter() {
 
       let clients = [];
       if (workflowMode === 'easy_apply') {
-        const users = await listAllAgentAssignedClients({ limit, offset });
+        const users = await listAllAgentAssignedClients({ limit, offset, requireResume: false });
         clients = users.map((u) => mapUserToAgentClientPayload(u));
       } else {
         const assignments = await models.AgentClients.findAll({
@@ -230,7 +230,7 @@ export function createAgentClientsRouter() {
         });
         clients = assignments
           .map((a) => a.Client)
-          .filter((u) => u && String(u.ResumeURL || '').trim())
+          .filter(Boolean)
           .map((u) => mapUserToAgentClientPayload(u));
       }
 
