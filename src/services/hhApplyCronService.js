@@ -189,12 +189,16 @@ export function validateHhApplicationCheckQuery({ userId, hhVacancyId, hhId } = 
   return { ok: true, userId: parsedUserId, hhVacancyId: normalizedVacancyId };
 }
 
+export function isRejectedApplicationStatus(status) {
+  return String(status || '').trim().toLowerCase() === 'rejected';
+}
+
 export async function checkHhApplicationApplied({ userId, hhVacancyId, hhId } = {}) {
   const validated = validateHhApplicationCheckQuery({ userId, hhVacancyId, hhId });
   if (!validated.ok) return validated;
 
   const existing = await findHhApplicationByVacancyId(validated.userId, validated.hhVacancyId);
-  if (!existing) {
+  if (!existing || isRejectedApplicationStatus(existing.Status)) {
     return { ok: true, applied: false };
   }
 
@@ -249,8 +253,11 @@ export function buildHhApplicationBackfillUpdates(existing, payload) {
   if (!String(existing.CoverLetterUrl || '').trim() && payload.coverLetterUrl) {
     updates.CoverLetterUrl = payload.coverLetterUrl;
   }
-  if (payload.status && !String(existing.Status || '').trim()) {
-    updates.Status = payload.status;
+  if (payload.status) {
+    const existingStatus = String(existing.Status || '').trim().toLowerCase();
+    if (!existingStatus || existingStatus === 'rejected') {
+      updates.Status = payload.status;
+    }
   }
   if (!existing.AppliedAt && payload.appliedAt) {
     updates.AppliedAt = payload.appliedAt;

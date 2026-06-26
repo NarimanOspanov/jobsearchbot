@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildHhApplicationBackfillUpdates,
   buildHhImportMetaJson,
+  isRejectedApplicationStatus,
   metaHhVacancyId,
   normalizeHhVacancyId,
   parseApplyPriorityJsonFromBody,
@@ -103,6 +104,13 @@ test('parseApplyPriorityJsonFromBody accepts object or JSON string', () => {
   assert.equal(parseApplyPriorityJsonFromBody('not-json').ok, false);
 });
 
+test('isRejectedApplicationStatus matches rejected case-insensitively', () => {
+  assert.equal(isRejectedApplicationStatus('rejected'), true);
+  assert.equal(isRejectedApplicationStatus('Rejected'), true);
+  assert.equal(isRejectedApplicationStatus('applied'), false);
+  assert.equal(isRejectedApplicationStatus(''), false);
+});
+
 test('buildHhApplicationBackfillUpdates fills empty fields without overwriting populated ones', () => {
   const updates = buildHhApplicationBackfillUpdates(
     {
@@ -126,4 +134,19 @@ test('buildHhApplicationBackfillUpdates fills empty fields without overwriting p
   assert.equal(updates.Source, undefined);
   assert.equal(updates.ApplyType, undefined);
   assert.equal(updates.MetaJson, JSON.stringify({ hhVacancyId: '55', source: 'hh', applyUrl: 'https://hh.ru/vacancy/55' }));
+});
+
+test('buildHhApplicationBackfillUpdates overwrites rejected status on re-import', () => {
+  const updates = buildHhApplicationBackfillUpdates(
+    {
+      Status: 'rejected',
+      MetaJson: JSON.stringify({ hhVacancyId: '55' }),
+    },
+    {
+      hhVacancyId: '55',
+      vacancyTitle: 'Engineer',
+      status: 'applied',
+    }
+  );
+  assert.equal(updates.Status, 'applied');
 });
