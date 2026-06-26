@@ -12,6 +12,7 @@ import {
 let schedulerStarted = false;
 let fallbackStarted = false;
 let screeningCronRunning = false;
+let singleUserCronStarted = false;
 
 function logScreeningScheduleMode() {
   const rejectionChatFilter = config.rejectionNotificationChatIds;
@@ -68,7 +69,38 @@ function startScreeningCronFallback() {
     `Position apply screening cron fallback (every ${Math.round(config.screeningCronIntervalMs / 1000)} s, first run in ~${Math.round(startupDelayMs / 1000)} s)`
   );
   logScreeningScheduleMode();
+  startSingleUserScreeningCronIfNeeded();
   return { started: true, reason: 'fallback_in_process', mode: 'fallback' };
+}
+
+const SINGLE_USER_CRON_INTERVAL_MS = 5 * 60 * 1000;
+
+function startSingleUserScreeningCronIfNeeded() {
+  const chatId = config.screeningSingleChatId;
+  if (!chatId || singleUserCronStarted) return;
+  singleUserCronStarted = true;
+
+  const screeningJobsUi = buildScreeningJobsUi();
+  const run = async () => {
+    if (!runtimeBot.telegram) return;
+    try {
+      const result = await processDueScreeningResponses({
+        telegram: runtimeBot.telegram,
+        jobsUi: screeningJobsUi,
+        rejectionNotificationIds: [chatId],
+        ignoreDueAt: true,
+      });
+      if (result.processed > 0 || result.sent > 0) {
+        console.log(`Position apply screening single-user cron (chatId=${chatId}):`, result);
+      }
+    } catch (err) {
+      console.error(`Position apply screening single-user cron error (chatId=${chatId}):`, err?.message || err);
+    }
+  };
+
+  setTimeout(run, config.screeningCronStartupDelayMs);
+  setInterval(run, SINGLE_USER_CRON_INTERVAL_MS);
+  console.log(`Position apply screening single-user cron started (chatId=${chatId}, every ${SINGLE_USER_CRON_INTERVAL_MS / 1000}s)`);
 }
 
 /**
@@ -125,5 +157,6 @@ export function startPositionApplyScreeningCronIfNeeded() {
     `Position apply screening cron scheduled via Redis (every ${Math.round(config.screeningCronIntervalMs / 1000)} s, first enqueue in ~${Math.round(startupDelayMs / 1000)} s)`
   );
   logScreeningScheduleMode();
+  startSingleUserScreeningCronIfNeeded();
   return { started: true, reason: null, mode: 'redis' };
 }

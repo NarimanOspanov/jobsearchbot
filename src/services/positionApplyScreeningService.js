@@ -8,6 +8,7 @@ import { normalizeUserLanguage } from '../utils/userLanguage.js';
 import { isValidTelegramWebAppUrl } from '../utils/telegramUtils.js';
 import { formatTopJobsTelegramHtml } from './telegraphService.js';
 import { getRequiredChannelsState } from './channelService.js';
+import { fetchSimilarPositionsBySkills } from './applyAckPreviewService.js';
 
 export const USER_APPLICATION_STATUS = {
   PENDING_SCREENING: 'pending_screening',
@@ -179,12 +180,12 @@ export function buildScreeningJobsUi() {
   };
 }
 
-function buildDueScreeningWhere(rejectionNotificationIds, onlyUserApplicationId = null) {
+function buildDueScreeningWhere(rejectionNotificationIds, onlyUserApplicationId = null, { ignoreDueAt = false } = {}) {
   const chatIdAllowlist = getRejectionNotificationChatIdFilter(rejectionNotificationIds);
-  const where = {
-    Status: USER_APPLICATION_STATUS.PENDING_SCREENING,
-    ScreeningResponseDueAt: { [Op.lte]: new Date() },
-  };
+  const where = { Status: USER_APPLICATION_STATUS.PENDING_SCREENING };
+  if (!ignoreDueAt) {
+    where.ScreeningResponseDueAt = { [Op.lte]: new Date() };
+  }
   if (onlyUserApplicationId != null) {
     const appId = Number.parseInt(String(onlyUserApplicationId), 10);
     if (Number.isSafeInteger(appId) && appId > 0) where.Id = appId;
@@ -361,6 +362,7 @@ export async function processDueScreeningResponses({
   jobsUi,
   rejectionNotificationIds = undefined,
   onlyUserApplicationId = null,
+  ignoreDueAt = false,
 }) {
   const status = await getPositionApplyScreeningStatus({
     rejectionNotificationIds,
@@ -387,7 +389,7 @@ export async function processDueScreeningResponses({
     return result;
   }
 
-  const { where } = buildDueScreeningWhere(rejectionNotificationIds, onlyUserApplicationId);
+  const { where } = buildDueScreeningWhere(rejectionNotificationIds, onlyUserApplicationId, { ignoreDueAt });
   if (result.rejectionNotificationChatIds) {
     const { userIds: allowedUserIds } = await resolveRejectionNotificationUserIds(
       getRejectionNotificationChatIdFilter(rejectionNotificationIds)
@@ -466,6 +468,27 @@ export async function processDueScreeningResponses({
         sentAt: new Date(),
       });
       result.sent += 1;
+
+      const position = await models.Positions.findByPk(row.PositionId, {
+        attributes: ['Id', 'Skills'],
+      });
+      if (position) {
+        const similars = await fetchSimilarPositionsBySkills(position.Skills);
+        if (!similars.skipped && similars.topJobs?.length) {
+          const jobListHtml = formatTopJobsTelegramHtml({
+            jobs: similars.topJobs,
+            appBaseUrl: similars.appBaseUrl,
+            maxJobs: 5,
+          });
+          const similarsText = `<b>${t(lang, 'similar_positions_header')}</b>\n\n${jobListHtml}`;
+          const showAllButton = { text: t(lang, 'btn_see_all_positions'), callback_data: 'similar_positions_show_all' };
+          await telegram.sendMessage(chatId, similarsText, {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+            reply_markup: { inline_keyboard: [[showAllButton]] },
+          });
+        }
+      }
     } catch (err) {
       await recordUserApplicationOutreach({
         userApplicationId: row.Id,

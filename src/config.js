@@ -66,6 +66,8 @@ export const config = {
    * Comma-separated. Unset/empty = all due applicants.
    */
   rejectionNotificationChatIds: parseCommaSeparatedIdSet(getEnv('REJECTION_NOTIFICATION_IDS')),
+  /** Single TelegramChatId to run a dedicated 5-minute rejection check for (test/debug). */
+  screeningSingleChatId: '412811910',
   /** Shared secret for POST/GET /api/cron/position-apply-screening/* (manual or external scheduler). */
   screeningCronSecret: getEnv('SCREENING_CRON_SECRET'),
   /** Shared secret for HeadHunter apply service (/api/hh-apply/*). */
