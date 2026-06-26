@@ -1,6 +1,7 @@
 import { Sequelize } from 'sequelize';
 import { models, sequelize } from '../db.js';
 import { clientHasResumeForAgentAccess, findAssignmentForClient } from './agentAccessService.js';
+import { isAppliedApplicationStatus } from './applicationAgentAttribution.js';
 import { getSeekerResumeTextForTailoring } from './tailoredCvService.js';
 import { resumeStorage } from './resumeStorage.js';
 import { isSupportedResumeMimeType, normalizeSkillIds } from './userService.js';
@@ -193,24 +194,38 @@ export function isRejectedApplicationStatus(status) {
   return String(status || '').trim().toLowerCase() === 'rejected';
 }
 
+export function buildHhApplicationCheckPayload(existing) {
+  const emptyAppliedFields = {
+    applicationId: null,
+    appliedAt: null,
+    vacancyTitle: null,
+    companyName: null,
+  };
+
+  if (!existing) {
+    return { status: null, ...emptyAppliedFields };
+  }
+
+  const status = existing.Status || null;
+  if (!isAppliedApplicationStatus(status)) {
+    return { status, ...emptyAppliedFields };
+  }
+
+  return {
+    status,
+    applicationId: existing.Id,
+    appliedAt: existing.AppliedAt || null,
+    vacancyTitle: existing.VacancyTitle || null,
+    companyName: existing.CompanyName || null,
+  };
+}
+
 export async function checkHhApplicationApplied({ userId, hhVacancyId, hhId } = {}) {
   const validated = validateHhApplicationCheckQuery({ userId, hhVacancyId, hhId });
   if (!validated.ok) return validated;
 
   const existing = await findHhApplicationByVacancyId(validated.userId, validated.hhVacancyId);
-  if (!existing || isRejectedApplicationStatus(existing.Status)) {
-    return { ok: true, applied: false };
-  }
-
-  return {
-    ok: true,
-    applied: true,
-    applicationId: existing.Id,
-    status: existing.Status || null,
-    appliedAt: existing.AppliedAt || null,
-    vacancyTitle: existing.VacancyTitle || null,
-    companyName: existing.CompanyName || null,
-  };
+  return { ok: true, ...buildHhApplicationCheckPayload(existing) };
 }
 
 function parseAppliedAtFromBody(value) {

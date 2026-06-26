@@ -62,10 +62,10 @@ export function createHhApplyRouter() {
         hhVacancyId: req.query.hhVacancyId,
         hhId: req.query.hhId,
       });
-      if (!result.ok && result.status) {
+      if (!result.ok) {
         return res.status(result.status).json({ error: result.error });
       }
-      const { ok: _ok, status: _status, error: _error, ...payload } = result;
+      const { ok: _ok, ...payload } = result;
       return res.json(payload);
     } catch (err) {
       console.error('GET /api/hh-apply/applications/check:', err);

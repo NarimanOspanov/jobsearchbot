@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildHhApplicationBackfillUpdates,
+  buildHhApplicationCheckPayload,
   buildHhImportMetaJson,
   isRejectedApplicationStatus,
   metaHhVacancyId,
@@ -109,6 +110,49 @@ test('isRejectedApplicationStatus matches rejected case-insensitively', () => {
   assert.equal(isRejectedApplicationStatus('Rejected'), true);
   assert.equal(isRejectedApplicationStatus('applied'), false);
   assert.equal(isRejectedApplicationStatus(''), false);
+});
+
+test('buildHhApplicationCheckPayload returns status and clears applied fields when not applied', () => {
+  const emptyAppliedFields = {
+    applicationId: null,
+    appliedAt: null,
+    vacancyTitle: null,
+    companyName: null,
+  };
+
+  assert.deepEqual(buildHhApplicationCheckPayload(null), {
+    status: null,
+    ...emptyAppliedFields,
+  });
+  assert.deepEqual(
+    buildHhApplicationCheckPayload({
+      Id: 42,
+      Status: 'rejected',
+      AppliedAt: new Date('2026-06-01T00:00:00.000Z'),
+      VacancyTitle: 'Engineer',
+      CompanyName: 'Acme',
+    }),
+    {
+      status: 'rejected',
+      ...emptyAppliedFields,
+    }
+  );
+  assert.deepEqual(
+    buildHhApplicationCheckPayload({
+      Id: 7,
+      Status: 'applied',
+      AppliedAt: null,
+      VacancyTitle: 'PM',
+      CompanyName: null,
+    }),
+    {
+      status: 'applied',
+      applicationId: 7,
+      appliedAt: null,
+      vacancyTitle: 'PM',
+      companyName: null,
+    }
+  );
 });
 
 test('buildHhApplicationBackfillUpdates fills empty fields without overwriting populated ones', () => {
