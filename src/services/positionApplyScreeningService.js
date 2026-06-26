@@ -451,9 +451,13 @@ export async function processDueScreeningResponses({
       channelSubscribed: channelsState.ok,
     });
 
+    const position = await models.Positions.findByPk(row.PositionId, { attributes: ['Id', 'Skills'] });
+    const similars = position ? await fetchSimilarPositionsBySkills(position.Skills) : null;
+    const hasSimilars = !similars?.skipped && similars?.topJobs?.length > 0;
+
     try {
       const sent = await telegram.sendMessage(chatId, text, {
-        reply_markup: replyMarkup || undefined,
+        reply_markup: hasSimilars ? undefined : replyMarkup || undefined,
       });
       await row.update({ Status: USER_APPLICATION_STATUS.DOES_NOT_MATCH });
       await recordUserApplicationOutreach({
@@ -469,25 +473,19 @@ export async function processDueScreeningResponses({
       });
       result.sent += 1;
 
-      const position = await models.Positions.findByPk(row.PositionId, {
-        attributes: ['Id', 'Skills'],
-      });
-      if (position) {
-        const similars = await fetchSimilarPositionsBySkills(position.Skills);
-        if (!similars.skipped && similars.topJobs?.length) {
-          const jobListHtml = formatTopJobsTelegramHtml({
-            jobs: similars.topJobs,
-            appBaseUrl: similars.appBaseUrl,
-            maxJobs: 5,
-          });
-          const similarsText = `<b>${t(lang, 'similar_positions_header')}</b>\n\n${jobListHtml}`;
-          const showAllButton = { text: t(lang, 'btn_see_all_positions'), callback_data: 'similar_positions_show_all' };
-          await telegram.sendMessage(chatId, similarsText, {
-            parse_mode: 'HTML',
-            disable_web_page_preview: true,
-            reply_markup: { inline_keyboard: [[showAllButton]] },
-          });
-        }
+      if (hasSimilars) {
+        const jobListHtml = formatTopJobsTelegramHtml({
+          jobs: similars.topJobs,
+          appBaseUrl: similars.appBaseUrl,
+          maxJobs: 5,
+        });
+        const similarsText = `<b>${t(lang, 'similar_positions_header')}</b>\n\n${jobListHtml}`;
+        const showAllButton = { text: t(lang, 'btn_see_all_positions'), callback_data: 'similar_positions_show_all' };
+        await telegram.sendMessage(chatId, similarsText, {
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          reply_markup: { inline_keyboard: [[showAllButton]] },
+        });
       }
     } catch (err) {
       await recordUserApplicationOutreach({
