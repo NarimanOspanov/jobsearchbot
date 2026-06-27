@@ -8,6 +8,7 @@ import {
   metaHhVacancyId,
   normalizeHhVacancyId,
   parseApplyPriorityJsonFromBody,
+  parseApplyPriorityJsonField,
   parseHhSearchUrlsInput,
   validateHhApplicationCheckQuery,
   validateHhArtifactFile,
@@ -136,6 +137,7 @@ test('buildHhApplicationCheckPayload returns status and clears applied fields wh
     appliedAt: null,
     vacancyTitle: null,
     companyName: null,
+    applyPriorityJson: null,
   };
 
   assert.deepEqual(buildHhApplicationCheckPayload(null), {
@@ -162,6 +164,7 @@ test('buildHhApplicationCheckPayload returns status and clears applied fields wh
       AppliedAt: null,
       VacancyTitle: 'PM',
       CompanyName: null,
+      ApplyPriorityJson: '{"rank":1,"score":9.2}',
     }),
     {
       status: 'applied',
@@ -169,6 +172,7 @@ test('buildHhApplicationCheckPayload returns status and clears applied fields wh
       appliedAt: null,
       vacancyTitle: 'PM',
       companyName: null,
+      applyPriorityJson: { rank: 1, score: 9.2 },
     }
   );
 });

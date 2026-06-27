@@ -263,12 +263,23 @@ export function isRejectedApplicationStatus(status) {
   return String(status || '').trim().toLowerCase() === 'rejected';
 }
 
+export function parseApplyPriorityJsonField(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(String(raw));
+  } catch {
+    return null;
+  }
+}
+
 export function buildHhApplicationCheckPayload(existing) {
   const emptyAppliedFields = {
     applicationId: null,
     appliedAt: null,
     vacancyTitle: null,
     companyName: null,
+    applyPriorityJson: null,
   };
 
   if (!existing) {
@@ -286,6 +297,7 @@ export function buildHhApplicationCheckPayload(existing) {
     appliedAt: existing.AppliedAt || null,
     vacancyTitle: existing.VacancyTitle || null,
     companyName: existing.CompanyName || null,
+    applyPriorityJson: parseApplyPriorityJsonField(existing.ApplyPriorityJson),
   };
 }
 
