@@ -135,6 +135,16 @@ function mapMentorAssignmentRow(row) {
 
 const CLIENT_COMMENT_MAX_LENGTH = 4000;
 const CLIENT_NOTE_MAX_LENGTH = 4000;
+const CLIENT_HH_COOKIES_MAX_LENGTH = 65535;
+
+function toHhCookiesOrNullOrUndefined(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > CLIENT_HH_COOKIES_MAX_LENGTH) return undefined;
+  return trimmed;
+}
 
 function parseImpersonateAgentUserId(req) {
   const n = Number.parseInt(String(req.query.agentUserId || req.body?.agentUserId || ''), 10);
@@ -822,6 +832,15 @@ export function createAgentClientsRouter() {
           }
           updates.CompanySitesEnabled = companySitesEnabled;
         }
+        if ('hhCookies' in req.body) {
+          const hhCookies = toHhCookiesOrNullOrUndefined(req.body.hhCookies);
+          if (hhCookies === undefined) {
+            return res.status(400).json({
+              error: `hhCookies must be a string with at most ${CLIENT_HH_COOKIES_MAX_LENGTH} characters`,
+            });
+          }
+          updates.HhCookies = hhCookies;
+        }
 
         const hasUserUpdates = Object.keys(updates).length > 0;
         const hasHhSearchUrlsUpdate = 'hhSearchUrls' in req.body;
@@ -858,6 +877,7 @@ export function createAgentClientsRouter() {
           indeedEnabled: !!client.IndeedEnabled,
           companySitesEnabled: !!client.CompanySitesEnabled,
           hhSearchUrls,
+          hhCookies: client.HhCookies ?? null,
         });
       } catch (err) {
         console.error('PATCH /api/app/agent/clients/:clientUserId/settings:', err);

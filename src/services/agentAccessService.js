@@ -377,6 +377,7 @@ export function mapUserToAgentClientPayload(u) {
     indeedEnabled: !!u.IndeedEnabled,
     companySitesEnabled: !!u.CompanySitesEnabled,
     hhSearchUrls: Array.isArray(u.hhSearchUrls) ? u.hhSearchUrls : [],
+    hhCookies: u.HhCookies ?? null,
     ...projection,
   };
 }

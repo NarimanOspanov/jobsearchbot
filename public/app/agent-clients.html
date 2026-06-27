@@ -279,6 +279,20 @@
         color: var(--text);
       }
       .hh-search-urls-empty { font-size: 13px; color: var(--muted); margin: 0; }
+      .hh-auth-data-block { display: grid; gap: 10px; }
+      .hh-auth-data-block textarea {
+        width: 100%;
+        min-height: 220px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #10182d;
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.45;
+        resize: vertical;
+      }
       .resume-open-link { margin: 6px 0 10px; }
       .resume-open-link a { font-weight: 600; }
       .resume-file-input { display: none; }
@@ -963,6 +977,7 @@
               <div class="preferences-sub-tabs" role="tablist" aria-label="Preferences sections">
                 <button type="button" class="preferences-sub-tab-btn is-active" data-preferences-sub-tab="general" role="tab" aria-selected="true">General</button>
                 <button type="button" class="preferences-sub-tab-btn" data-preferences-sub-tab="hhSearchUrls" role="tab" aria-selected="false">HeadHunter search URLs</button>
+                <button type="button" class="preferences-sub-tab-btn" data-preferences-sub-tab="hhAuthData" role="tab" aria-selected="false">HH auth data</button>
               </div>
               <div data-preferences-sub-panel="general" class="preferences-sub-panel" role="tabpanel">
                 <div data-client-role="clientSettingsBlock" class="client-settings-block">
@@ -1037,6 +1052,21 @@
                   <div class="row" style="margin:0">
                     <button data-client-role="addClientHhSearchUrlBtn" type="button" class="ghost-btn">Add URL</button>
                   </div>
+                </div>
+              </div>
+              <div data-preferences-sub-panel="hhAuthData" class="preferences-sub-panel is-hidden" role="tabpanel">
+                <div data-client-role="clientHhAuthDataBlock" class="hh-auth-data-block">
+                  <p class="muted" style="margin:0;font-size:13px">HeadHunter session cookies used by the HH apply service. Paste the exported cookie JSON or header value for this client.</p>
+                  <label class="client-comment-label">
+                    <span class="k">HhCookies</span>
+                    <textarea
+                      data-client-role="clientHhCookiesText"
+                      rows="12"
+                      placeholder="Paste HeadHunter cookies here..."
+                      aria-label="HeadHunter cookies"
+                      spellcheck="false"
+                    ></textarea>
+                  </label>
                 </div>
               </div>
               <div class="row" style="margin-top:12px">
@@ -1474,6 +1504,7 @@
           'clientIndeedEnabledToggle',
           'clientCompanySitesEnabledToggle',
           'addClientHhSearchUrlBtn',
+          'clientHhCookiesText',
           'saveClientCommentBtn',
           'saveClientNoteBtn',
           'viewClientResumeBtn',
@@ -3005,7 +3036,8 @@
         row.querySelector('input')?.focus();
       }
       function setActivePreferencesSubTab(tab) {
-        const next = tab === 'hhSearchUrls' ? 'hhSearchUrls' : 'general';
+        const allowed = new Set(['general', 'hhSearchUrls', 'hhAuthData']);
+        const next = allowed.has(tab) ? tab : 'general';
         const panelRoot = document.getElementById('userInfoTabPreferences');
         if (!panelRoot) return;
         panelRoot.querySelectorAll('[data-preferences-sub-tab]').forEach((btn) => {
@@ -3423,6 +3455,7 @@
           applyClientWorkAuthCsv(scope, '');
           syncClientPlatformSettingsUi(scope, null);
           renderClientHhSearchUrlsList(scope, []);
+          syncClientHhCookiesUi(scope, null);
           return;
         }
         const searchModeSel = clientEl(scope, 'clientSearchModeSel');
@@ -3433,6 +3466,14 @@
         applyClientWorkAuthCsv(scope, user.workAuthorizationCountries || '');
         syncClientPlatformSettingsUi(scope, user);
         renderClientHhSearchUrlsList(scope, user.hhSearchUrls || []);
+        syncClientHhCookiesUi(scope, user);
+      }
+
+      function syncClientHhCookiesUi(scope, user) {
+        if (scope !== MAIN_CLIENT_SCOPE) return;
+        const textarea = clientEl(scope, 'clientHhCookiesText');
+        if (!textarea) return;
+        textarea.value = user?.hhCookies != null ? String(user.hhCookies) : '';
       }
 
       function getClientSkillIds(scope) {
@@ -3619,6 +3660,7 @@
           indeedEnabled: platformSettings.indeedEnabled,
           companySitesEnabled: platformSettings.companySitesEnabled,
           hhSearchUrls: getClientHhSearchUrlsFromUi(scope),
+          hhCookies: String(clientEl(scope, 'clientHhCookiesText')?.value || '').trim() || null,
         };
         if (isBotAdminUser) {
           const aid = String(q().agentUserId || '').trim();
@@ -3635,6 +3677,7 @@
           const savedWorkAuth = payload?.workAuthorizationCountries || '';
           const savedSkills = Array.isArray(payload?.skills) ? payload.skills : getClientSkillIds(scope);
           const savedHhSearchUrls = Array.isArray(payload?.hhSearchUrls) ? payload.hhSearchUrls : getClientHhSearchUrlsFromUi(scope);
+          const savedHhCookies = payload?.hhCookies ?? null;
           const idx = users.findIndex((u) => String(u.id) === String(seekerId));
           if (idx >= 0) {
             users[idx] = {
@@ -3648,6 +3691,7 @@
               indeedEnabled: !!payload?.indeedEnabled,
               companySitesEnabled: !!payload?.companySitesEnabled,
               hhSearchUrls: savedHhSearchUrls,
+              hhCookies: savedHhCookies,
             };
           }
           const commentEl = clientEl(MAIN_CLIENT_SCOPE, 'clientCommentText');
@@ -3658,6 +3702,7 @@
           applyClientWorkAuthCsv(MAIN_CLIENT_SCOPE, savedWorkAuth);
           syncClientPlatformSettingsUi(MAIN_CLIENT_SCOPE, users[idx] || getSelectedUser());
           renderClientHhSearchUrlsList(MAIN_CLIENT_SCOPE, savedHhSearchUrls);
+          syncClientHhCookiesUi(MAIN_CLIENT_SCOPE, users[idx] || { hhCookies: savedHhCookies });
           setScopeMsg(MAIN_CLIENT_SCOPE, 'clientCommentMsg', 'Saved.');
           applyUserSkillsToFilters(users[idx] || getSelectedUser(), { force: true });
           invalidateApplyPriorityCache();
