@@ -279,25 +279,25 @@ export function buildHhApplicationCheckPayload(existing) {
     appliedAt: null,
     vacancyTitle: null,
     companyName: null,
-    applyPriorityJson: null,
   };
 
   if (!existing) {
-    return { status: null, ...emptyAppliedFields };
+    return { status: null, applyPriorityJson: null, ...emptyAppliedFields };
   }
 
   const status = existing.Status || null;
+  const applyPriorityJson = parseApplyPriorityJsonField(existing.ApplyPriorityJson);
   if (!isAppliedApplicationStatus(status)) {
-    return { status, ...emptyAppliedFields };
+    return { status, applyPriorityJson, ...emptyAppliedFields };
   }
 
   return {
     status,
+    applyPriorityJson,
     applicationId: existing.Id,
     appliedAt: existing.AppliedAt || null,
     vacancyTitle: existing.VacancyTitle || null,
     companyName: existing.CompanyName || null,
-    applyPriorityJson: parseApplyPriorityJsonField(existing.ApplyPriorityJson),
   };
 }
 

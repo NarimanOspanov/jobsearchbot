@@ -137,11 +137,11 @@ test('buildHhApplicationCheckPayload returns status and clears applied fields wh
     appliedAt: null,
     vacancyTitle: null,
     companyName: null,
-    applyPriorityJson: null,
   };
 
   assert.deepEqual(buildHhApplicationCheckPayload(null), {
     status: null,
+    applyPriorityJson: null,
     ...emptyAppliedFields,
   });
   assert.deepEqual(
@@ -151,9 +151,11 @@ test('buildHhApplicationCheckPayload returns status and clears applied fields wh
       AppliedAt: new Date('2026-06-01T00:00:00.000Z'),
       VacancyTitle: 'Engineer',
       CompanyName: 'Acme',
+      ApplyPriorityJson: '{"rank":2,"score":7.5}',
     }),
     {
       status: 'rejected',
+      applyPriorityJson: { rank: 2, score: 7.5 },
       ...emptyAppliedFields,
     }
   );
