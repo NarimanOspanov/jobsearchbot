@@ -372,6 +372,11 @@ export function mapUserToAgentClientPayload(u) {
     skills: Array.isArray(u.skills) ? u.skills : [],
     workAuthorizationCountries: u.WorkAuthorizationCountries || '',
     searchMode: u.SearchMode || 'not_urgent',
+    hhEnabled: !!u.HhEnabled,
+    linkedInEnabled: !!u.LinkedInEnabled,
+    indeedEnabled: !!u.IndeedEnabled,
+    companySitesEnabled: !!u.CompanySitesEnabled,
+    hhSearchUrls: Array.isArray(u.hhSearchUrls) ? u.hhSearchUrls : [],
     ...projection,
   };
 }

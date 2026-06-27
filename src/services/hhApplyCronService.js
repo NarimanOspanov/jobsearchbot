@@ -5,10 +5,79 @@ import { isAppliedApplicationStatus } from './applicationAgentAttribution.js';
 import { getSeekerResumeTextForTailoring } from './tailoredCvService.js';
 import { resumeStorage } from './resumeStorage.js';
 import { isSupportedResumeMimeType, normalizeSkillIds } from './userService.js';
+import { toValidUrlOrUndefined } from '../utils/validators.js';
 
 const RESUME_TEXT_CONCURRENCY = 4;
 const HH_ARTIFACT_MAX_BYTES = 10 * 1024 * 1024;
 const HH_TAILORED_CV_MAX_BYTES = 15 * 1024 * 1024;
+const HH_SEARCH_URLS_MAX_COUNT = 20;
+
+export function parseHhSearchUrlsInput(value) {
+  if (value == null) return { ok: true, hhSearchUrls: [] };
+  if (!Array.isArray(value)) {
+    return { ok: false, error: 'hhSearchUrls must be an array' };
+  }
+  const out = [];
+  const seen = new Set();
+  for (const item of value) {
+    const raw = String(item ?? '').trim();
+    if (!raw) continue;
+    const url = toValidUrlOrUndefined(raw);
+    if (!url) {
+      return { ok: false, error: `Invalid HH search URL: ${raw.slice(0, 120)}` };
+    }
+    if (seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+    if (out.length > HH_SEARCH_URLS_MAX_COUNT) {
+      return { ok: false, error: `At most ${HH_SEARCH_URLS_MAX_COUNT} HH search URLs allowed` };
+    }
+  }
+  return { ok: true, hhSearchUrls: out };
+}
+
+export async function listHhSearchUrlsByUserIds(userIds) {
+  const ids = [...new Set((Array.isArray(userIds) ? userIds : []).map((id) => Number(id)).filter((id) => id > 0))];
+  const map = new Map(ids.map((id) => [id, []]));
+  if (!ids.length || !models.UserHhSearchUrls) return map;
+
+  const rows = await models.UserHhSearchUrls.findAll({
+    where: { UserId: ids },
+    order: [['Id', 'ASC']],
+  });
+  for (const row of rows) {
+    const userId = Number(row.UserId);
+    const url = String(row.SearchURL || '').trim();
+    if (!userId || !url) continue;
+    const bucket = map.get(userId) || [];
+    bucket.push(url);
+    map.set(userId, bucket);
+  }
+  return map;
+}
+
+export async function replaceUserHhSearchUrls(userId, hhSearchUrls) {
+  const id = Number(userId);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return { ok: false, status: 400, error: 'Invalid user id' };
+  }
+  if (!models.UserHhSearchUrls) {
+    return { ok: false, status: 500, error: 'HH search URLs are not configured' };
+  }
+
+  const parsed = parseHhSearchUrlsInput(hhSearchUrls);
+  if (parsed && parsed.ok === false) return { ok: false, status: 400, error: parsed.error };
+  const urls = parsed?.hhSearchUrls ?? [];
+
+  await sequelize.transaction(async (transaction) => {
+    await models.UserHhSearchUrls.destroy({ where: { UserId: id }, transaction });
+    for (const searchURL of urls) {
+      await models.UserHhSearchUrls.create({ UserId: id, SearchURL: searchURL }, { transaction });
+    }
+  });
+
+  return { ok: true, hhSearchUrls: urls };
+}
 
 export function normalizeHhVacancyId(raw) {
   const value = String(raw ?? '').trim();

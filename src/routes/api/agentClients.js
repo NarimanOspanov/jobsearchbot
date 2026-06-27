@@ -33,7 +33,12 @@ import {
   toSearchModeOrUndefined,
   toSkillIdsOrNullOrUndefined,
   toWorkAuthCountriesOrNullOrUndefined,
+  toBoolOrUndefined,
 } from '../../utils/validators.js';
+import {
+  listHhSearchUrlsByUserIds,
+  replaceUserHhSearchUrls,
+} from '../../services/hhApplyCronService.js';
 import {
   buildAgentPerformanceStats,
   parseAgentPerformancePeriod,
@@ -233,6 +238,12 @@ export function createAgentClientsRouter() {
           .filter(Boolean)
           .map((u) => mapUserToAgentClientPayload(u));
       }
+
+      const hhSearchUrlsByUserId = await listHhSearchUrlsByUserIds(clients.map((client) => client.id));
+      clients = clients.map((client) => ({
+        ...client,
+        hhSearchUrls: hhSearchUrlsByUserId.get(Number(client.id)) || [],
+      }));
 
       return res.json({
         agentUserId: effectiveAgentId,
@@ -783,12 +794,57 @@ export function createAgentClientsRouter() {
           }
           updates.skills = skillIds;
         }
-        if (!Object.keys(updates).length) {
+        if ('hhEnabled' in req.body) {
+          const hhEnabled = toBoolOrUndefined(req.body.hhEnabled);
+          if (hhEnabled === undefined) {
+            return res.status(400).json({ error: 'Invalid hhEnabled' });
+          }
+          updates.HhEnabled = hhEnabled;
+        }
+        if ('linkedInEnabled' in req.body) {
+          const linkedInEnabled = toBoolOrUndefined(req.body.linkedInEnabled);
+          if (linkedInEnabled === undefined) {
+            return res.status(400).json({ error: 'Invalid linkedInEnabled' });
+          }
+          updates.LinkedInEnabled = linkedInEnabled;
+        }
+        if ('indeedEnabled' in req.body) {
+          const indeedEnabled = toBoolOrUndefined(req.body.indeedEnabled);
+          if (indeedEnabled === undefined) {
+            return res.status(400).json({ error: 'Invalid indeedEnabled' });
+          }
+          updates.IndeedEnabled = indeedEnabled;
+        }
+        if ('companySitesEnabled' in req.body) {
+          const companySitesEnabled = toBoolOrUndefined(req.body.companySitesEnabled);
+          if (companySitesEnabled === undefined) {
+            return res.status(400).json({ error: 'Invalid companySitesEnabled' });
+          }
+          updates.CompanySitesEnabled = companySitesEnabled;
+        }
+
+        const hasUserUpdates = Object.keys(updates).length > 0;
+        const hasHhSearchUrlsUpdate = 'hhSearchUrls' in req.body;
+        if (!hasUserUpdates && !hasHhSearchUrlsUpdate) {
           return res.status(400).json({ error: 'No valid fields to update' });
         }
 
-        await client.update(updates);
-        await client.reload();
+        if (hasUserUpdates) {
+          await client.update(updates);
+          await client.reload();
+        }
+
+        let hhSearchUrls = null;
+        if (hasHhSearchUrlsUpdate) {
+          const replaced = await replaceUserHhSearchUrls(clientUserId, req.body.hhSearchUrls);
+          if (!replaced.ok) {
+            return res.status(replaced.status || 400).json({ error: replaced.error });
+          }
+          hhSearchUrls = replaced.hhSearchUrls;
+        } else {
+          const urlsByUserId = await listHhSearchUrlsByUserIds([clientUserId]);
+          hhSearchUrls = urlsByUserId.get(clientUserId) || [];
+        }
 
         return res.json({
           ok: true,
@@ -797,6 +853,11 @@ export function createAgentClientsRouter() {
           searchMode: client.SearchMode || 'not_urgent',
           workAuthorizationCountries: client.WorkAuthorizationCountries || '',
           skills: Array.isArray(client.skills) ? client.skills : [],
+          hhEnabled: !!client.HhEnabled,
+          linkedInEnabled: !!client.LinkedInEnabled,
+          indeedEnabled: !!client.IndeedEnabled,
+          companySitesEnabled: !!client.CompanySitesEnabled,
+          hhSearchUrls,
         });
       } catch (err) {
         console.error('PATCH /api/app/agent/clients/:clientUserId/settings:', err);

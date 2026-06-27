@@ -205,6 +205,80 @@
       .client-settings-block { margin: 12px 0; display: grid; gap: 10px; }
       .client-settings-block label { display: block; font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
       .client-settings-block select { width: 100%; max-width: 320px; }
+      .preferences-sub-tabs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 0 0 12px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 8px;
+      }
+      .preferences-sub-tab-btn {
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--muted);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .preferences-sub-tab-btn.is-active {
+        color: var(--text);
+        border-color: var(--border);
+        background: rgba(96, 165, 250, 0.08);
+      }
+      .preferences-sub-panel.is-hidden { display: none; }
+      .client-platform-toggles { display: grid; gap: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+      .client-toggle-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        background: #10182d;
+      }
+      .client-toggle-row:last-child { border-bottom: none; }
+      .client-toggle-label { font-size: 14px; font-weight: 600; }
+      .client-toggle-desc { display: block; font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+      .toggle {
+        position: relative;
+        width: 48px;
+        height: 28px;
+        flex-shrink: 0;
+        border: none;
+        padding: 0;
+        border-radius: 999px;
+        background: #334155;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .toggle::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: #e2e8f0;
+        transition: transform 0.2s;
+      }
+      .toggle.on { background: #2563eb; }
+      .toggle.on::after { transform: translateX(20px); }
+      .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+      .hh-search-urls-block { display: grid; gap: 10px; }
+      .hh-search-url-row { display: flex; gap: 8px; align-items: center; }
+      .hh-search-url-row input {
+        flex: 1;
+        min-width: 0;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #10182d;
+        color: var(--text);
+      }
+      .hh-search-urls-empty { font-size: 13px; color: var(--muted); margin: 0; }
       .resume-open-link { margin: 6px 0 10px; }
       .resume-open-link a { font-weight: 600; }
       .resume-file-input { display: none; }
@@ -886,43 +960,88 @@
               </div>
             </div>
             <div id="userInfoTabPreferences" class="user-info-tab-panel is-hidden" data-user-tab-panel="preferences" role="tabpanel">
-              <div data-client-role="clientSettingsBlock" class="client-settings-block">
-                <div>
-                  <label>Search mode</label>
-                  <select data-client-role="clientSearchModeSel">
-                    <option value="not_urgent">Not urgent</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-                <div>
-                  <label>Roles</label>
-                  <div class="skills-picker">
-                    <button data-client-role="clientSkillPickerBtn" type="button" class="skills-picker-btn">No roles selected</button>
-                    <div data-client-role="clientSkillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+              <div class="preferences-sub-tabs" role="tablist" aria-label="Preferences sections">
+                <button type="button" class="preferences-sub-tab-btn is-active" data-preferences-sub-tab="general" role="tab" aria-selected="true">General</button>
+                <button type="button" class="preferences-sub-tab-btn" data-preferences-sub-tab="hhSearchUrls" role="tab" aria-selected="false">HeadHunter search URLs</button>
+              </div>
+              <div data-preferences-sub-panel="general" class="preferences-sub-panel" role="tabpanel">
+                <div data-client-role="clientSettingsBlock" class="client-settings-block">
+                  <div>
+                    <label>Job sources</label>
+                    <div class="client-platform-toggles">
+                      <div class="client-toggle-row">
+                        <div>
+                          <span class="client-toggle-label">HeadHunter (HH)</span>
+                        </div>
+                        <button type="button" class="toggle" data-client-role="clientHhEnabledToggle" role="switch" aria-checked="false" aria-label="HeadHunter enabled"></button>
+                      </div>
+                      <div class="client-toggle-row">
+                        <div>
+                          <span class="client-toggle-label">LinkedIn</span>
+                        </div>
+                        <button type="button" class="toggle" data-client-role="clientLinkedInEnabledToggle" role="switch" aria-checked="false" aria-label="LinkedIn enabled"></button>
+                      </div>
+                      <div class="client-toggle-row">
+                        <div>
+                          <span class="client-toggle-label">Indeed</span>
+                        </div>
+                        <button type="button" class="toggle" data-client-role="clientIndeedEnabledToggle" role="switch" aria-checked="false" aria-label="Indeed enabled"></button>
+                      </div>
+                      <div class="client-toggle-row">
+                        <div>
+                          <span class="client-toggle-label">External websites</span>
+                          <span class="client-toggle-desc">Company career sites</span>
+                        </div>
+                        <button type="button" class="toggle" data-client-role="clientCompanySitesEnabledToggle" role="switch" aria-checked="false" aria-label="External websites enabled"></button>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label>Search mode</label>
+                    <select data-client-role="clientSearchModeSel">
+                      <option value="not_urgent">Not urgent</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Roles</label>
+                    <div class="skills-picker">
+                      <button data-client-role="clientSkillPickerBtn" type="button" class="skills-picker-btn">No roles selected</button>
+                      <div data-client-role="clientSkillPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <label>Work authorization</label>
+                    <div class="skills-picker">
+                      <button data-client-role="clientWorkAuthPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
+                      <div data-client-role="clientWorkAuthPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label>Work authorization</label>
-                  <div class="skills-picker">
-                    <button data-client-role="clientWorkAuthPickerBtn" type="button" class="skills-picker-btn">Not specified</button>
-                    <div data-client-role="clientWorkAuthPickerMenu" class="skills-picker-menu" role="listbox" aria-multiselectable="true"></div>
+                <div data-client-role="clientCommentBlock" class="client-comment-block">
+                  <label class="client-comment-label">
+                    <span class="k">Apply preferences</span>
+                    <textarea
+                      data-client-role="clientCommentText"
+                      rows="5"
+                      placeholder="Free-form notes for AI job ranking. Examples: companies to skip (cvat.ai, CDEK), priority companies (Stripe), industries (fintech), preferred roles (senior backend), current employer..."
+                      aria-label="Apply preferences"
+                    ></textarea>
+                  </label>
+                </div>
+              </div>
+              <div data-preferences-sub-panel="hhSearchUrls" class="preferences-sub-panel is-hidden" role="tabpanel">
+                <div data-client-role="clientHhSearchUrlsBlock" class="hh-search-urls-block">
+                  <p class="muted" style="margin:0;font-size:13px">Saved HeadHunter vacancy search URLs used by the HH apply service for this client.</p>
+                  <div data-client-role="clientHhSearchUrlsList"></div>
+                  <div class="row" style="margin:0">
+                    <button data-client-role="addClientHhSearchUrlBtn" type="button" class="ghost-btn">Add URL</button>
                   </div>
                 </div>
               </div>
-              <div data-client-role="clientCommentBlock" class="client-comment-block">
-                <label class="client-comment-label">
-                  <span class="k">Apply preferences</span>
-                  <textarea
-                    data-client-role="clientCommentText"
-                    rows="5"
-                    placeholder="Free-form notes for AI job ranking. Examples: companies to skip (cvat.ai, CDEK), priority companies (Stripe), industries (fintech), preferred roles (senior backend), current employer..."
-                    aria-label="Apply preferences"
-                  ></textarea>
-                </label>
-                <div class="row">
-                  <button data-client-role="saveClientCommentBtn" type="button">Save client settings</button>
-                  <span data-client-role="clientCommentMsg" class="muted"></span>
-                </div>
+              <div class="row" style="margin-top:12px">
+                <button data-client-role="saveClientCommentBtn" type="button">Save client settings</button>
+                <span data-client-role="clientCommentMsg" class="muted"></span>
               </div>
               <div class="preferences-actions">
                 <button data-client-role="enqueueClientApplyPriorityBtn" type="button" class="ghost-btn">Run apply priority (background)</button>
@@ -1350,6 +1469,11 @@
           'clientSkillPickerBtn',
           'clientWorkAuthPickerBtn',
           'clientSearchModeSel',
+          'clientHhEnabledToggle',
+          'clientLinkedInEnabledToggle',
+          'clientIndeedEnabledToggle',
+          'clientCompanySitesEnabledToggle',
+          'addClientHhSearchUrlBtn',
           'saveClientCommentBtn',
           'saveClientNoteBtn',
           'viewClientResumeBtn',
@@ -1362,8 +1486,18 @@
           const el = clientEl(MAIN_CLIENT_SCOPE, role);
           if (el) el.disabled = on;
         });
+        clientEl(MAIN_CLIENT_SCOPE, 'clientHhSearchUrlsList')
+          ?.querySelectorAll('input, button')
+          .forEach((el) => {
+            el.disabled = on;
+          });
       }
       function handleClientDetailClick(event) {
+        const preferencesSubTabBtn = event.target.closest('[data-preferences-sub-tab]');
+        if (preferencesSubTabBtn) {
+          setActivePreferencesSubTab(preferencesSubTabBtn.getAttribute('data-preferences-sub-tab'));
+          return;
+        }
         const scope = clientScopeFromTarget(event.target);
         if (!scope || isClientScopeReadOnly(scope)) return;
         const roleEl = event.target.closest('[data-client-role]');
@@ -1374,6 +1508,28 @@
         }
         if (role === 'saveClientCommentBtn') {
           saveClientComment(scope).catch((e) => setScopeMsg(scope, 'clientCommentMsg', e.message, true));
+          return;
+        }
+        if (
+          role === 'clientHhEnabledToggle' ||
+          role === 'clientLinkedInEnabledToggle' ||
+          role === 'clientIndeedEnabledToggle' ||
+          role === 'clientCompanySitesEnabledToggle'
+        ) {
+          roleEl.classList.toggle('on');
+          roleEl.setAttribute('aria-checked', roleEl.classList.contains('on') ? 'true' : 'false');
+          return;
+        }
+        if (role === 'addClientHhSearchUrlBtn') {
+          addClientHhSearchUrlRow(scope);
+          return;
+        }
+        if (role === 'removeClientHhSearchUrlBtn') {
+          roleEl.closest('.hh-search-url-row')?.remove();
+          const list = clientEl(scope, 'clientHhSearchUrlsList');
+          if (list && !list.querySelector('.hh-search-url-row')) {
+            list.innerHTML = '<p class="hh-search-urls-empty">No HeadHunter search URLs yet.</p>';
+          }
           return;
         }
         if (role === 'clientSkillPickerBtn') {
@@ -2780,6 +2936,87 @@
       function formatClientSearchModeDisplay(user) {
         return String(user?.searchMode || '').trim() === 'urgent' ? 'Urgent' : 'Not urgent';
       }
+      function formatClientPlatformSourcesDisplay(user) {
+        const labels = [];
+        if (user?.hhEnabled) labels.push('HH');
+        if (user?.linkedInEnabled) labels.push('LinkedIn');
+        if (user?.indeedEnabled) labels.push('Indeed');
+        if (user?.companySitesEnabled) labels.push('External websites');
+        return labels.length ? labels.join(', ') : 'None enabled';
+      }
+      function setClientPlatformToggle(scope, role, enabled) {
+        const btn = clientEl(scope, role);
+        if (!btn) return;
+        btn.classList.toggle('on', !!enabled);
+        btn.setAttribute('aria-checked', enabled ? 'true' : 'false');
+      }
+      function readClientPlatformSettingsFromUi(scope) {
+        return {
+          hhEnabled: clientEl(scope, 'clientHhEnabledToggle')?.classList.contains('on') || false,
+          linkedInEnabled: clientEl(scope, 'clientLinkedInEnabledToggle')?.classList.contains('on') || false,
+          indeedEnabled: clientEl(scope, 'clientIndeedEnabledToggle')?.classList.contains('on') || false,
+          companySitesEnabled: clientEl(scope, 'clientCompanySitesEnabledToggle')?.classList.contains('on') || false,
+        };
+      }
+      function syncClientPlatformSettingsUi(scope, user) {
+        if (scope !== MAIN_CLIENT_SCOPE) return;
+        setClientPlatformToggle(scope, 'clientHhEnabledToggle', !!user?.hhEnabled);
+        setClientPlatformToggle(scope, 'clientLinkedInEnabledToggle', !!user?.linkedInEnabled);
+        setClientPlatformToggle(scope, 'clientIndeedEnabledToggle', !!user?.indeedEnabled);
+        setClientPlatformToggle(scope, 'clientCompanySitesEnabledToggle', !!user?.companySitesEnabled);
+      }
+      function renderClientHhSearchUrlsList(scope, urls) {
+        if (scope !== MAIN_CLIENT_SCOPE) return;
+        const list = clientEl(scope, 'clientHhSearchUrlsList');
+        if (!list) return;
+        const items = Array.isArray(urls) ? urls : [];
+        if (!items.length) {
+          list.innerHTML = '<p class="hh-search-urls-empty">No HeadHunter search URLs yet.</p>';
+          return;
+        }
+        list.innerHTML = items
+          .map(
+            (url) => `
+          <div class="hh-search-url-row">
+            <input type="url" value="${esc(url)}" placeholder="https://hh.ru/search/vacancy?..." />
+            <button type="button" class="ghost-btn" data-client-role="removeClientHhSearchUrlBtn">Remove</button>
+          </div>`
+          )
+          .join('');
+      }
+      function getClientHhSearchUrlsFromUi(scope) {
+        const list = clientEl(scope, 'clientHhSearchUrlsList');
+        if (!list) return [];
+        return [...list.querySelectorAll('input[type="url"]')]
+          .map((input) => String(input.value || '').trim())
+          .filter(Boolean);
+      }
+      function addClientHhSearchUrlRow(scope) {
+        const list = clientEl(scope, 'clientHhSearchUrlsList');
+        if (!list) return;
+        list.querySelector('.hh-search-urls-empty')?.remove();
+        const row = document.createElement('div');
+        row.className = 'hh-search-url-row';
+        row.innerHTML = `
+          <input type="url" value="" placeholder="https://hh.ru/search/vacancy?..." />
+          <button type="button" class="ghost-btn" data-client-role="removeClientHhSearchUrlBtn">Remove</button>
+        `;
+        list.appendChild(row);
+        row.querySelector('input')?.focus();
+      }
+      function setActivePreferencesSubTab(tab) {
+        const next = tab === 'hhSearchUrls' ? 'hhSearchUrls' : 'general';
+        const panelRoot = document.getElementById('userInfoTabPreferences');
+        if (!panelRoot) return;
+        panelRoot.querySelectorAll('[data-preferences-sub-tab]').forEach((btn) => {
+          const isActive = btn.getAttribute('data-preferences-sub-tab') === next;
+          btn.classList.toggle('is-active', isActive);
+          btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        panelRoot.querySelectorAll('[data-preferences-sub-panel]').forEach((panel) => {
+          panel.classList.toggle('is-hidden', panel.getAttribute('data-preferences-sub-panel') !== next);
+        });
+      }
       function buildSelectedUserInfoReadOnlyHtml(u) {
         const username = String(u.telegramUserName || '').trim();
         const firstName = String(u.displayFirstName || u.firstName || '').trim();
@@ -3184,6 +3421,8 @@
         if (!user) {
           applyClientSkillIdsCsv(scope, '');
           applyClientWorkAuthCsv(scope, '');
+          syncClientPlatformSettingsUi(scope, null);
+          renderClientHhSearchUrlsList(scope, []);
           return;
         }
         const searchModeSel = clientEl(scope, 'clientSearchModeSel');
@@ -3192,6 +3431,8 @@
         }
         applyClientSkillIdsCsv(scope, userSkillIdsCsv(user));
         applyClientWorkAuthCsv(scope, user.workAuthorizationCountries || '');
+        syncClientPlatformSettingsUi(scope, user);
+        renderClientHhSearchUrlsList(scope, user.hhSearchUrls || []);
       }
 
       function getClientSkillIds(scope) {
@@ -3367,11 +3608,17 @@
         const searchModeSel = clientEl(scope, 'clientSearchModeSel');
         const btn = clientEl(scope, 'saveClientCommentBtn');
         const raw = String(textarea?.value || '').trim();
+        const platformSettings = readClientPlatformSettingsFromUi(scope);
         const body = {
           comment: raw || null,
           searchMode: searchModeSel?.value || 'not_urgent',
           workAuthorizationCountries: getClientWorkAuthCsv(scope) || null,
           skills: getClientSkillIds(scope),
+          hhEnabled: platformSettings.hhEnabled,
+          linkedInEnabled: platformSettings.linkedInEnabled,
+          indeedEnabled: platformSettings.indeedEnabled,
+          companySitesEnabled: platformSettings.companySitesEnabled,
+          hhSearchUrls: getClientHhSearchUrlsFromUi(scope),
         };
         if (isBotAdminUser) {
           const aid = String(q().agentUserId || '').trim();
@@ -3387,6 +3634,7 @@
           const savedSearchMode = payload?.searchMode || 'not_urgent';
           const savedWorkAuth = payload?.workAuthorizationCountries || '';
           const savedSkills = Array.isArray(payload?.skills) ? payload.skills : getClientSkillIds(scope);
+          const savedHhSearchUrls = Array.isArray(payload?.hhSearchUrls) ? payload.hhSearchUrls : getClientHhSearchUrlsFromUi(scope);
           const idx = users.findIndex((u) => String(u.id) === String(seekerId));
           if (idx >= 0) {
             users[idx] = {
@@ -3395,6 +3643,11 @@
               searchMode: savedSearchMode,
               workAuthorizationCountries: savedWorkAuth,
               skills: savedSkills,
+              hhEnabled: !!payload?.hhEnabled,
+              linkedInEnabled: !!payload?.linkedInEnabled,
+              indeedEnabled: !!payload?.indeedEnabled,
+              companySitesEnabled: !!payload?.companySitesEnabled,
+              hhSearchUrls: savedHhSearchUrls,
             };
           }
           const commentEl = clientEl(MAIN_CLIENT_SCOPE, 'clientCommentText');
@@ -3403,6 +3656,8 @@
           if (modeEl) modeEl.value = savedSearchMode === 'urgent' ? 'urgent' : 'not_urgent';
           applyClientSkillIdsCsv(MAIN_CLIENT_SCOPE, userSkillIdsCsv(users[idx] || { skills: savedSkills }));
           applyClientWorkAuthCsv(MAIN_CLIENT_SCOPE, savedWorkAuth);
+          syncClientPlatformSettingsUi(MAIN_CLIENT_SCOPE, users[idx] || getSelectedUser());
+          renderClientHhSearchUrlsList(MAIN_CLIENT_SCOPE, savedHhSearchUrls);
           setScopeMsg(MAIN_CLIENT_SCOPE, 'clientCommentMsg', 'Saved.');
           applyUserSkillsToFilters(users[idx] || getSelectedUser(), { force: true });
           invalidateApplyPriorityCache();

@@ -8,6 +8,7 @@ import {
   metaHhVacancyId,
   normalizeHhVacancyId,
   parseApplyPriorityJsonFromBody,
+  parseHhSearchUrlsInput,
   validateHhApplicationCheckQuery,
   validateHhArtifactFile,
   validateHhImportApplicationBody,
@@ -103,6 +104,23 @@ test('parseApplyPriorityJsonFromBody accepts object or JSON string', () => {
     applyPriorityJson: '{"rank":1}',
   });
   assert.equal(parseApplyPriorityJsonFromBody('not-json').ok, false);
+});
+
+test('parseHhSearchUrlsInput validates and deduplicates HH search URLs', () => {
+  assert.deepEqual(parseHhSearchUrlsInput(null), { ok: true, hhSearchUrls: [] });
+  assert.equal(parseHhSearchUrlsInput('bad').ok, false);
+  assert.deepEqual(
+    parseHhSearchUrlsInput([
+      'https://hh.ru/search/vacancy?text=node',
+      'https://hh.ru/search/vacancy?text=node',
+      'https://example.com/jobs',
+    ]),
+    {
+      ok: true,
+      hhSearchUrls: ['https://hh.ru/search/vacancy?text=node', 'https://example.com/jobs'],
+    }
+  );
+  assert.equal(parseHhSearchUrlsInput(['not-a-url']).ok, false);
 });
 
 test('isRejectedApplicationStatus matches rejected case-insensitively', () => {
