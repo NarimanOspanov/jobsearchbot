@@ -15,8 +15,19 @@
       .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; }
       .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
       .muted { color: var(--muted); }
-      select, button { border-radius:8px; border:1px solid var(--border); background:#0f1730; color:var(--text); padding:8px; font:inherit; }
+      select, button, input { border-radius:8px; border:1px solid var(--border); background:#0f1730; color:var(--text); padding:8px; font:inherit; }
       button { cursor:pointer; }
+      button[disabled] { opacity:0.45; cursor:not-allowed; }
+      #searchInput { flex:1; min-width:160px; max-width:420px; }
+      .dropdown { position: relative; display: inline-block; }
+      .dd-toggle { min-width: 170px; text-align: left; display: inline-flex; justify-content: space-between; align-items: center; gap: 8px; }
+      .dd-toggle .caret { opacity: 0.7; }
+      .dd-menu { position: absolute; z-index: 50; margin-top: 4px; min-width: 230px; max-height: 300px; overflow: auto; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px; box-shadow: 0 10px 28px rgba(0,0,0,0.45); }
+      .dd-menu[hidden] { display: none; }
+      .dd-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; user-select: none; }
+      .dd-item:hover { background: rgba(79,124,255,0.12); }
+      .dd-item input { width: 16px; height: 16px; cursor: pointer; }
+      .dd-sep { height: 1px; background: var(--border); margin: 5px 2px; }
       table { width:100%; border-collapse: collapse; font-size:14px; }
       th, td { border-bottom: 1px solid var(--border); padding:10px; text-align:left; vertical-align:top; }
       th { font-size:12px; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
@@ -58,14 +69,29 @@
             <option value="30d">30d</option>
             <option value="all">All</option>
           </select>
-          <label class="muted" for="clientSel" id="clientLabel">Client</label>
-          <select id="clientSel" multiple size="4"></select>
+          <label class="muted" id="clientLabel">Client</label>
+          <div class="dropdown" id="clientDropdown">
+            <button type="button" id="clientToggle" class="dd-toggle"><span id="clientToggleText">All clients</span><span class="caret">▾</span></button>
+            <div id="clientMenu" class="dd-menu" hidden></div>
+          </div>
           <label class="muted" for="applyTypeSel" id="applyTypeLabel">Apply type</label>
           <select id="applyTypeSel"></select>
           <button id="refreshBtn" type="button">Refresh</button>
         </div>
       </div>
       <div class="card">
+        <div class="row" style="margin-bottom:10px; justify-content:space-between">
+          <input id="searchInput" type="search" placeholder="Search" autocomplete="off" />
+          <div class="row">
+            <label class="muted" for="pageSizeSel" id="pageSizeLabel">Per page</label>
+            <select id="pageSizeSel">
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+            </select>
+          </div>
+        </div>
         <table>
           <thead>
             <tr>
@@ -74,11 +100,18 @@
               <th id="thTitle">Title</th>
               <th id="thCompany">Company</th>
               <th id="thApplyType">Apply type</th>
-              <th id="thLocation">Location</th>
             </tr>
           </thead>
           <tbody id="rowsBody"></tbody>
         </table>
+        <div class="row" id="pager" style="margin-top:10px; justify-content:space-between">
+          <span class="muted" id="pagerInfo"></span>
+          <div class="row">
+            <button id="prevPageBtn" type="button">Prev</button>
+            <span class="muted" id="pagerPage"></span>
+            <button id="nextPageBtn" type="button">Next</button>
+          </div>
+        </div>
       </div>
       <div class="card">
         <h2 id="chartTitle">Applications by client</h2>
@@ -138,6 +171,11 @@
           thLocation: 'Location',
           applyTypeAll: 'All',
           allClients: 'All clients',
+          selectedWord: 'selected',
+          search: 'Search',
+          perPage: 'Per page',
+          prev: 'Prev',
+          next: 'Next',
           empty: 'No applied jobs for selected filters.',
           modalTitle: 'Job details',
           close: 'Close',
@@ -184,6 +222,11 @@
           thLocation: 'Локация',
           applyTypeAll: 'Все',
           allClients: 'Все клиенты',
+          selectedWord: 'выбрано',
+          search: 'Поиск',
+          perPage: 'На странице',
+          prev: 'Назад',
+          next: 'Вперёд',
           empty: 'Нет откликов по выбранным фильтрам.',
           modalTitle: 'Детали вакансии',
           close: 'Закрыть',
@@ -223,6 +266,7 @@
       const t = (key, params) => (window.TmaI18n ? window.TmaI18n.t(STRINGS, lang, key, params) : key);
       let rows = [];
       let clients = [];
+      let currentPage = 1;
       let clientsChart = null;
       let chartPayload = { dates: [], series: [] };
       const CLIENT_CHART_COLORS = ['#4f7cff', '#22c55e', '#f59e0b', '#ec4899', '#38bdf8', '#a78bfa', '#f97316', '#14b8a6'];
@@ -327,12 +371,15 @@
         document.getElementById('clientLabel').textContent = t('client');
         document.getElementById('applyTypeLabel').textContent = t('applyType');
         document.getElementById('refreshBtn').textContent = t('refresh');
+        document.getElementById('searchInput').placeholder = t('search');
+        document.getElementById('pageSizeLabel').textContent = t('perPage');
+        document.getElementById('prevPageBtn').textContent = t('prev');
+        document.getElementById('nextPageBtn').textContent = t('next');
         document.getElementById('thClient').textContent = t('thClient');
         document.getElementById('thAppliedAt').textContent = t('thAppliedAt');
         document.getElementById('thTitle').textContent = t('thTitle');
         document.getElementById('thCompany').textContent = t('thCompany');
         document.getElementById('thApplyType').textContent = t('thApplyType');
-        document.getElementById('thLocation').textContent = t('thLocation');
         document.getElementById('jobModalTitle').textContent = t('modalTitle');
         document.getElementById('closeModalBtn').textContent = t('close');
         document.getElementById('tailoredCvLink').textContent = t('tailoredCv');
@@ -406,23 +453,39 @@
           },
         });
       }
+      // Custom checkbox dropdown: an "All clients" master + one checkbox per client.
       function renderClientOptions() {
-        const sel = document.getElementById('clientSel');
+        const menu = document.getElementById('clientMenu');
+        const toggle = document.getElementById('clientToggle');
         if (!clients.length) {
-          sel.innerHTML = `<option value="">${esc(t('noClients'))}</option>`;
-          sel.disabled = true;
+          menu.innerHTML = `<div class="dd-item muted">${esc(t('noClients'))}</div>`;
+          toggle.disabled = true;
+          updateClientToggleText();
           return;
         }
-        sel.disabled = false;
-        const allOpt = `<option value="__all__" selected>${esc(t('allClients'))}</option>`;
-        sel.innerHTML = allOpt + clients.map((client) => `<option value="${esc(client.id)}">${esc(clientLabel(client))}</option>`).join('');
+        toggle.disabled = false;
+        const allItem = `<label class="dd-item"><input type="checkbox" id="clientAll" checked /><span>${esc(t('allClients'))}</span></label><div class="dd-sep"></div>`;
+        const items = clients.map((client) =>
+          `<label class="dd-item"><input type="checkbox" class="client-cb" value="${esc(client.id)}" checked /><span>${esc(clientLabel(client))}</span></label>`
+        ).join('');
+        menu.innerHTML = allItem + items;
+        updateClientToggleText();
       }
-      // Selected client ids; "All clients" (or nothing) => every assigned client.
+      function clientCheckboxes() { return [...document.querySelectorAll('#clientMenu .client-cb')]; }
+      // Selected client ids; none checked => every assigned client (avoids an empty report).
       function selectedClientIds() {
-        const sel = document.getElementById('clientSel');
-        const vals = [...sel.selectedOptions].map((o) => o.value).filter(Boolean);
-        if (!vals.length || vals.includes('__all__')) return clients.map((c) => String(c.id));
-        return vals;
+        const checked = clientCheckboxes().filter((cb) => cb.checked).map((cb) => cb.value);
+        return checked.length ? checked : clients.map((c) => String(c.id));
+      }
+      function updateClientToggleText() {
+        const el = document.getElementById('clientToggleText');
+        if (!el) return;
+        const boxes = clientCheckboxes();
+        const checked = boxes.filter((cb) => cb.checked);
+        if (!clients.length) { el.textContent = t('noClients'); return; }
+        if (!checked.length || checked.length === clients.length) { el.textContent = t('allClients'); return; }
+        if (checked.length === 1) { el.textContent = clientNameById(checked[0].value); return; }
+        el.textContent = `${checked.length} ${t('selectedWord')}`;
       }
       function clientNameById(id) {
         const c = clients.find((x) => String(x.id) === String(id));
@@ -437,22 +500,47 @@
           .concat(types.map((ty) => `<option value="${esc(ty)}">${esc(ty)}</option>`)).join('');
         sel.value = prev && types.includes(prev) ? prev : '';
       }
+      // Lowercased searchable text for a row (client, title, company, apply type, location).
+      function rowSearchText(row) {
+        const meta = parseMetaJson(row.meta);
+        return [clientNameById(row.userId), row.vacancyTitle, row.companyName, rowApplyType(row), meta?.location]
+          .filter(Boolean).join(' ').toLowerCase();
+      }
+      // All rows after the apply-type filter + search query (client-side).
+      function getVisibleRows() {
+        const selectedType = document.getElementById('applyTypeSel').value || '';
+        const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+        let out = selectedType ? rows.filter((row) => rowApplyType(row) === selectedType) : rows;
+        if (q) out = out.filter((row) => rowSearchText(row).includes(q));
+        return out;
+      }
+      function pageSize() { return Number(document.getElementById('pageSizeSel').value) || 25; }
+      function rowToHtml(row) {
+        const meta = parseMetaJson(row.meta);
+        const applyUrl = rowApplyUrl(row, meta);
+        const safeTitle = esc(row.vacancyTitle || t('noData'));
+        const titleHtml = applyUrl ? `<a class="title-link" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">${safeTitle}</a>` : safeTitle;
+        return `<tr data-row-id="${esc(row.id)}"><td>${esc(clientNameById(row.userId))}</td><td>${esc(fmtDateTime(row.appliedAt))}</td><td>${titleHtml}</td><td>${esc(row.companyName || t('noData'))}</td><td>${esc(rowApplyType(row) || t('noData'))}</td></tr>`;
+      }
       function renderRows() {
         const body = document.getElementById('rowsBody');
-        const selectedType = document.getElementById('applyTypeSel').value || '';
-        const visible = selectedType ? rows.filter((row) => rowApplyType(row) === selectedType) : rows;
-        if (!visible.length) {
-          body.innerHTML = `<tr><td colspan="6" class="empty">${esc(t('empty'))}</td></tr>`;
-          return;
-        }
-        body.innerHTML = visible.map((row) => {
-          const meta = parseMetaJson(row.meta);
-          const location = meta?.location || t('noLocation');
-          const applyUrl = rowApplyUrl(row, meta);
-          const safeTitle = esc(row.vacancyTitle || t('noData'));
-          const titleHtml = applyUrl ? `<a class="title-link" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">${safeTitle}</a>` : safeTitle;
-          return `<tr data-row-id="${esc(row.id)}"><td>${esc(clientNameById(row.userId))}</td><td>${esc(fmtDateTime(row.appliedAt))}</td><td>${titleHtml}</td><td>${esc(row.companyName || t('noData'))}</td><td>${esc(rowApplyType(row) || t('noData'))}</td><td>${esc(location)}</td></tr>`;
-        }).join('');
+        const visible = getVisibleRows();
+        const size = pageSize();
+        const total = visible.length;
+        const pages = Math.max(1, Math.ceil(total / size));
+        if (currentPage > pages) currentPage = pages;
+        if (currentPage < 1) currentPage = 1;
+        const start = (currentPage - 1) * size;
+        const pageRows = visible.slice(start, start + size);
+        body.innerHTML = pageRows.length
+          ? pageRows.map(rowToHtml).join('')
+          : `<tr><td colspan="5" class="empty">${esc(t('empty'))}</td></tr>`;
+        const info = document.getElementById('pagerInfo');
+        const pageEl = document.getElementById('pagerPage');
+        info.textContent = total ? `${start + 1}–${start + pageRows.length} / ${total}` : '0';
+        pageEl.textContent = `${currentPage} / ${pages}`;
+        document.getElementById('prevPageBtn').disabled = currentPage <= 1;
+        document.getElementById('nextPageBtn').disabled = currentPage >= pages;
       }
       function closeModal() { document.getElementById('jobModal').classList.remove('on'); }
       function toggleButton(el, on, href = '') {
@@ -512,6 +600,7 @@
             .catch(() => [])
         ));
         rows = results.flat().sort((a, b) => new Date(b.appliedAt || 0) - new Date(a.appliedAt || 0));
+        currentPage = 1;
         renderApplyTypeOptions();
         renderRows();
       }
@@ -525,8 +614,35 @@
       }
       document.getElementById('refreshBtn').addEventListener('click', () => { reloadReport().catch(showLoadError); });
       document.getElementById('periodSel').addEventListener('change', () => { reloadReport().catch(showLoadError); });
-      document.getElementById('clientSel').addEventListener('change', () => { loadRows().catch(showLoadError); });
-      document.getElementById('applyTypeSel').addEventListener('change', () => { renderRows(); });
+      // Client checkbox dropdown: open/close, master "All" sync, reload on change.
+      document.getElementById('clientToggle').addEventListener('click', (event) => {
+        event.stopPropagation();
+        const menu = document.getElementById('clientMenu');
+        menu.hidden = !menu.hidden;
+      });
+      document.addEventListener('click', (event) => {
+        const dd = document.getElementById('clientDropdown');
+        if (dd && !dd.contains(event.target)) document.getElementById('clientMenu').hidden = true;
+      });
+      document.getElementById('clientMenu').addEventListener('change', (event) => {
+        const target = event.target;
+        if (target.id === 'clientAll') {
+          clientCheckboxes().forEach((cb) => { cb.checked = target.checked; });
+        } else if (target.classList.contains('client-cb')) {
+          const boxes = clientCheckboxes();
+          const all = document.getElementById('clientAll');
+          if (all) all.checked = boxes.every((cb) => cb.checked);
+        } else {
+          return;
+        }
+        updateClientToggleText();
+        loadRows().catch(showLoadError);
+      });
+      document.getElementById('applyTypeSel').addEventListener('change', () => { currentPage = 1; renderRows(); });
+      document.getElementById('searchInput').addEventListener('input', () => { currentPage = 1; renderRows(); });
+      document.getElementById('pageSizeSel').addEventListener('change', () => { currentPage = 1; renderRows(); });
+      document.getElementById('prevPageBtn').addEventListener('click', () => { currentPage -= 1; renderRows(); });
+      document.getElementById('nextPageBtn').addEventListener('click', () => { currentPage += 1; renderRows(); });
       document.getElementById('rowsBody').addEventListener('click', (event) => {
         if (event.target.closest('a.title-link')) return;
         const row = event.target.closest('tr[data-row-id]');
@@ -538,7 +654,7 @@
       document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeModal(); });
       function showLoadError(err) {
         const body = document.getElementById('rowsBody');
-        body.innerHTML = `<tr><td colspan="6" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="5" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
       }
       boot().catch(showLoadError);
     </script>
