@@ -161,6 +161,14 @@ export default function defineUser(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      HHUserName: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      HHPassword: {
+        type: DataTypes.STRING(512),
+        allowNull: true,
+      },
     },
     {
       tableName: 'Users',

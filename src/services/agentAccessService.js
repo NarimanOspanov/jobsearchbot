@@ -378,6 +378,8 @@ export function mapUserToAgentClientPayload(u) {
     companySitesEnabled: !!u.CompanySitesEnabled,
     hhSearchUrls: Array.isArray(u.hhSearchUrls) ? u.hhSearchUrls : [],
     hhCookies: u.HhCookies ?? null,
+    hhUserName: u.HHUserName ?? null,
+    hhPassword: u.HHPassword ?? null,
     ...projection,
   };
 }

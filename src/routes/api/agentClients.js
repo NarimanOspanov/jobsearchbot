@@ -841,6 +841,21 @@ export function createAgentClientsRouter() {
           }
           updates.HhCookies = hhCookies;
         }
+        if ('hhUserName' in req.body) {
+          const v = req.body.hhUserName;
+          if (v !== null && typeof v !== 'string') {
+            return res.status(400).json({ error: 'hhUserName must be a string or null' });
+          }
+          const trimmed = v == null ? '' : String(v).trim();
+          updates.HHUserName = trimmed ? trimmed.slice(0, 255) : null;
+        }
+        if ('hhPassword' in req.body) {
+          const v = req.body.hhPassword;
+          if (v !== null && typeof v !== 'string') {
+            return res.status(400).json({ error: 'hhPassword must be a string or null' });
+          }
+          updates.HHPassword = v == null || v === '' ? null : String(v).slice(0, 512);
+        }
 
         const hasUserUpdates = Object.keys(updates).length > 0;
         const hasHhSearchUrlsUpdate = 'hhSearchUrls' in req.body;
@@ -878,6 +893,8 @@ export function createAgentClientsRouter() {
           companySitesEnabled: !!client.CompanySitesEnabled,
           hhSearchUrls,
           hhCookies: client.HhCookies ?? null,
+          hhUserName: client.HHUserName ?? null,
+          hhPassword: client.HHPassword ?? null,
         });
       } catch (err) {
         console.error('PATCH /api/app/agent/clients/:clientUserId/settings:', err);

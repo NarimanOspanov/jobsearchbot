@@ -280,6 +280,17 @@
       }
       .hh-search-urls-empty { font-size: 13px; color: var(--muted); margin: 0; }
       .hh-auth-data-block { display: grid; gap: 10px; }
+      .hh-auth-data-block input[type="text"],
+      .hh-auth-data-block input[type="password"] {
+        width: 100%;
+        padding: 9px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #10182d;
+        color: var(--text);
+        font: inherit;
+      }
+      .hh-auth-data-block .pw-show { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
       .hh-auth-data-block textarea {
         width: 100%;
         min-height: 220px;
@@ -1056,7 +1067,31 @@
               </div>
               <div data-preferences-sub-panel="hhAuthData" class="preferences-sub-panel is-hidden" role="tabpanel">
                 <div data-client-role="clientHhAuthDataBlock" class="hh-auth-data-block">
-                  <p class="muted" style="margin:0;font-size:13px">HeadHunter session cookies used by the HH apply service. Paste the exported cookie JSON or header value for this client.</p>
+                  <p class="muted" style="margin:0;font-size:13px">HeadHunter credentials and session cookies used by the HH apply service for this client.</p>
+                  <label class="client-comment-label">
+                    <span class="k">HH username (email / phone)</span>
+                    <input
+                      type="text"
+                      data-client-role="clientHhUserNameText"
+                      placeholder="login@example.com"
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                  </label>
+                  <label class="client-comment-label">
+                    <span class="k">HH password</span>
+                    <input
+                      type="password"
+                      data-client-role="clientHhPasswordText"
+                      placeholder="HeadHunter password"
+                      autocomplete="new-password"
+                      spellcheck="false"
+                    />
+                  </label>
+                  <label class="pw-show">
+                    <input type="checkbox" data-client-role="clientHhPasswordShow" />
+                    <span>Show password</span>
+                  </label>
                   <label class="client-comment-label">
                     <span class="k">HhCookies</span>
                     <textarea
@@ -1505,6 +1540,9 @@
           'clientCompanySitesEnabledToggle',
           'addClientHhSearchUrlBtn',
           'clientHhCookiesText',
+          'clientHhUserNameText',
+          'clientHhPasswordText',
+          'clientHhPasswordShow',
           'saveClientCommentBtn',
           'saveClientNoteBtn',
           'viewClientResumeBtn',
@@ -3472,9 +3510,24 @@
       function syncClientHhCookiesUi(scope, user) {
         if (scope !== MAIN_CLIENT_SCOPE) return;
         const textarea = clientEl(scope, 'clientHhCookiesText');
-        if (!textarea) return;
-        textarea.value = user?.hhCookies != null ? String(user.hhCookies) : '';
+        if (textarea) textarea.value = user?.hhCookies != null ? String(user.hhCookies) : '';
+        const userNameEl = clientEl(scope, 'clientHhUserNameText');
+        if (userNameEl) userNameEl.value = user?.hhUserName != null ? String(user.hhUserName) : '';
+        const passwordEl = clientEl(scope, 'clientHhPasswordText');
+        if (passwordEl) passwordEl.value = user?.hhPassword != null ? String(user.hhPassword) : '';
+        const showEl = clientEl(scope, 'clientHhPasswordShow');
+        if (showEl) showEl.checked = false;
+        if (passwordEl) passwordEl.type = 'password';
       }
+
+      // Toggle HH password visibility (delegated so it works across scope re-renders).
+      document.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!target || target.getAttribute?.('data-client-role') !== 'clientHhPasswordShow') return;
+        const block = target.closest('[data-client-role="clientHhAuthDataBlock"]');
+        const pw = block?.querySelector('[data-client-role="clientHhPasswordText"]');
+        if (pw) pw.type = target.checked ? 'text' : 'password';
+      });
 
       function getClientSkillIds(scope) {
         const menu = clientEl(scope, 'clientSkillPickerMenu');
@@ -3661,6 +3714,8 @@
           companySitesEnabled: platformSettings.companySitesEnabled,
           hhSearchUrls: getClientHhSearchUrlsFromUi(scope),
           hhCookies: String(clientEl(scope, 'clientHhCookiesText')?.value || '').trim() || null,
+          hhUserName: String(clientEl(scope, 'clientHhUserNameText')?.value || '').trim() || null,
+          hhPassword: String(clientEl(scope, 'clientHhPasswordText')?.value || '') || null,
         };
         if (isBotAdminUser) {
           const aid = String(q().agentUserId || '').trim();
@@ -3678,6 +3733,8 @@
           const savedSkills = Array.isArray(payload?.skills) ? payload.skills : getClientSkillIds(scope);
           const savedHhSearchUrls = Array.isArray(payload?.hhSearchUrls) ? payload.hhSearchUrls : getClientHhSearchUrlsFromUi(scope);
           const savedHhCookies = payload?.hhCookies ?? null;
+          const savedHhUserName = payload?.hhUserName ?? null;
+          const savedHhPassword = payload?.hhPassword ?? null;
           const idx = users.findIndex((u) => String(u.id) === String(seekerId));
           if (idx >= 0) {
             users[idx] = {
@@ -3692,6 +3749,8 @@
               companySitesEnabled: !!payload?.companySitesEnabled,
               hhSearchUrls: savedHhSearchUrls,
               hhCookies: savedHhCookies,
+              hhUserName: savedHhUserName,
+              hhPassword: savedHhPassword,
             };
           }
           const commentEl = clientEl(MAIN_CLIENT_SCOPE, 'clientCommentText');
