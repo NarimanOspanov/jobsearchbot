@@ -59,6 +59,8 @@
           </select>
           <label class="muted" for="clientSel" id="clientLabel">Client</label>
           <select id="clientSel"></select>
+          <label class="muted" for="applyTypeSel" id="applyTypeLabel">Apply type</label>
+          <select id="applyTypeSel"></select>
           <button id="refreshBtn" type="button">Refresh</button>
         </div>
       </div>
@@ -69,6 +71,7 @@
               <th id="thAppliedAt">Applied at</th>
               <th id="thTitle">Title</th>
               <th id="thCompany">Company</th>
+              <th id="thApplyType">Apply type</th>
               <th id="thLocation">Location</th>
             </tr>
           </thead>
@@ -128,7 +131,9 @@
           thAppliedAt: 'Applied at',
           thTitle: 'Title',
           thCompany: 'Company',
+          thApplyType: 'Apply type',
           thLocation: 'Location',
+          applyTypeAll: 'All',
           empty: 'No applied jobs for selected filters.',
           modalTitle: 'Job details',
           close: 'Close',
@@ -170,7 +175,9 @@
           thAppliedAt: 'Время отклика',
           thTitle: 'Вакансия',
           thCompany: 'Компания',
+          thApplyType: 'Тип отклика',
           thLocation: 'Локация',
+          applyTypeAll: 'Все',
           empty: 'Нет откликов по выбранным фильтрам.',
           modalTitle: 'Детали вакансии',
           close: 'Закрыть',
@@ -312,10 +319,12 @@
         document.getElementById('subtitleText').textContent = t('subtitle');
         document.getElementById('periodLabel').textContent = t('period');
         document.getElementById('clientLabel').textContent = t('client');
+        document.getElementById('applyTypeLabel').textContent = t('applyType');
         document.getElementById('refreshBtn').textContent = t('refresh');
         document.getElementById('thAppliedAt').textContent = t('thAppliedAt');
         document.getElementById('thTitle').textContent = t('thTitle');
         document.getElementById('thCompany').textContent = t('thCompany');
+        document.getElementById('thApplyType').textContent = t('thApplyType');
         document.getElementById('thLocation').textContent = t('thLocation');
         document.getElementById('jobModalTitle').textContent = t('modalTitle');
         document.getElementById('closeModalBtn').textContent = t('close');
@@ -400,19 +409,30 @@
         sel.disabled = false;
         sel.innerHTML = clients.map((client) => `<option value="${esc(client.id)}">${esc(clientLabel(client))}</option>`).join('');
       }
+      function rowApplyType(row) { return String(row?.applyType || '').trim(); }
+      function renderApplyTypeOptions() {
+        const sel = document.getElementById('applyTypeSel');
+        const prev = sel.value || '';
+        const types = [...new Set(rows.map(rowApplyType).filter(Boolean))].sort();
+        sel.innerHTML = [`<option value="">${esc(t('applyTypeAll'))}</option>`]
+          .concat(types.map((ty) => `<option value="${esc(ty)}">${esc(ty)}</option>`)).join('');
+        sel.value = prev && types.includes(prev) ? prev : '';
+      }
       function renderRows() {
         const body = document.getElementById('rowsBody');
-        if (!rows.length) {
-          body.innerHTML = `<tr><td colspan="4" class="empty">${esc(t('empty'))}</td></tr>`;
+        const selectedType = document.getElementById('applyTypeSel').value || '';
+        const visible = selectedType ? rows.filter((row) => rowApplyType(row) === selectedType) : rows;
+        if (!visible.length) {
+          body.innerHTML = `<tr><td colspan="5" class="empty">${esc(t('empty'))}</td></tr>`;
           return;
         }
-        body.innerHTML = rows.map((row) => {
+        body.innerHTML = visible.map((row) => {
           const meta = parseMetaJson(row.meta);
           const location = meta?.location || t('noLocation');
           const applyUrl = rowApplyUrl(row, meta);
           const safeTitle = esc(row.vacancyTitle || t('noData'));
           const titleHtml = applyUrl ? `<a class="title-link" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">${safeTitle}</a>` : safeTitle;
-          return `<tr data-row-id="${esc(row.id)}"><td>${esc(fmtDateTime(row.appliedAt))}</td><td>${titleHtml}</td><td>${esc(row.companyName || t('noData'))}</td><td>${esc(location)}</td></tr>`;
+          return `<tr data-row-id="${esc(row.id)}"><td>${esc(fmtDateTime(row.appliedAt))}</td><td>${titleHtml}</td><td>${esc(row.companyName || t('noData'))}</td><td>${esc(rowApplyType(row) || t('noData'))}</td><td>${esc(location)}</td></tr>`;
         }).join('');
       }
       function closeModal() { document.getElementById('jobModal').classList.remove('on'); }
@@ -469,6 +489,7 @@
         if (!clientUserId) { rows = []; renderRows(); return; }
         const payload = await api(`/api/app/mentor/report?clientUserId=${encodeURIComponent(clientUserId)}&period=${encodeURIComponent(period)}`);
         rows = Array.isArray(payload?.rows) ? payload.rows : [];
+        renderApplyTypeOptions();
         renderRows();
       }
       async function boot() {
@@ -482,6 +503,7 @@
       document.getElementById('refreshBtn').addEventListener('click', () => { reloadReport().catch(showLoadError); });
       document.getElementById('periodSel').addEventListener('change', () => { reloadReport().catch(showLoadError); });
       document.getElementById('clientSel').addEventListener('change', () => { loadRows().catch(showLoadError); });
+      document.getElementById('applyTypeSel').addEventListener('change', () => { renderRows(); });
       document.getElementById('rowsBody').addEventListener('click', (event) => {
         if (event.target.closest('a.title-link')) return;
         const row = event.target.closest('tr[data-row-id]');
@@ -493,7 +515,7 @@
       document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeModal(); });
       function showLoadError(err) {
         const body = document.getElementById('rowsBody');
-        body.innerHTML = `<tr><td colspan="4" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="5" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
       }
       boot().catch(showLoadError);
     </script>
