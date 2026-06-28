@@ -56,9 +56,10 @@
             <option value="24h">24h</option>
             <option value="7d">7d</option>
             <option value="30d">30d</option>
+            <option value="all">All</option>
           </select>
           <label class="muted" for="clientSel" id="clientLabel">Client</label>
-          <select id="clientSel"></select>
+          <select id="clientSel" multiple size="4"></select>
           <label class="muted" for="applyTypeSel" id="applyTypeLabel">Apply type</label>
           <select id="applyTypeSel"></select>
           <button id="refreshBtn" type="button">Refresh</button>
@@ -68,6 +69,7 @@
         <table>
           <thead>
             <tr>
+              <th id="thClient">Client</th>
               <th id="thAppliedAt">Applied at</th>
               <th id="thTitle">Title</th>
               <th id="thCompany">Company</th>
@@ -128,12 +130,14 @@
           period: 'Period',
           client: 'Client',
           refresh: 'Refresh',
+          thClient: 'Client',
           thAppliedAt: 'Applied at',
           thTitle: 'Title',
           thCompany: 'Company',
           thApplyType: 'Apply type',
           thLocation: 'Location',
           applyTypeAll: 'All',
+          allClients: 'All clients',
           empty: 'No applied jobs for selected filters.',
           modalTitle: 'Job details',
           close: 'Close',
@@ -172,12 +176,14 @@
           period: 'Период',
           client: 'Клиент',
           refresh: 'Обновить',
+          thClient: 'Клиент',
           thAppliedAt: 'Время отклика',
           thTitle: 'Вакансия',
           thCompany: 'Компания',
           thApplyType: 'Тип отклика',
           thLocation: 'Локация',
           applyTypeAll: 'Все',
+          allClients: 'Все клиенты',
           empty: 'Нет откликов по выбранным фильтрам.',
           modalTitle: 'Детали вакансии',
           close: 'Закрыть',
@@ -321,6 +327,7 @@
         document.getElementById('clientLabel').textContent = t('client');
         document.getElementById('applyTypeLabel').textContent = t('applyType');
         document.getElementById('refreshBtn').textContent = t('refresh');
+        document.getElementById('thClient').textContent = t('thClient');
         document.getElementById('thAppliedAt').textContent = t('thAppliedAt');
         document.getElementById('thTitle').textContent = t('thTitle');
         document.getElementById('thCompany').textContent = t('thCompany');
@@ -407,7 +414,19 @@
           return;
         }
         sel.disabled = false;
-        sel.innerHTML = clients.map((client) => `<option value="${esc(client.id)}">${esc(clientLabel(client))}</option>`).join('');
+        const allOpt = `<option value="__all__" selected>${esc(t('allClients'))}</option>`;
+        sel.innerHTML = allOpt + clients.map((client) => `<option value="${esc(client.id)}">${esc(clientLabel(client))}</option>`).join('');
+      }
+      // Selected client ids; "All clients" (or nothing) => every assigned client.
+      function selectedClientIds() {
+        const sel = document.getElementById('clientSel');
+        const vals = [...sel.selectedOptions].map((o) => o.value).filter(Boolean);
+        if (!vals.length || vals.includes('__all__')) return clients.map((c) => String(c.id));
+        return vals;
+      }
+      function clientNameById(id) {
+        const c = clients.find((x) => String(x.id) === String(id));
+        return c ? clientLabel(c) : `#${id}`;
       }
       function rowApplyType(row) { return String(row?.applyType || '').trim(); }
       function renderApplyTypeOptions() {
@@ -423,7 +442,7 @@
         const selectedType = document.getElementById('applyTypeSel').value || '';
         const visible = selectedType ? rows.filter((row) => rowApplyType(row) === selectedType) : rows;
         if (!visible.length) {
-          body.innerHTML = `<tr><td colspan="5" class="empty">${esc(t('empty'))}</td></tr>`;
+          body.innerHTML = `<tr><td colspan="6" class="empty">${esc(t('empty'))}</td></tr>`;
           return;
         }
         body.innerHTML = visible.map((row) => {
@@ -432,7 +451,7 @@
           const applyUrl = rowApplyUrl(row, meta);
           const safeTitle = esc(row.vacancyTitle || t('noData'));
           const titleHtml = applyUrl ? `<a class="title-link" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">${safeTitle}</a>` : safeTitle;
-          return `<tr data-row-id="${esc(row.id)}"><td>${esc(fmtDateTime(row.appliedAt))}</td><td>${titleHtml}</td><td>${esc(row.companyName || t('noData'))}</td><td>${esc(rowApplyType(row) || t('noData'))}</td><td>${esc(location)}</td></tr>`;
+          return `<tr data-row-id="${esc(row.id)}"><td>${esc(clientNameById(row.userId))}</td><td>${esc(fmtDateTime(row.appliedAt))}</td><td>${titleHtml}</td><td>${esc(row.companyName || t('noData'))}</td><td>${esc(rowApplyType(row) || t('noData'))}</td><td>${esc(location)}</td></tr>`;
         }).join('');
       }
       function closeModal() { document.getElementById('jobModal').classList.remove('on'); }
@@ -484,11 +503,15 @@
         renderClientsChart();
       }
       async function loadRows() {
-        const clientUserId = document.getElementById('clientSel').value;
+        const ids = selectedClientIds();
         const period = document.getElementById('periodSel').value || '24h';
-        if (!clientUserId) { rows = []; renderRows(); return; }
-        const payload = await api(`/api/app/mentor/report?clientUserId=${encodeURIComponent(clientUserId)}&period=${encodeURIComponent(period)}`);
-        rows = Array.isArray(payload?.rows) ? payload.rows : [];
+        if (!ids.length) { rows = []; renderApplyTypeOptions(); renderRows(); return; }
+        const results = await Promise.all(ids.map((id) =>
+          api(`/api/app/mentor/report?clientUserId=${encodeURIComponent(id)}&period=${encodeURIComponent(period)}`)
+            .then((p) => (Array.isArray(p?.rows) ? p.rows : []))
+            .catch(() => [])
+        ));
+        rows = results.flat().sort((a, b) => new Date(b.appliedAt || 0) - new Date(a.appliedAt || 0));
         renderApplyTypeOptions();
         renderRows();
       }
@@ -515,7 +538,7 @@
       document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeModal(); });
       function showLoadError(err) {
         const body = document.getElementById('rowsBody');
-        body.innerHTML = `<tr><td colspan="5" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="6" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
       }
       boot().catch(showLoadError);
     </script>

@@ -234,9 +234,10 @@ export function createApplicationsRouter() {
         order: [['CreatedAt', 'DESC'], ['Id', 'DESC']],
       });
       const clientUserIds = assignments.map((row) => row.ClientUserId).filter(Boolean);
-      const hours = parseReportPeriodHours(req.query.period);
+      const allTime = String(req.query.period || '').trim().toLowerCase() === 'all';
+      const hours = allTime ? 90 * 24 : parseReportPeriodHours(req.query.period); // bound the 'all' chart to 90d
       const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-      const period = hours === 24 ? '24h' : hours === 7 * 24 ? '7d' : '30d';
+      const period = allTime ? 'all' : (hours === 24 ? '24h' : hours === 7 * 24 ? '7d' : '30d');
       const chart = await fetchMentorClientApplicationChart(clientUserIds, { since });
       return res.json({
         ok: true,
@@ -268,14 +269,15 @@ export function createApplicationsRouter() {
       if (!access.ok) {
         return res.status(access.status).json({ error: access.error });
       }
-      const hours = parseReportPeriodHours(req.query.period);
-      const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-      const rows = await fetchClientDailyReportRows(clientUserId, { since });
-      const period = hours === 24 ? '24h' : hours === 7 * 24 ? '7d' : '30d';
+      const allTime = String(req.query.period || '').trim().toLowerCase() === 'all';
+      const hours = allTime ? null : parseReportPeriodHours(req.query.period);
+      const since = allTime ? null : new Date(Date.now() - hours * 60 * 60 * 1000);
+      const rows = await fetchClientDailyReportRows(clientUserId, allTime ? { allTime: true } : { since });
+      const period = allTime ? 'all' : (hours === 24 ? '24h' : hours === 7 * 24 ? '7d' : '30d');
       return res.json({
         ok: true,
         period,
-        since: since.toISOString(),
+        since: since ? since.toISOString() : null,
         count: rows.length,
         rows,
       });
