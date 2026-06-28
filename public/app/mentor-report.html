@@ -81,7 +81,10 @@
       </div>
       <div class="card">
         <div class="row" style="margin-bottom:10px; justify-content:space-between">
-          <input id="searchInput" type="search" placeholder="Search" autocomplete="off" />
+          <div class="row">
+            <input id="searchInput" type="search" placeholder="Search" autocomplete="off" />
+            <span class="muted" id="resultCount" style="white-space:nowrap"></span>
+          </div>
           <div class="row">
             <label class="muted" for="pageSizeSel" id="pageSizeLabel">Per page</label>
             <select id="pageSizeSel">
@@ -176,6 +179,7 @@
           perPage: 'Per page',
           prev: 'Prev',
           next: 'Next',
+          found: 'found',
           empty: 'No applied jobs for selected filters.',
           modalTitle: 'Job details',
           close: 'Close',
@@ -227,6 +231,7 @@
           perPage: 'На странице',
           prev: 'Назад',
           next: 'Вперёд',
+          found: 'найдено',
           empty: 'Нет откликов по выбранным фильтрам.',
           modalTitle: 'Детали вакансии',
           close: 'Закрыть',
@@ -535,6 +540,7 @@
         body.innerHTML = pageRows.length
           ? pageRows.map(rowToHtml).join('')
           : `<tr><td colspan="5" class="empty">${esc(t('empty'))}</td></tr>`;
+        document.getElementById('resultCount').textContent = `${total} ${t('found')}`;
         const info = document.getElementById('pagerInfo');
         const pageEl = document.getElementById('pagerPage');
         info.textContent = total ? `${start + 1}–${start + pageRows.length} / ${total}` : '0';
