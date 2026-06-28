@@ -94,6 +94,7 @@ function sanitizeJobPayload(raw) {
       title: String(job?.title || '').trim().slice(0, 255),
       company: String(job?.company || '').trim().slice(0, 255),
       source: String(job?.source || '').trim() || null,
+      applyType: String(job?.applyType || '').trim().slice(0, 50) || null,
       applyUrl: String(job?.applyUrl || '').trim() || null,
       location: String(job?.location || '').trim().slice(0, 255) || null,
       shortSummary: String(job?.shortSummary || '').trim().slice(0, 1200) || null,

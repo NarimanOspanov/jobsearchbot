@@ -20,6 +20,7 @@ export async function persistApplyPriorityForPageJobs({ clientUserId, client, jo
       title: String(job?.title || '').trim(),
       company: String(job?.company || '').trim(),
       source: String(job?.source || '').trim() || null,
+      applyType: String(job?.applyType || '').trim() || null,
       applyUrl: String(job?.applyUrl || '').trim() || null,
       location: String(job?.location || '').trim() || null,
       shortSummary: String(job?.shortSummary || '').trim() || null,
@@ -57,9 +58,14 @@ export async function persistApplyPriorityForPageJobs({ clientUserId, client, jo
       context: context || null,
     });
 
+    const applyType = job.applyType ? String(job.applyType).slice(0, 50) : null;
+
     const row = existingByJobId.get(job.id);
     if (row) {
-      await row.update({ ApplyPriorityJson: applyPriorityJson });
+      const rowUpdates = { ApplyPriorityJson: applyPriorityJson };
+      // backfill ApplyType for rows created before it was persisted
+      if (!String(row.ApplyType || '').trim() && applyType) rowUpdates.ApplyType = applyType;
+      await row.update(rowUpdates);
       updatedCount += 1;
       continue;
     }
@@ -69,6 +75,7 @@ export async function persistApplyPriorityForPageJobs({ clientUserId, client, jo
       VacancyTitle: (job.title || `Screenly #${job.id}`).slice(0, 255),
       CompanyName: job.company ? job.company.slice(0, 255) : null,
       Source: job.source ? job.source.slice(0, 50) : null,
+      ApplyType: applyType,
       ScreenlyJobId: job.id,
       Status: 'new',
       AppliedAt: new Date(),
