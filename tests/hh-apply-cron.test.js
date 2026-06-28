@@ -218,3 +218,35 @@ test('buildHhApplicationBackfillUpdates overwrites rejected status on re-import'
   );
   assert.equal(updates.Status, 'applied');
 });
+
+test('buildHhApplicationBackfillUpdates flips a "new" row to applied on real apply', () => {
+  const updates = buildHhApplicationBackfillUpdates(
+    {
+      Status: 'new',
+      MetaJson: JSON.stringify({ hhVacancyId: '55' }),
+    },
+    {
+      hhVacancyId: '55',
+      vacancyTitle: 'Engineer',
+      status: 'applied',
+      appliedAt: new Date('2026-06-28T10:00:00.000Z'),
+    }
+  );
+  assert.equal(updates.Status, 'applied');
+  assert.equal(updates.AppliedAt?.toISOString?.(), '2026-06-28T10:00:00.000Z');
+});
+
+test('buildHhApplicationBackfillUpdates does not downgrade an applied row to new', () => {
+  const updates = buildHhApplicationBackfillUpdates(
+    {
+      Status: 'applied',
+      MetaJson: JSON.stringify({ hhVacancyId: '55' }),
+    },
+    {
+      hhVacancyId: '55',
+      vacancyTitle: 'Engineer',
+      status: 'new',
+    }
+  );
+  assert.equal(updates.Status, undefined);
+});

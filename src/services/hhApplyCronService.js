@@ -351,11 +351,19 @@ export function buildHhApplicationBackfillUpdates(existing, payload) {
   }
   if (payload.status) {
     const existingStatus = String(existing.Status || '').trim().toLowerCase();
-    if (!existingStatus || existingStatus === 'rejected') {
+    const incomingStatus = String(payload.status).trim().toLowerCase();
+    // A real "applied" submission is authoritative: it must win over any non-applied status
+    // (incl. "new" — e.g. a row that was rejected→new and has now actually been applied to).
+    // Otherwise keep backfill semantics: only fill an empty or "rejected" status, and never
+    // let a non-applied import (e.g. "new") downgrade a row that is already "applied".
+    if (incomingStatus === 'applied') {
+      if (existingStatus !== 'applied') updates.Status = payload.status;
+    } else if (!existingStatus || existingStatus === 'rejected') {
       updates.Status = payload.status;
     }
   }
-  if (!existing.AppliedAt && payload.appliedAt) {
+  // Stamp AppliedAt when missing, or whenever this import flips the row to "applied".
+  if (payload.appliedAt && (!existing.AppliedAt || updates.Status === 'applied')) {
     updates.AppliedAt = payload.appliedAt;
   }
 
