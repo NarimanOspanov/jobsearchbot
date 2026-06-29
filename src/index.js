@@ -824,6 +824,10 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       await openJobSearchFromBot(ctx);
       return;
     }
+    if (payload === 'companies') {
+      await openCompaniesFromBot(ctx);
+      return;
+    }
     if (payload.startsWith('buy_')) {
       const requestedCode = payload.replace(/^buy_/, '').trim().toLowerCase();
       if (requestedCode) {
@@ -935,6 +939,21 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
       return;
     }
     await ctx.reply(tr(ctx, 'jobsearch_https_error'));
+  };
+
+  // Same reply as the /companies command — reused by the command and by the
+  // `?start=companies` deep link so an advertised link behaves like the command.
+  const openCompaniesFromBot = async (ctx) => {
+    const lang = langFromCtx(ctx);
+    if (canUseCompaniesWebApp) {
+      await ctx.reply(tr(ctx, 'companies_open'), {
+        reply_markup: {
+          inline_keyboard: [[{ text: t(lang, 'btn_companies'), web_app: { url: companiesUrl } }]],
+        },
+      });
+      return;
+    }
+    await ctx.reply(tr(ctx, 'companies_https_error'));
   };
 
   const sendCvscoreIntro = async (ctx) => {
@@ -1751,16 +1770,7 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   bot.command('companies', async (ctx) => {
     const canProceedToCompanies = await enforceStartRequiredChannelsGate(ctx);
     if (!canProceedToCompanies) return;
-    const lang = langFromCtx(ctx);
-    if (canUseCompaniesWebApp) {
-      await ctx.reply(tr(ctx, 'companies_open'), {
-        reply_markup: {
-          inline_keyboard: [[{ text: t(lang, 'btn_companies'), web_app: { url: companiesUrl } }]],
-        },
-      });
-      return;
-    }
-    await ctx.reply(tr(ctx, 'companies_https_error'));
+    await openCompaniesFromBot(ctx);
   });
 
   bot.command('news', async (ctx) => {
