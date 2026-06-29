@@ -19,6 +19,16 @@
       body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
       .wrap { max-width: 760px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
       .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+      .company-card { cursor: pointer; transition: background 0.12s, border-color 0.12s; }
+      .company-card:hover, .company-card:focus { background: #1a2240; border-color: var(--accent); outline: none; }
+      .modal { position: fixed; inset: 0; background: rgba(5,10,20,0.78); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 999; }
+      .modal.on { display: flex; }
+      .modal-card { width: min(560px, 100%); background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+      .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+      .modal-close { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 4px 10px; cursor: pointer; font: inherit; }
+      .modal-card h3 { margin: 0; font-size: 20px; }
+      .modal-card .modal-desc { margin: 12px 0; line-height: 1.5; }
+      .modal-card .modal-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
       .title { margin: 0; font-size: 22px; }
       .muted { color: var(--muted); font-size: 14px; }
       a { color: var(--accent); word-break: break-all; }
@@ -182,6 +192,18 @@
       </div>
       <div id="companiesList"></div>
     </div>
+
+    <div id="companyModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="companyModalName">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3 id="companyModalName"></h3>
+          <button type="button" id="companyModalClose" class="modal-close">Close</button>
+        </div>
+        <div id="companyModalTags" class="modal-tags"></div>
+        <p id="companyModalDesc" class="modal-desc muted"></p>
+        <a id="companyModalLink" href="#" target="_blank" rel="noopener noreferrer"></a>
+      </div>
+    </div>
     <script>
       const STRINGS = {
         en: {
@@ -199,6 +221,9 @@
           loadCompaniesError: 'Failed to load companies',
           loadIndustriesError: 'Failed to load industries',
           requestTimeout: 'Request timed out. Please try again.',
+          visitWebsite: 'Visit website',
+          noDescription: 'No description yet.',
+          close: 'Close',
         },
         ru: {
           pageTitle: 'Компании с удаленкой',
@@ -215,6 +240,9 @@
           loadCompaniesError: 'Не удалось загрузить компании',
           loadIndustriesError: 'Не удалось загрузить отрасли',
           requestTimeout: 'Превышено время ожидания. Попробуйте ещё раз.',
+          visitWebsite: 'Перейти на сайт',
+          noDescription: 'Описание пока отсутствует.',
+          close: 'Закрыть',
         },
       };
 
@@ -377,12 +405,14 @@
         const tags = (row.industries || [])
           .map((item) => `<span class="industry-tag">${esc(item.name)}</span>`)
           .join('');
+        const desc = row.shortDescription
+          ? `<p class="muted" style="margin:8px 0 0">${esc(row.shortDescription)}</p>`
+          : '';
         return `
-          <article class="card">
+          <article class="card company-card" data-company-id="${esc(row.Id)}" role="button" tabindex="0">
             <h3 style="margin:0 0 8px;font-size:18px">${esc(row.Name)}</h3>
-            <a href="${esc(row.Url)}" target="_blank" rel="noopener noreferrer">${esc(row.Url)}</a>
             ${tags ? `<div>${tags}</div>` : ''}
-            ${row.Notes ? `<p class="muted" style="margin:8px 0 0; white-space:pre-wrap">${esc(row.Notes)}</p>` : ''}
+            ${desc}
           </article>
         `;
       }
@@ -474,7 +504,39 @@
         if (!picker.contains(event.target)) setPickerOpen(false);
       });
 
+      // Company details modal (Name, short description, link).
+      function openCompanyModal(id) {
+        const row = companies.find((c) => String(c.Id) === String(id));
+        if (!row) return;
+        document.getElementById('companyModalName').textContent = row.Name || '';
+        document.getElementById('companyModalTags').innerHTML = (row.industries || [])
+          .map((i) => `<span class="industry-tag">${esc(i.name)}</span>`).join('');
+        document.getElementById('companyModalDesc').textContent = row.shortDescription || t('noDescription');
+        const link = document.getElementById('companyModalLink');
+        if (row.Url) { link.href = row.Url; link.textContent = t('visitWebsite'); link.style.display = ''; }
+        else { link.removeAttribute('href'); link.textContent = ''; link.style.display = 'none'; }
+        document.getElementById('companyModal').classList.add('on');
+      }
+      function closeCompanyModal() {
+        document.getElementById('companyModal').classList.remove('on');
+      }
+      document.getElementById('companiesList').addEventListener('click', (event) => {
+        const card = event.target.closest('.company-card');
+        if (card) openCompanyModal(card.getAttribute('data-company-id'));
+      });
+      document.getElementById('companiesList').addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const card = event.target.closest('.company-card');
+        if (card) { event.preventDefault(); openCompanyModal(card.getAttribute('data-company-id')); }
+      });
+      document.getElementById('companyModalClose').addEventListener('click', closeCompanyModal);
+      document.getElementById('companyModal').addEventListener('click', (event) => {
+        if (event.target.id === 'companyModal') closeCompanyModal();
+      });
+      document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeCompanyModal(); });
+
       applyI18n();
+      document.getElementById('companyModalClose').textContent = t('close');
 
       (async () => {
         try {

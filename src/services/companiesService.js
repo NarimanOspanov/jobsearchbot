@@ -39,12 +39,21 @@ export function mapCompanyRow(row, lang = 'ru') {
       if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
       return a.name.localeCompare(b.name, normalizeUserLanguage(lang));
     });
+  const shortDescriptionRu = row.ShortDescriptionRU ? String(row.ShortDescriptionRU).trim() : null;
+  const shortDescriptionEng = row.ShortDescriptionEng ? String(row.ShortDescriptionEng).trim() : null;
+  const shortDescription =
+    normalizeUserLanguage(lang) === 'en'
+      ? shortDescriptionEng || shortDescriptionRu
+      : shortDescriptionRu || shortDescriptionEng;
   return {
     Id: row.Id,
     Name: row.Name,
     Url: row.Url,
     Notes: row.Notes,
     DateAdded: row.DateAdded,
+    shortDescription: shortDescription || null,
+    shortDescriptionRu,
+    shortDescriptionEng,
     industries,
     industryNames: industries.map((item) => item.name),
     primaryIndustry: industries[0] || null,

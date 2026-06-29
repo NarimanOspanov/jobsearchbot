@@ -654,4 +654,69 @@ Rules:
   return normalizeCompanyIndustryAssignments(parsed, { allowedCompanyIds, allowedIndustryIds });
 }
 
-export { INDUSTRY_TRANSLATE_BATCH_SIZE, COMPANY_INDUSTRY_BATCH_SIZE, MAX_INDUSTRIES_PER_COMPANY };
+const COMPANY_DESCRIPTION_BATCH_SIZE = 12;
+
+/**
+ * Generate a concise RU + Eng one-liner describing what each company does.
+ * Input companies: { id, name, url, industries?: string[] }
+ * Returns: [{ companyId, ru, eng }]
+ */
+export async function generateCompanyDescriptionsBatchWithAI({ companies = [] }) {
+  if (!genAI) throw new Error('GEMINI_API_KEY is not configured');
+  if (!Array.isArray(companies) || !companies.length) return [];
+
+  const blocks = companies
+    .map((item) => {
+      const industries = Array.isArray(item.industries) ? item.industries.filter(Boolean).join(', ') : '';
+      return [
+        `companyId: ${item.id}`,
+        `name: ${String(item.name || '').trim()}`,
+        `url: ${String(item.url || '').trim()}`,
+        industries ? `industries: ${industries}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n');
+    })
+    .join('\n\n---\n\n');
+
+  const prompt = `You write very short descriptions of companies for a remote-jobs board.
+
+Companies:
+${blocks}
+
+For each company, write one concise sentence (max ~160 characters) describing what the company does / its product or domain. Use the company name, careers URL domain, and industries as signals. Be factual and neutral; if unsure, describe the likely domain from the industries rather than inventing specifics.
+
+Return strict JSON only as an array:
+[
+  { "companyId": number, "ru": "одно предложение на русском", "eng": "one sentence in English" }
+]
+
+Rules:
+- Include every companyId listed above exactly once
+- "ru" must be in Russian, "eng" in English
+- One sentence each, no markdown, no quotes inside the text
+- Do not include the company name as the whole description — describe what it does`;
+
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const raw = response.text?.trim();
+  if (!raw) throw new Error('AI response is empty');
+
+  const parsed = JSON.parse(extractFirstJsonArray(raw));
+  const allowed = new Set(
+    companies.map((item) => Number(item.id)).filter((id) => Number.isSafeInteger(id) && id > 0)
+  );
+  const trim = (v) => (v == null ? null : String(v).replace(/\s+/g, ' ').trim().slice(0, 1000) || null);
+  return (Array.isArray(parsed) ? parsed : [])
+    .map((row) => ({ companyId: Number(row?.companyId), ru: trim(row?.ru), eng: trim(row?.eng) }))
+    .filter((row) => allowed.has(row.companyId) && (row.ru || row.eng));
+}
+
+export {
+  INDUSTRY_TRANSLATE_BATCH_SIZE,
+  COMPANY_INDUSTRY_BATCH_SIZE,
+  COMPANY_DESCRIPTION_BATCH_SIZE,
+  MAX_INDUSTRIES_PER_COMPANY,
+};
