@@ -946,11 +946,15 @@ function registerHandlers(bot, appBaseUrl, options = {}) {
   const openCompaniesFromBot = async (ctx) => {
     const lang = langFromCtx(ctx);
     if (canUseCompaniesWebApp) {
-      await ctx.reply(tr(ctx, 'companies_open'), {
-        reply_markup: {
-          inline_keyboard: [[{ text: t(lang, 'btn_companies'), web_app: { url: companiesUrl } }]],
-        },
-      });
+      const caption = tr(ctx, 'companies_open');
+      const replyMarkup = {
+        inline_keyboard: [[{ text: t(lang, 'btn_companies'), web_app: { url: companiesUrl } }]],
+      };
+      if (existsSync(startAvatarPath)) {
+        await ctx.replyWithPhoto({ source: startAvatarPath }, { caption, reply_markup: replyMarkup });
+        return;
+      }
+      await ctx.reply(caption, { reply_markup: replyMarkup });
       return;
     }
     await ctx.reply(tr(ctx, 'companies_https_error'));

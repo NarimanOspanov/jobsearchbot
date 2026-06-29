@@ -192,7 +192,8 @@ export const BOT_LOCALES = {
     profile_https_error:
       'Страница настроек требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).',
 
-    companies_open: 'Открыть компании с удалёнкой:',
+    companies_open:
+      'Мы собрали компании, в которых можно работать удалённо из любой точки мира, а также те, которые помогают с релокацией и визами 🌍\n\nНажмите кнопку ниже, чтобы посмотреть список:',
     btn_companies: 'Компании с удалёнкой',
     companies_https_error:
       'Страница компаний требует публичный HTTPS WEBHOOK_URL/ADMIN_APP_URL (не localhost).',
@@ -427,7 +428,8 @@ export const BOT_LOCALES = {
     profile_https_error:
       'Settings page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).',
 
-    companies_open: 'Open remote-friendly companies:',
+    companies_open:
+      "We've gathered companies where you can work remotely from anywhere in the world — plus ones that help with relocation and visas 🌍\n\nTap the button below to browse the list:",
     btn_companies: 'Remote companies',
     companies_https_error:
       'Companies page requires public HTTPS WEBHOOK_URL/ADMIN_APP_URL (not localhost).',
