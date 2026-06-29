@@ -953,6 +953,27 @@ export function createAgentClientsRouter() {
     }
   );
 
+  // Remove the client's main resume (clears Users.ResumeURL).
+  router.delete('/api/app/agent/clients/:clientUserId/resume', agentMiniAppAuth, async (req, res) => {
+    try {
+      const clientUserId = Number.parseInt(String(req.params.clientUserId), 10);
+      if (!Number.isSafeInteger(clientUserId) || clientUserId <= 0) {
+        return res.status(400).json({ error: 'Invalid client user id' });
+      }
+      if (!(await enforceAgentClientAccess(req, res, clientUserId))) return;
+
+      const client = await models.Users.findByPk(clientUserId);
+      if (!client) return res.status(404).json({ error: 'Client not found' });
+
+      await client.update({ ResumeURL: null });
+      await client.reload();
+      return res.json({ ok: true, client: mapUserToAgentClientPayload(client) });
+    } catch (err) {
+      console.error('DELETE /api/app/agent/clients/:clientUserId/resume:', err);
+      return res.status(500).json({ error: 'Failed to remove client resume' });
+    }
+  });
+
   router.post('/api/app/agent/clients/apply-priority/enqueue-all', agentMiniAppAuth, async (req, res) => {
     try {
       const queueState = getAgentApplyPriorityQueueState();

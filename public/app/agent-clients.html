@@ -978,6 +978,7 @@
                 <div class="resume-actions">
                   <button data-client-role="viewClientResumeBtn" type="button">Open full screen</button>
                   <button data-client-role="triggerClientResumeReuploadBtn" type="button" class="ghost-btn">Choose new file</button>
+                  <button data-client-role="removeClientResumeBtn" type="button" class="ghost-btn" style="display:none;color:var(--bad);border-color:var(--bad)">Remove resume</button>
                 </div>
                 <div data-client-role="clientResumePreviewWrap" class="client-resume-preview" style="display:none">
                   <iframe data-client-role="clientResumePreviewFrame" title="Resume preview"></iframe>
@@ -1548,6 +1549,7 @@
           'viewClientResumeBtn',
           'triggerClientResumeReuploadBtn',
           'uploadClientResumeBtn',
+          'removeClientResumeBtn',
           'clientResumeFileInput',
           'enqueueClientApplyPriorityBtn',
           'enqueueClientApplyPriorityRewriteBtn',
@@ -1619,6 +1621,10 @@
         }
         if (role === 'uploadClientResumeBtn') {
           uploadClientResumeFromUi(scope).catch((err) => setClientResumeMsg(scope, err.message));
+          return;
+        }
+        if (role === 'removeClientResumeBtn') {
+          removeClientResumeFromUi(scope).catch((err) => setClientResumeMsg(scope, err.message));
           return;
         }
         if (role === 'enqueueClientApplyPriorityBtn') {
@@ -3369,6 +3375,11 @@
         if (triggerReuploadBtn) {
           triggerReuploadBtn.disabled = isUploadingClientResume || isSyncing || !u;
         }
+        const removeBtn = clientEl(scope, 'removeClientResumeBtn');
+        if (removeBtn) {
+          removeBtn.style.display = resumeUrl ? '' : 'none';
+          removeBtn.disabled = !resumeUrl || isUploadingClientResume || isSyncing;
+        }
         const reuploadLabel = clientEl(scope, 'clientResumeReuploadLabel');
         const uploadBtn = clientEl(scope, 'uploadClientResumeBtn');
         if (reuploadLabel) {
@@ -3643,6 +3654,43 @@
               ? `Resume saved. AI updated profile fields${skillCount ? ` (${skillCount} role(s))` : ''}.`
               : 'Resume updated';
           setClientResumeMsg(MAIN_CLIENT_SCOPE, msg, true);
+          setTimeout(() => setClientResumeMsg(MAIN_CLIENT_SCOPE, ''), 4000);
+        } finally {
+          isUploadingClientResume = false;
+          onScopeLoading(MAIN_CLIENT_SCOPE, 'uploadClientResumeLoader', false);
+          refreshClientResumeFileUi(MAIN_CLIENT_SCOPE);
+          renderClientResumeUi(MAIN_CLIENT_SCOPE);
+        }
+      }
+
+      async function removeClientResumeFromUi(scope = MAIN_CLIENT_SCOPE) {
+        const seekerId = q().seekerId;
+        if (!seekerId) throw new Error('Select a client first.');
+        const user = getSelectedUser();
+        if (!user?.resumeUrl) return;
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          const ok = window.confirm('Remove this client’s resume? Auto-apply and apply-priority need a resume on file.');
+          if (!ok) return;
+        }
+        isUploadingClientResume = true; // reuse busy flag to lock the resume controls
+        renderClientResumeUi(MAIN_CLIENT_SCOPE);
+        onScopeLoading(MAIN_CLIENT_SCOPE, 'uploadClientResumeLoader', true);
+        setClientResumeMsg(MAIN_CLIENT_SCOPE, '');
+        try {
+          const payload = await api(
+            `${API_BASE}/api/app/agent/clients/${encodeURIComponent(seekerId)}/resume${agentQueryPrefix()}`,
+            { method: 'DELETE' }
+          );
+          const updatedClient = payload?.client && typeof payload.client === 'object' ? payload.client : null;
+          const idx = users.findIndex((row) => String(row.id) === String(seekerId));
+          if (idx >= 0) {
+            users[idx] = updatedClient ? { ...users[idx], ...updatedClient } : { ...users[idx], resumeUrl: '' };
+          }
+          const fileInput = clientEl(MAIN_CLIENT_SCOPE, 'clientResumeFileInput');
+          if (fileInput) fileInput.value = '';
+          invalidateApplyPriorityCache();
+          renderAllSelectedUserInfo();
+          setClientResumeMsg(MAIN_CLIENT_SCOPE, 'Resume removed.', true);
           setTimeout(() => setClientResumeMsg(MAIN_CLIENT_SCOPE, ''), 4000);
         } finally {
           isUploadingClientResume = false;
