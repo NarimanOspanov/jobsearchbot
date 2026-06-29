@@ -965,7 +965,13 @@ export function createAgentClientsRouter() {
       const client = await models.Users.findByPk(clientUserId);
       if (!client) return res.status(404).json({ error: 'Client not found' });
 
-      await client.update({ ResumeURL: null });
+      // Removing the resume also clears the AI-parsed profile fields derived from it.
+      await client.update({
+        ResumeURL: null,
+        ResumeContactsJson: null,
+        skills: null,
+        WorkAuthorizationCountries: null,
+      });
       await client.reload();
       return res.json({ ok: true, client: mapUserToAgentClientPayload(client) });
     } catch (err) {
