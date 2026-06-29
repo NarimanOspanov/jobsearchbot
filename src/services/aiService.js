@@ -714,9 +714,70 @@ Rules:
     .filter((row) => allowed.has(row.companyId) && (row.ru || row.eng));
 }
 
+const COMPANY_RELOCATION_BATCH_SIZE = 15;
+
+/**
+ * Assess whether each company is known to help employees relocate (visa sponsorship,
+ * relocation package, "relocate" offers). Input: { id, name, url, industries?, description? }.
+ * Returns: [{ companyId, relocation: true | false | null }] where null = unknown/uncertain.
+ */
+export async function assessCompaniesRelocationBatchWithAI({ companies = [] }) {
+  if (!genAI) throw new Error('GEMINI_API_KEY is not configured');
+  if (!Array.isArray(companies) || !companies.length) return [];
+
+  const blocks = companies
+    .map((item) => {
+      const industries = Array.isArray(item.industries) ? item.industries.filter(Boolean).join(', ') : '';
+      return [
+        `companyId: ${item.id}`,
+        `name: ${String(item.name || '').trim()}`,
+        `url: ${String(item.url || '').trim()}`,
+        industries ? `industries: ${industries}` : null,
+        item.description ? `about: ${String(item.description).trim().slice(0, 240)}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n');
+    })
+    .join('\n\n---\n\n');
+
+  const prompt = `You assess whether each company is known to HELP EMPLOYEES RELOCATE — i.e. it offers relocation support such as visa/work-permit sponsorship, a relocation package, or "relocate" hiring options (moving people to an office/country).
+
+Companies:
+${blocks}
+
+Return strict JSON only as an array:
+[
+  { "companyId": number, "relocation": true | false | null }
+]
+
+Rules:
+- true  = the company is reasonably known to sponsor visas or offer relocation/relocate options
+- false = the company is clearly remote-only with no relocation, or known not to relocate
+- null  = you cannot reasonably determine it
+- Include every companyId exactly once
+- Be conservative: prefer null over guessing. Do not invent facts.`;
+
+  const response = await genAI.models.generateContent({
+    model: config.geminiTextModel,
+    contents: prompt,
+  });
+  const raw = response.text?.trim();
+  if (!raw) throw new Error('AI response is empty');
+
+  const parsed = JSON.parse(extractFirstJsonArray(raw));
+  const allowed = new Set(
+    companies.map((item) => Number(item.id)).filter((id) => Number.isSafeInteger(id) && id > 0)
+  );
+  const toBool = (v) => (v === true ? true : v === false ? false : null);
+  return (Array.isArray(parsed) ? parsed : [])
+    .map((row) => ({ companyId: Number(row?.companyId), relocation: toBool(row?.relocation) }))
+    .filter((row) => allowed.has(row.companyId));
+}
+
 export {
   INDUSTRY_TRANSLATE_BATCH_SIZE,
   COMPANY_INDUSTRY_BATCH_SIZE,
   COMPANY_DESCRIPTION_BATCH_SIZE,
+  COMPANY_RELOCATION_BATCH_SIZE,
   MAX_INDUSTRIES_PER_COMPANY,
 };

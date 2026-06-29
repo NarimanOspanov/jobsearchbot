@@ -54,6 +54,7 @@ export function mapCompanyRow(row, lang = 'ru') {
     shortDescription: shortDescription || null,
     shortDescriptionRu,
     shortDescriptionEng,
+    helpsWithRelocation: row.HelpsWithRelocation == null ? null : !!row.HelpsWithRelocation,
     industries,
     industryNames: industries.map((item) => item.name),
     primaryIndustry: industries[0] || null,

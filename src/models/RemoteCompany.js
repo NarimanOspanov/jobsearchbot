@@ -30,6 +30,10 @@ export default function defineRemoteCompany(sequelize) {
         type: DataTypes.STRING(1000),
         allowNull: true,
       },
+      HelpsWithRelocation: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+      },
       DateAdded: {
         type: DataTypes.DATE,
         allowNull: false,
