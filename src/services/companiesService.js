@@ -197,3 +197,30 @@ export async function setUserCompanyPref({ userId, companyId, type, enabled }) {
   }
   return { ok: true, enabled: Boolean(enabled) };
 }
+
+/**
+ * Enable/disable one opt-in for ALL remote companies at once.
+ * Returns { ok: true, enabled, count } or null on invalid input.
+ */
+export async function setAllUserCompaniesPref({ userId, type, enabled }) {
+  const uid = Number.parseInt(String(userId), 10);
+  if (!Number.isSafeInteger(uid) || uid <= 0) return null;
+  if (!isValidCompanyPrefType(type)) return null;
+
+  const Model = PREF_MODEL_BY_TYPE[type]();
+  if (!enabled) {
+    await Model.destroy({ where: { UserId: uid } });
+    return { ok: true, enabled: false, count: 0 };
+  }
+
+  const [companies, existing] = await Promise.all([
+    models.RemoteCompanies.findAll({ attributes: ['Id'], raw: true }),
+    Model.findAll({ where: { UserId: uid }, attributes: ['RemoteCompanyId'], raw: true }),
+  ]);
+  const have = new Set(existing.map((r) => r.RemoteCompanyId));
+  const missing = companies.map((c) => c.Id).filter((id) => !have.has(id));
+  if (missing.length) {
+    await Model.bulkCreate(missing.map((id) => ({ UserId: uid, RemoteCompanyId: id })));
+  }
+  return { ok: true, enabled: true, count: companies.length };
+}

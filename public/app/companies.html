@@ -26,7 +26,8 @@
       .modal.on { display: flex; }
       .modal-card { width: min(560px, 100%); background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
       .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-      .modal-close { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 4px 10px; cursor: pointer; font: inherit; }
+      .modal-close { background: transparent; border: none; color: var(--muted); border-radius: 8px; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; cursor: pointer; flex: 0 0 auto; transition: color 0.12s, background 0.12s; }
+      .modal-close:hover, .modal-close:focus { color: var(--text); background: rgba(255,255,255,0.06); outline: none; }
       .modal-card h3 { margin: 0; font-size: 20px; }
       .modal-card .modal-desc { margin: 12px 0; line-height: 1.5; }
       .modal-card .modal-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
@@ -239,24 +240,17 @@
       <div class="modal-card">
         <div class="modal-head">
           <h3 id="companyModalName"></h3>
-          <button type="button" id="companyModalClose" class="modal-close">Close</button>
+          <button type="button" id="companyModalClose" class="modal-close" aria-label="Close">✕</button>
         </div>
         <div id="companyModalTags" class="modal-tags"></div>
         <p id="companyModalDesc" class="modal-desc muted"></p>
         <a id="companyModalLink" href="#" target="_blank" rel="noopener noreferrer"></a>
 
         <div class="modal-prefs">
-          <div class="pref-row" id="prefNotifyRow">
-            <label class="pref-label-wrap">
-              <input type="checkbox" id="prefNotify" />
-              <span class="pref-label" id="prefNotifyLabel">Notify me about matching positions</span>
-            </label>
-            <span id="prefNotifyHelp" class="help-q" tabindex="0" role="img" aria-label="info">?</span>
-          </div>
           <div class="pref-row" id="prefAutoApplyRow">
             <label class="pref-label-wrap">
               <input type="checkbox" id="prefAutoApply" />
-              <span class="pref-label" id="prefAutoApplyLabel">Apply for me automatically</span>
+              <span class="pref-label" id="prefAutoApplyLabel">Enable auto-apply</span>
             </label>
             <span id="prefAutoApplyHelp" class="help-q" tabindex="0" role="img" aria-label="info">?</span>
           </div>
@@ -270,6 +264,17 @@
               <input type="file" id="resumeFileInput" accept=".pdf,image/png,image/jpeg,image/webp" />
               <button type="button" id="resumeUploadBtn" class="btn-accent">Upload resume</button>
               <span id="resumeUploadSpinner" class="mini-spinner" hidden></span>
+            </div>
+          </div>
+
+          <div class="resume-gate" id="enableAllBox" hidden>
+            <p class="gate-text" id="enableAllText">
+              Auto-apply is on for this company. Want to enable it for all companies in the list?
+            </p>
+            <div class="gate-row">
+              <button type="button" id="enableAllBtn" class="btn-accent">Enable for all companies</button>
+              <button type="button" id="enableAllLaterBtn" class="ghost-btn">Decide later</button>
+              <span id="enableAllSpinner" class="mini-spinner" hidden></span>
             </div>
           </div>
         </div>
@@ -298,14 +303,17 @@
           close: 'Close',
           relocationLabel: 'Relocation friendly',
           relocationHelp: 'According to reviews and feedback from other employees, the company helps with relocation or sponsors visas.',
-          prefNotifyLabel: 'Notify me about matching positions',
-          prefNotifyHelp: 'When our AI finds a position at this company that matches your resume, you’ll get a Telegram message.',
-          prefAutoApplyLabel: 'Apply for me automatically',
+          prefAutoApplyLabel: 'Enable auto-apply',
           prefAutoApplyHelp: 'When a matching position appears at this company, we’ll apply on your behalf using your main resume.',
           resumeGateText: 'To enable this we need your main resume. Upload it (PDF or image) — our AI reads your skills and work authorization automatically.',
           resumeUploadBtn: 'Upload resume',
           resumeUploading: 'Uploading…',
-          resumeUploadedProcessing: 'Resume uploaded — our AI is reading your skills. Done!',
+          resumeUploadedProcessing: 'Resume uploaded — our AI is reading your skills.',
+          autoApplyEnabledMsg: 'Auto-apply is enabled for this company.',
+          enableAllText: 'Auto-apply is on for this company. Want to enable it for all companies in the list?',
+          enableAllBtn: 'Enable for all companies',
+          enableAllLater: 'Decide later',
+          enabledForAllMsg: 'Auto-apply is now enabled for all companies.',
           prefSaveError: 'Could not save. Please try again.',
           resumeTypeError: 'Unsupported file. Use PDF or an image (JPG/PNG/WEBP).',
           resumeSizeError: 'File is too large (max 15 MB).',
@@ -332,14 +340,17 @@
           close: 'Закрыть',
           relocationLabel: 'Дружелюбны к релокации',
           relocationHelp: 'По отзывам и обратной связи других сотрудников, компания помогает с релокацией или спонсирует визу.',
-          prefNotifyLabel: 'Уведомлять о подходящих вакансиях',
-          prefNotifyHelp: 'Когда наш ИИ найдёт в этой компании вакансию, подходящую под ваше резюме, вы получите сообщение в Telegram.',
-          prefAutoApplyLabel: 'Откликаться за меня автоматически',
+          prefAutoApplyLabel: 'Включить автоотклик',
           prefAutoApplyHelp: 'Когда в этой компании появится подходящая вакансия, мы откликнемся за вас, используя ваше основное резюме.',
-          resumeGateText: 'Чтобы включить это, нужно ваше основное резюме. Загрузите его (PDF или изображение) — наш ИИ сам считает навыки и право на работу.',
+          resumeGateText: 'Чтобы включить это, нужно ваше основное резюме чтобы откликаться на подходящие вакансии под ваш профиль. Загрузите его (PDF или изображение) — наш ИИ сам считает навыки и право на работу.',
           resumeUploadBtn: 'Загрузить резюме',
           resumeUploading: 'Загрузка…',
-          resumeUploadedProcessing: 'Резюме загружено — ИИ анализирует ваши навыки. Готово!',
+          resumeUploadedProcessing: 'Резюме загружено — ИИ анализирует ваши навыки.',
+          autoApplyEnabledMsg: 'Автоотклик включён для этой компании.',
+          enableAllText: 'Автоотклик включён для этой компании. Включить его для всех компаний из списка?',
+          enableAllBtn: 'Включить для всех компаний',
+          enableAllLater: 'Решить позже',
+          enabledForAllMsg: 'Автоотклик включён для всех компаний.',
           prefSaveError: 'Не удалось сохранить. Попробуйте ещё раз.',
           resumeTypeError: 'Неподдерживаемый файл. Используйте PDF или изображение (JPG/PNG/WEBP).',
           resumeSizeError: 'Файл слишком большой (макс. 15 МБ).',
@@ -377,12 +388,13 @@
         document.getElementById('loadingText').textContent = t('loading');
         document.getElementById('relocationLabel').textContent = t('relocationLabel');
         document.getElementById('relocationHelp').title = t('relocationHelp');
-        document.getElementById('prefNotifyLabel').textContent = t('prefNotifyLabel');
-        document.getElementById('prefNotifyHelp').title = t('prefNotifyHelp');
         document.getElementById('prefAutoApplyLabel').textContent = t('prefAutoApplyLabel');
         document.getElementById('prefAutoApplyHelp').title = t('prefAutoApplyHelp');
         document.getElementById('resumeGateText').textContent = t('resumeGateText');
         document.getElementById('resumeUploadBtn').textContent = t('resumeUploadBtn');
+        document.getElementById('enableAllText').textContent = t('enableAllText');
+        document.getElementById('enableAllBtn').textContent = t('enableAllBtn');
+        document.getElementById('enableAllLaterBtn').textContent = t('enableAllLater');
       }
 
       function getTgInitDataString() {
@@ -660,16 +672,17 @@
         document.getElementById('resumeGate').hidden = !visible;
       }
 
-      // Reflect the current user's saved prefs for the open company onto the checkboxes.
+      function setEnableAllVisible(visible) {
+        document.getElementById('enableAllBox').hidden = !visible;
+      }
+
+      // Reflect the current user's saved prefs for the open company onto the checkbox.
       function reflectPrefs() {
-        const idNum = Number(modalCompanyId);
-        document.getElementById('prefNotify').checked = subs.notify.has(idNum);
-        document.getElementById('prefAutoApply').checked = subs.autoApply.has(idNum);
+        document.getElementById('prefAutoApply').checked = subs.autoApply.has(Number(modalCompanyId));
       }
 
       function setPrefRowsBusy(busy) {
-        for (const id of ['prefNotify', 'prefAutoApply']) document.getElementById(id).disabled = busy;
-        document.getElementById('prefNotifyRow').classList.toggle('busy', busy);
+        document.getElementById('prefAutoApply').disabled = busy;
         document.getElementById('prefAutoApplyRow').classList.toggle('busy', busy);
       }
 
@@ -701,11 +714,45 @@
           const set = type === 'notify' ? subs.notify : subs.autoApply;
           if (enabled) set.add(Number(modalCompanyId));
           else set.delete(Number(modalCompanyId));
+          // After enabling auto-apply for one company, offer to enable it everywhere.
+          if (type === 'autoApply' && enabled) {
+            setPrefMsg(t('autoApplyEnabledMsg'), 'ok');
+            if (subs.autoApply.size < companies.length) setEnableAllVisible(true);
+          } else {
+            setPrefMsg('');
+            setEnableAllVisible(false);
+          }
         } catch (err) {
           checkboxEl.checked = !enabled; // revert
           setPrefMsg(t('prefSaveError'), 'error');
         } finally {
           setPrefRowsBusy(false);
+        }
+      }
+
+      async function enableAllCompanies() {
+        const btn = document.getElementById('enableAllBtn');
+        const spinner = document.getElementById('enableAllSpinner');
+        btn.disabled = true;
+        spinner.hidden = false;
+        try {
+          const res = await apiPost('/api/app/companies/subscriptions/all', { type: 'autoApply', enabled: true });
+          if (res.status === 409 && res.data?.error === 'resume_required') {
+            subs.hasResume = false;
+            setEnableAllVisible(false);
+            setResumeGateVisible(true);
+            return;
+          }
+          if (!res.ok) throw new Error(res.data?.error || 'failed');
+          await loadSubscriptions();
+          reflectPrefs();
+          setEnableAllVisible(false);
+          setPrefMsg(t('enabledForAllMsg'), 'ok');
+        } catch (err) {
+          setPrefMsg(t('prefSaveError'), 'error');
+        } finally {
+          btn.disabled = false;
+          spinner.hidden = true;
         }
       }
 
@@ -748,7 +795,7 @@
           const type = pendingPrefType;
           pendingPrefType = null;
           if (type) {
-            const cb = document.getElementById(type === 'notify' ? 'prefNotify' : 'prefAutoApply');
+            const cb = document.getElementById('prefAutoApply');
             cb.checked = true;
             await togglePref(type, true, cb);
           }
@@ -776,6 +823,7 @@
         setPrefRowsBusy(false);
         setPrefMsg('');
         setResumeGateVisible(false);
+        setEnableAllVisible(false);
         document.getElementById('resumeFileInput').value = '';
         reflectPrefs();
         document.getElementById('companyModal').classList.add('on');
@@ -786,13 +834,12 @@
         pendingPrefType = null;
       }
 
-      document.getElementById('prefNotify').addEventListener('change', (e) => {
-        togglePref('notify', e.target.checked, e.target);
-      });
       document.getElementById('prefAutoApply').addEventListener('change', (e) => {
         togglePref('autoApply', e.target.checked, e.target);
       });
       document.getElementById('resumeUploadBtn').addEventListener('click', uploadResumeAndContinue);
+      document.getElementById('enableAllBtn').addEventListener('click', enableAllCompanies);
+      document.getElementById('enableAllLaterBtn').addEventListener('click', () => setEnableAllVisible(false));
       document.getElementById('companiesList').addEventListener('click', (event) => {
         const tag = event.target.closest('.tag-filter');
         if (tag) { event.stopPropagation(); toggleIndustry(tag.getAttribute('data-industry-id')); return; }
@@ -813,7 +860,12 @@
       document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeCompanyModal(); });
 
       applyI18n();
-      document.getElementById('companyModalClose').textContent = t('close');
+      (() => {
+        const closeBtn = document.getElementById('companyModalClose');
+        closeBtn.textContent = '✕';
+        closeBtn.setAttribute('aria-label', t('close'));
+        closeBtn.title = t('close');
+      })();
 
       async function loadSubscriptions() {
         try {

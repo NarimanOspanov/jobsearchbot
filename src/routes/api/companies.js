@@ -9,6 +9,7 @@ import {
   setCompanyIndustries,
   getUserCompanyPrefs,
   setUserCompanyPref,
+  setAllUserCompaniesPref,
   isValidCompanyPrefType,
 } from '../../services/companiesService.js';
 import { toStringOrUndefined, toNormalizedCareerUrlOrUndefined } from '../../utils/validators.js';
@@ -133,6 +134,30 @@ export function createCompaniesRouter() {
     } catch (err) {
       console.error('POST /api/app/companies/subscriptions:', err);
       res.status(500).json({ error: 'Failed to update subscription' });
+    }
+  });
+
+  // Enable/disable one opt-in for ALL companies at once (e.g. auto-apply everywhere).
+  router.post('/api/app/companies/subscriptions/all', miniAppAuth, async (req, res) => {
+    try {
+      const { user } = await resolveMiniAppUser(req);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const type = String(req.body?.type || '');
+      const enabled = Boolean(req.body?.enabled);
+      if (!isValidCompanyPrefType(type)) {
+        return res.status(400).json({ error: 'type must be "notify" or "autoApply"' });
+      }
+      if (enabled && !hasMainResume(user)) {
+        return res.status(409).json({ error: 'resume_required' });
+      }
+
+      const result = await setAllUserCompaniesPref({ userId: user.Id, type, enabled });
+      if (!result) return res.status(400).json({ error: 'Invalid request' });
+      res.json({ ok: true, type, enabled: result.enabled, count: result.count });
+    } catch (err) {
+      console.error('POST /api/app/companies/subscriptions/all:', err);
+      res.status(500).json({ error: 'Failed to update subscriptions' });
     }
   });
 
