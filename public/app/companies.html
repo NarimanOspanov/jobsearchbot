@@ -19,6 +19,7 @@
       body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
       .wrap { max-width: 760px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
       .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+      .help-q { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; border:1px solid var(--border); color:var(--muted); font-size:11px; line-height:1; cursor:help; user-select:none; }
       .company-card { cursor: pointer; transition: background 0.12s, border-color 0.12s; }
       .company-card:hover, .company-card:focus { background: #1a2240; border-color: var(--accent); outline: none; }
       .modal { position: fixed; inset: 0; background: rgba(5,10,20,0.78); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 999; }
@@ -182,10 +183,13 @@
               <div id="industryOptions" class="picker-list"></div>
             </div>
           </div>
-          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)">
-            <input type="checkbox" id="relocationChk" style="width:16px;height:16px;cursor:pointer" />
-            <span id="relocationLabel">Helps with relocation</span>
-          </label>
+          <span style="display:inline-flex;align-items:center;gap:6px">
+            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)">
+              <input type="checkbox" id="relocationChk" style="width:16px;height:16px;cursor:pointer" />
+              <span id="relocationLabel">Relocation friendly</span>
+            </label>
+            <span id="relocationHelp" class="help-q" tabindex="0" role="img" aria-label="info">?</span>
+          </span>
           <div id="resultCount" class="count-pill">—</div>
         </div>
       </section>
@@ -228,9 +232,8 @@
           visitWebsite: 'Visit website',
           noDescription: 'No description yet.',
           close: 'Close',
-          relocationAll: 'All',
-          relocationYes: 'Helps with relocation',
-          relocationNo: 'No relocation',
+          relocationLabel: 'Relocation friendly',
+          relocationHelp: 'According to reviews and feedback from other employees, the company helps with relocation or sponsors visas.',
         },
         ru: {
           pageTitle: 'Компании с удаленкой',
@@ -250,9 +253,8 @@
           visitWebsite: 'Перейти на сайт',
           noDescription: 'Описание пока отсутствует.',
           close: 'Закрыть',
-          relocationAll: 'Все',
-          relocationYes: 'Помогает с релокацией',
-          relocationNo: 'Без релокации',
+          relocationLabel: 'Дружелюбны к релокации',
+          relocationHelp: 'По отзывам и обратной связи других сотрудников, компания помогает с релокацией или спонсирует визу.',
         },
       };
 
@@ -279,7 +281,8 @@
         document.getElementById('industrySearch').placeholder = t('searchPlaceholder');
         document.getElementById('clearIndustriesBtn').textContent = t('clear');
         document.getElementById('loadingText').textContent = t('loading');
-        document.getElementById('relocationLabel').textContent = t('relocationYes');
+        document.getElementById('relocationLabel').textContent = t('relocationLabel');
+        document.getElementById('relocationHelp').title = t('relocationHelp');
       }
 
       function getTgInitDataString() {
