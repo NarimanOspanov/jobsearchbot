@@ -44,6 +44,16 @@
         font-size: 13px;
         white-space: nowrap;
       }
+      .text-search {
+        width: 100%;
+        border: 1px solid var(--border);
+        background: #0f1730;
+        color: var(--text);
+        border-radius: 10px;
+        padding: 11px 12px;
+        font: inherit;
+      }
+      .text-search::placeholder { color: var(--muted); }
       .picker { position: relative; flex: 1 1 220px; min-width: 0; }
       .picker-btn {
         width: 100%;
@@ -130,6 +140,9 @@
         color: var(--muted);
         font-size: 12px;
       }
+      .industry-tag.tag-filter { cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s; }
+      .industry-tag.tag-filter:hover { border-color: var(--accent); color: var(--text); }
+      .industry-tag.tag-filter.active { background: var(--accent); border-color: var(--accent); color: #fff; }
       .loading {
         display: flex;
         align-items: center;
@@ -168,6 +181,7 @@
       <p class="muted" id="pageSubtitle">Select one or more industries — the list updates automatically.</p>
 
       <section class="card toolbar">
+        <input id="textSearch" class="text-search" type="search" placeholder="Search by name, website or description..." autocomplete="off" />
         <label class="muted" for="industryPickerBtn" id="industryLabel">Industries</label>
         <div class="toolbar-row">
           <div class="picker" id="industryPicker">
@@ -220,6 +234,7 @@
           industryLabel: 'Industries',
           allIndustries: 'All industries',
           searchPlaceholder: 'Search industry...',
+          textSearchPlaceholder: 'Search by name, website or description...',
           clear: 'Clear',
           loading: 'Loading companies...',
           count: '{n} companies',
@@ -241,6 +256,7 @@
           industryLabel: 'Отрасли',
           allIndustries: 'Все отрасли',
           searchPlaceholder: 'Поиск отрасли...',
+          textSearchPlaceholder: 'Поиск по названию, сайту или описанию...',
           clear: 'Сбросить',
           loading: 'Загрузка компаний...',
           count: '{n} компаний',
@@ -279,6 +295,7 @@
         document.getElementById('pageSubtitle').textContent = t('pageSubtitle');
         document.getElementById('industryLabel').textContent = t('industryLabel');
         document.getElementById('industrySearch').placeholder = t('searchPlaceholder');
+        document.getElementById('textSearch').placeholder = t('textSearchPlaceholder');
         document.getElementById('clearIndustriesBtn').textContent = t('clear');
         document.getElementById('loadingText').textContent = t('loading');
         document.getElementById('relocationLabel').textContent = t('relocationLabel');
@@ -417,7 +434,10 @@
 
       function companyCard(row) {
         const tags = (row.industries || [])
-          .map((item) => `<span class="industry-tag">${esc(item.name)}</span>`)
+          .map(
+            (item) =>
+              `<span class="industry-tag tag-filter${selectedIndustryIds.has(item.id) ? ' active' : ''}" data-industry-id="${esc(item.id)}" role="button" tabindex="0">${esc(item.name)}</span>`
+          )
           .join('');
         const desc = row.shortDescription
           ? `<p class="muted" style="margin:8px 0 0">${esc(row.shortDescription)}</p>`
@@ -437,7 +457,19 @@
 
         // Relocation filter (client-side): checked => only companies that help with relocation.
         const relOnly = document.getElementById('relocationChk').checked;
-        const visible = relOnly ? companies.filter((c) => c.helpsWithRelocation === true) : companies;
+        let visible = relOnly ? companies.filter((c) => c.helpsWithRelocation === true) : companies;
+
+        // Text search (client-side): match name, website (Url) or any description.
+        const q = String(document.getElementById('textSearch').value || '').trim().toLowerCase();
+        if (q) {
+          visible = visible.filter((c) => {
+            const hay = [c.Name, c.Url, c.shortDescription, c.shortDescriptionRu, c.shortDescriptionEng]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase();
+            return hay.includes(q);
+          });
+        }
 
         countEl.textContent = t('count', { n: visible.length });
 
@@ -471,6 +503,17 @@
         }
       }
 
+      // Toggle an industry filter (used by both the picker and the clickable card tags).
+      function toggleIndustry(id) {
+        const industryId = Number(id);
+        if (!Number.isFinite(industryId)) return;
+        if (selectedIndustryIds.has(industryId)) selectedIndustryIds.delete(industryId);
+        else selectedIndustryIds.add(industryId);
+        updatePickerLabel();
+        renderIndustryOptions(document.getElementById('industrySearch').value);
+        loadCompanies();
+      }
+
       document.getElementById('industryPickerBtn').addEventListener('click', () => {
         setPickerOpen(!pickerOpen);
       });
@@ -480,6 +523,10 @@
       });
 
       document.getElementById('relocationChk').addEventListener('change', () => {
+        renderCompanies();
+      });
+
+      document.getElementById('textSearch').addEventListener('input', () => {
         renderCompanies();
       });
 
@@ -512,11 +559,15 @@
         document.getElementById('companyModal').classList.remove('on');
       }
       document.getElementById('companiesList').addEventListener('click', (event) => {
+        const tag = event.target.closest('.tag-filter');
+        if (tag) { event.stopPropagation(); toggleIndustry(tag.getAttribute('data-industry-id')); return; }
         const card = event.target.closest('.company-card');
         if (card) openCompanyModal(card.getAttribute('data-company-id'));
       });
       document.getElementById('companiesList').addEventListener('keydown', (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
+        const tag = event.target.closest('.tag-filter');
+        if (tag) { event.preventDefault(); event.stopPropagation(); toggleIndustry(tag.getAttribute('data-industry-id')); return; }
         const card = event.target.closest('.company-card');
         if (card) { event.preventDefault(); openCompanyModal(card.getAttribute('data-company-id')); }
       });
