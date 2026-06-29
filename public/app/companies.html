@@ -182,11 +182,10 @@
               <div id="industryOptions" class="picker-list"></div>
             </div>
           </div>
-          <select id="relocationSel" class="picker-btn" aria-label="Relocation" style="cursor:pointer">
-            <option value="">All</option>
-            <option value="yes">Helps with relocation</option>
-            <option value="no">No relocation</option>
-          </select>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)">
+            <input type="checkbox" id="relocationChk" style="width:16px;height:16px;cursor:pointer" />
+            <span id="relocationLabel">Helps with relocation</span>
+          </label>
           <div id="resultCount" class="count-pill">—</div>
         </div>
       </section>
@@ -280,10 +279,7 @@
         document.getElementById('industrySearch').placeholder = t('searchPlaceholder');
         document.getElementById('clearIndustriesBtn').textContent = t('clear');
         document.getElementById('loadingText').textContent = t('loading');
-        const relSel = document.getElementById('relocationSel');
-        relSel.options[0].textContent = t('relocationAll');
-        relSel.options[1].textContent = t('relocationYes');
-        relSel.options[2].textContent = t('relocationNo');
+        document.getElementById('relocationLabel').textContent = t('relocationYes');
       }
 
       function getTgInitDataString() {
@@ -436,11 +432,9 @@
         const list = document.getElementById('companiesList');
         const countEl = document.getElementById('resultCount');
 
-        // Relocation filter (client-side): yes => helps, no => does not. null = unknown is excluded by both.
-        const rel = document.getElementById('relocationSel').value || '';
-        let visible = companies;
-        if (rel === 'yes') visible = companies.filter((c) => c.helpsWithRelocation === true);
-        else if (rel === 'no') visible = companies.filter((c) => c.helpsWithRelocation === false);
+        // Relocation filter (client-side): checked => only companies that help with relocation.
+        const relOnly = document.getElementById('relocationChk').checked;
+        const visible = relOnly ? companies.filter((c) => c.helpsWithRelocation === true) : companies;
 
         countEl.textContent = t('count', { n: visible.length });
 
@@ -482,7 +476,7 @@
         renderIndustryOptions(event.target.value);
       });
 
-      document.getElementById('relocationSel').addEventListener('change', () => {
+      document.getElementById('relocationChk').addEventListener('change', () => {
         renderCompanies();
       });
 
