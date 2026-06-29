@@ -309,8 +309,8 @@
           resumeUploadBtn: 'Upload resume',
           resumeUploading: 'Uploading…',
           resumeUploadedProcessing: 'Resume uploaded — our AI is reading your skills.',
-          autoApplyEnabledMsg: 'Auto-apply is enabled for this company.',
-          enableAllText: 'Auto-apply is on for this company. Want to enable it for all companies in the list?',
+          autoApplyEnabledMsg: 'Great — auto-apply for matching positions is now on for {company}.',
+          enableAllText: 'To avoid enabling auto-apply for each company one by one, you can turn it on for all companies in one click. Enable?',
           enableAllBtn: 'Enable for all companies',
           enableAllLater: 'Decide later',
           enabledForAllMsg: 'Auto-apply is now enabled for all companies.',
@@ -346,8 +346,8 @@
           resumeUploadBtn: 'Загрузить резюме',
           resumeUploading: 'Загрузка…',
           resumeUploadedProcessing: 'Резюме загружено — ИИ анализирует ваши навыки.',
-          autoApplyEnabledMsg: 'Автоотклик включён для этой компании.',
-          enableAllText: 'Автоотклик включён для этой компании. Включить его для всех компаний из списка?',
+          autoApplyEnabledMsg: 'Супер, теперь автоотклик на подходящие вакансии включён для компании {company}.',
+          enableAllText: 'Чтобы не включать автоотклик для каждой компании по отдельности, можно включить его для всех компаний одним кликом. Включить?',
           enableAllBtn: 'Включить для всех компаний',
           enableAllLater: 'Решить позже',
           enabledForAllMsg: 'Автоотклик включён для всех компаний.',
@@ -374,6 +374,7 @@
       // Per-company opt-ins for the current user (loaded once, kept in sync).
       let subs = { hasResume: false, notify: new Set(), autoApply: new Set() };
       let modalCompanyId = null;
+      let modalCompanyName = '';
       let pendingPrefType = null; // pref the user tried to enable before uploading a resume
 
       function applyI18n() {
@@ -716,7 +717,7 @@
           else set.delete(Number(modalCompanyId));
           // After enabling auto-apply for one company, offer to enable it everywhere.
           if (type === 'autoApply' && enabled) {
-            setPrefMsg(t('autoApplyEnabledMsg'), 'ok');
+            setPrefMsg(t('autoApplyEnabledMsg', { company: modalCompanyName }), 'ok');
             if (subs.autoApply.size < companies.length) setEnableAllVisible(true);
           } else {
             setPrefMsg('');
@@ -812,6 +813,7 @@
         const row = companies.find((c) => String(c.Id) === String(id));
         if (!row) return;
         modalCompanyId = row.Id;
+        modalCompanyName = row.Name || '';
         pendingPrefType = null;
         document.getElementById('companyModalName').textContent = row.Name || '';
         document.getElementById('companyModalTags').innerHTML = (row.industries || [])
