@@ -7,9 +7,26 @@ import {
   listRemoteCompanies,
   mapCompanyRow,
   setCompanyIndustries,
+  getUserCompanyPrefs,
+  setUserCompanyPref,
+  isValidCompanyPrefType,
 } from '../../services/companiesService.js';
 import { toStringOrUndefined, toNormalizedCareerUrlOrUndefined } from '../../utils/validators.js';
 import { resolveBotLanguage } from '../../utils/userLanguage.js';
+import { ensureUserByTelegramId } from '../../services/userService.js';
+
+function resolveMiniAppUser(req) {
+  return ensureUserByTelegramId(
+    req.miniAppUser.id,
+    req.miniAppUser.username ?? null,
+    req.miniAppUser.first_name ?? req.miniAppUser.firstName ?? null,
+    req.miniAppUser.last_name ?? req.miniAppUser.lastName ?? null
+  );
+}
+
+function hasMainResume(user) {
+  return Boolean(String(user?.ResumeURL || '').trim());
+}
 
 function parseIndustryIds(body) {
   if (!Object.prototype.hasOwnProperty.call(body || {}, 'industryIds')) return undefined;
@@ -74,6 +91,48 @@ export function createCompaniesRouter() {
     } catch (err) {
       console.error('GET /api/app/companies:', err);
       res.status(500).json({ error: 'Failed to load companies' });
+    }
+  });
+
+  // Current user's per-company opt-ins + whether they have a main resume.
+  router.get('/api/app/companies/subscriptions', miniAppAuth, async (req, res) => {
+    try {
+      const { user } = await resolveMiniAppUser(req);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      const prefs = await getUserCompanyPrefs(user.Id);
+      res.json({ hasResume: hasMainResume(user), notify: prefs.notify, autoApply: prefs.autoApply });
+    } catch (err) {
+      console.error('GET /api/app/companies/subscriptions:', err);
+      res.status(500).json({ error: 'Failed to load subscriptions' });
+    }
+  });
+
+  // Toggle one opt-in (notify | autoApply) for a company. Enabling requires a
+  // main resume; without one we return 409 resume_required so the UI prompts upload.
+  router.post('/api/app/companies/subscriptions', miniAppAuth, async (req, res) => {
+    try {
+      const { user } = await resolveMiniAppUser(req);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const companyId = Number.parseInt(String(req.body?.companyId), 10);
+      const type = String(req.body?.type || '');
+      const enabled = Boolean(req.body?.enabled);
+      if (!Number.isSafeInteger(companyId) || companyId <= 0) {
+        return res.status(400).json({ error: 'Invalid companyId' });
+      }
+      if (!isValidCompanyPrefType(type)) {
+        return res.status(400).json({ error: 'type must be "notify" or "autoApply"' });
+      }
+      if (enabled && !hasMainResume(user)) {
+        return res.status(409).json({ error: 'resume_required' });
+      }
+
+      const result = await setUserCompanyPref({ userId: user.Id, companyId, type, enabled });
+      if (!result) return res.status(404).json({ error: 'Company not found' });
+      res.json({ ok: true, type, enabled: result.enabled });
+    } catch (err) {
+      console.error('POST /api/app/companies/subscriptions:', err);
+      res.status(500).json({ error: 'Failed to update subscription' });
     }
   });
 

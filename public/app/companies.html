@@ -30,6 +30,26 @@
       .modal-card h3 { margin: 0; font-size: 20px; }
       .modal-card .modal-desc { margin: 12px 0; line-height: 1.5; }
       .modal-card .modal-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+      .modal-prefs { margin: 14px 0 6px; border-top: 1px solid var(--border); padding-top: 12px; display: grid; gap: 10px; }
+      .pref-row { display: flex; align-items: flex-start; gap: 8px; }
+      .pref-label-wrap { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; flex: 1 1 auto; }
+      .pref-row input[type="checkbox"] { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--accent); cursor: pointer; flex: 0 0 auto; }
+      .pref-row input[type="checkbox"]:disabled { cursor: default; opacity: 0.6; }
+      .pref-row .pref-label { line-height: 1.35; }
+      .pref-row .help-q { flex: 0 0 auto; margin-top: 1px; }
+      .pref-row.busy { opacity: 0.6; }
+      .pref-msg { font-size: 13px; min-height: 0; }
+      .pref-msg.error { color: #ff8f9d; }
+      .pref-msg.ok { color: #8fe3a6; }
+      .resume-gate { margin-top: 4px; border: 1px dashed var(--border); border-radius: 10px; padding: 12px; display: grid; gap: 10px; background: #0f1730; }
+      .resume-gate[hidden] { display: none; }
+      .resume-gate .gate-text { margin: 0; font-size: 13px; line-height: 1.45; }
+      .resume-gate .gate-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .resume-gate input[type="file"] { color: var(--muted); font: inherit; max-width: 100%; }
+      .btn-accent { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+      .btn-accent:disabled { opacity: 0.6; cursor: default; }
+      .mini-spinner { width: 15px; height: 15px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; vertical-align: middle; }
+      .mini-spinner[hidden] { display: none; }
       .title { margin: 0; font-size: 22px; }
       .muted { color: var(--muted); font-size: 14px; }
       a { color: var(--accent); word-break: break-all; }
@@ -224,6 +244,35 @@
         <div id="companyModalTags" class="modal-tags"></div>
         <p id="companyModalDesc" class="modal-desc muted"></p>
         <a id="companyModalLink" href="#" target="_blank" rel="noopener noreferrer"></a>
+
+        <div class="modal-prefs">
+          <div class="pref-row" id="prefNotifyRow">
+            <label class="pref-label-wrap">
+              <input type="checkbox" id="prefNotify" />
+              <span class="pref-label" id="prefNotifyLabel">Notify me about matching positions</span>
+            </label>
+            <span id="prefNotifyHelp" class="help-q" tabindex="0" role="img" aria-label="info">?</span>
+          </div>
+          <div class="pref-row" id="prefAutoApplyRow">
+            <label class="pref-label-wrap">
+              <input type="checkbox" id="prefAutoApply" />
+              <span class="pref-label" id="prefAutoApplyLabel">Apply for me automatically</span>
+            </label>
+            <span id="prefAutoApplyHelp" class="help-q" tabindex="0" role="img" aria-label="info">?</span>
+          </div>
+          <div class="pref-msg" id="prefMsg"></div>
+
+          <div class="resume-gate" id="resumeGate" hidden>
+            <p class="gate-text muted" id="resumeGateText">
+              To enable this we need your main resume. Upload it (PDF or image) — our AI reads your skills and work authorization automatically.
+            </p>
+            <div class="gate-row">
+              <input type="file" id="resumeFileInput" accept=".pdf,image/png,image/jpeg,image/webp" />
+              <button type="button" id="resumeUploadBtn" class="btn-accent">Upload resume</button>
+              <span id="resumeUploadSpinner" class="mini-spinner" hidden></span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <script>
@@ -249,6 +298,18 @@
           close: 'Close',
           relocationLabel: 'Relocation friendly',
           relocationHelp: 'According to reviews and feedback from other employees, the company helps with relocation or sponsors visas.',
+          prefNotifyLabel: 'Notify me about matching positions',
+          prefNotifyHelp: 'When our AI finds a position at this company that matches your resume, you’ll get a Telegram message.',
+          prefAutoApplyLabel: 'Apply for me automatically',
+          prefAutoApplyHelp: 'When a matching position appears at this company, we’ll apply on your behalf using your main resume.',
+          resumeGateText: 'To enable this we need your main resume. Upload it (PDF or image) — our AI reads your skills and work authorization automatically.',
+          resumeUploadBtn: 'Upload resume',
+          resumeUploading: 'Uploading…',
+          resumeUploadedProcessing: 'Resume uploaded — our AI is reading your skills. Done!',
+          prefSaveError: 'Could not save. Please try again.',
+          resumeTypeError: 'Unsupported file. Use PDF or an image (JPG/PNG/WEBP).',
+          resumeSizeError: 'File is too large (max 15 MB).',
+          resumePickError: 'Please choose a file first.',
         },
         ru: {
           pageTitle: 'Компании с удаленкой',
@@ -271,6 +332,18 @@
           close: 'Закрыть',
           relocationLabel: 'Дружелюбны к релокации',
           relocationHelp: 'По отзывам и обратной связи других сотрудников, компания помогает с релокацией или спонсирует визу.',
+          prefNotifyLabel: 'Уведомлять о подходящих вакансиях',
+          prefNotifyHelp: 'Когда наш ИИ найдёт в этой компании вакансию, подходящую под ваше резюме, вы получите сообщение в Telegram.',
+          prefAutoApplyLabel: 'Откликаться за меня автоматически',
+          prefAutoApplyHelp: 'Когда в этой компании появится подходящая вакансия, мы откликнемся за вас, используя ваше основное резюме.',
+          resumeGateText: 'Чтобы включить это, нужно ваше основное резюме. Загрузите его (PDF или изображение) — наш ИИ сам считает навыки и право на работу.',
+          resumeUploadBtn: 'Загрузить резюме',
+          resumeUploading: 'Загрузка…',
+          resumeUploadedProcessing: 'Резюме загружено — ИИ анализирует ваши навыки. Готово!',
+          prefSaveError: 'Не удалось сохранить. Попробуйте ещё раз.',
+          resumeTypeError: 'Неподдерживаемый файл. Используйте PDF или изображение (JPG/PNG/WEBP).',
+          resumeSizeError: 'Файл слишком большой (макс. 15 МБ).',
+          resumePickError: 'Сначала выберите файл.',
         },
       };
 
@@ -287,6 +360,10 @@
       let selectedIndustryIds = new Set();
       let loadSeq = 0;
       let pickerOpen = false;
+      // Per-company opt-ins for the current user (loaded once, kept in sync).
+      let subs = { hasResume: false, notify: new Set(), autoApply: new Set() };
+      let modalCompanyId = null;
+      let pendingPrefType = null; // pref the user tried to enable before uploading a resume
 
       function applyI18n() {
         document.documentElement.lang = lang;
@@ -300,6 +377,12 @@
         document.getElementById('loadingText').textContent = t('loading');
         document.getElementById('relocationLabel').textContent = t('relocationLabel');
         document.getElementById('relocationHelp').title = t('relocationHelp');
+        document.getElementById('prefNotifyLabel').textContent = t('prefNotifyLabel');
+        document.getElementById('prefNotifyHelp').title = t('prefNotifyHelp');
+        document.getElementById('prefAutoApplyLabel').textContent = t('prefAutoApplyLabel');
+        document.getElementById('prefAutoApplyHelp').title = t('prefAutoApplyHelp');
+        document.getElementById('resumeGateText').textContent = t('resumeGateText');
+        document.getElementById('resumeUploadBtn').textContent = t('resumeUploadBtn');
       }
 
       function getTgInitDataString() {
@@ -346,6 +429,30 @@
           const response = await fetch(path, { headers, signal: controller.signal });
           if (!response.ok) throw new Error(await response.text());
           return response.json();
+        } catch (err) {
+          if (err?.name === 'AbortError') throw new Error(t('requestTimeout'));
+          throw err;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      // POST JSON; returns { ok, status, data } without throwing on non-2xx
+      // so callers can branch on status (e.g. 409 resume_required).
+      async function apiPost(path, body) {
+        const headers = { 'Content-Type': 'application/json' };
+        attachMiniAppAuthHeaders(headers);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+        try {
+          const response = await fetch(path, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body || {}),
+            signal: controller.signal,
+          });
+          const data = await response.json().catch(() => ({}));
+          return { ok: response.ok, status: response.status, data };
         } catch (err) {
           if (err?.name === 'AbortError') throw new Error(t('requestTimeout'));
           throw err;
@@ -542,10 +649,123 @@
         if (!picker.contains(event.target)) setPickerOpen(false);
       });
 
-      // Company details modal (Name, short description, link).
+      // --- Per-company opt-ins (notify / auto-apply) ---
+      function setPrefMsg(text, kind) {
+        const el = document.getElementById('prefMsg');
+        el.textContent = text || '';
+        el.className = 'pref-msg' + (kind ? ' ' + kind : '');
+      }
+
+      function setResumeGateVisible(visible) {
+        document.getElementById('resumeGate').hidden = !visible;
+      }
+
+      // Reflect the current user's saved prefs for the open company onto the checkboxes.
+      function reflectPrefs() {
+        const idNum = Number(modalCompanyId);
+        document.getElementById('prefNotify').checked = subs.notify.has(idNum);
+        document.getElementById('prefAutoApply').checked = subs.autoApply.has(idNum);
+      }
+
+      function setPrefRowsBusy(busy) {
+        for (const id of ['prefNotify', 'prefAutoApply']) document.getElementById(id).disabled = busy;
+        document.getElementById('prefNotifyRow').classList.toggle('busy', busy);
+        document.getElementById('prefAutoApplyRow').classList.toggle('busy', busy);
+      }
+
+      async function togglePref(type, enabled, checkboxEl) {
+        // Resume required to enable either option — prompt upload, defer the toggle.
+        if (enabled && !subs.hasResume) {
+          checkboxEl.checked = false;
+          pendingPrefType = type;
+          setResumeGateVisible(true);
+          setPrefMsg('');
+          return;
+        }
+        setPrefRowsBusy(true);
+        setPrefMsg('');
+        try {
+          const res = await apiPost('/api/app/companies/subscriptions', {
+            companyId: Number(modalCompanyId),
+            type,
+            enabled,
+          });
+          if (res.status === 409 && res.data?.error === 'resume_required') {
+            subs.hasResume = false;
+            checkboxEl.checked = false;
+            pendingPrefType = type;
+            setResumeGateVisible(true);
+            return;
+          }
+          if (!res.ok) throw new Error(res.data?.error || 'failed');
+          const set = type === 'notify' ? subs.notify : subs.autoApply;
+          if (enabled) set.add(Number(modalCompanyId));
+          else set.delete(Number(modalCompanyId));
+        } catch (err) {
+          checkboxEl.checked = !enabled; // revert
+          setPrefMsg(t('prefSaveError'), 'error');
+        } finally {
+          setPrefRowsBusy(false);
+        }
+      }
+
+      async function uploadResumeAndContinue() {
+        const fileInput = document.getElementById('resumeFileInput');
+        const file = fileInput?.files?.[0];
+        if (!file) { setPrefMsg(t('resumePickError'), 'error'); return; }
+        if (file.size > 15 * 1024 * 1024) { setPrefMsg(t('resumeSizeError'), 'error'); return; }
+        const allowed = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+        if (!allowed.includes(file.type)) { setPrefMsg(t('resumeTypeError'), 'error'); return; }
+
+        const btn = document.getElementById('resumeUploadBtn');
+        const spinner = document.getElementById('resumeUploadSpinner');
+        btn.disabled = true;
+        spinner.hidden = false;
+        setPrefMsg(t('resumeUploading'));
+        try {
+          const ext = (String(file.name).match(/\.([a-z0-9]+)$/i)?.[1])
+            || (file.type === 'application/pdf' ? 'pdf' : file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg');
+          const headers = {
+            'Content-Type': 'application/octet-stream',
+            'x-file-name': `resume-${Date.now()}.${ext}`,
+            'x-file-type': file.type || 'application/octet-stream',
+          };
+          attachMiniAppAuthHeaders(headers);
+          const response = await fetch('/api/app/profile/resume-upload', {
+            method: 'POST',
+            headers,
+            body: await file.arrayBuffer(),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload?.resumeUrl) {
+            throw new Error(typeof payload?.error === 'string' ? payload.error : 'upload_failed');
+          }
+          subs.hasResume = true;
+          fileInput.value = '';
+          setResumeGateVisible(false);
+          setPrefMsg(t('resumeUploadedProcessing'), 'ok');
+          // Apply the toggle the user originally wanted.
+          const type = pendingPrefType;
+          pendingPrefType = null;
+          if (type) {
+            const cb = document.getElementById(type === 'notify' ? 'prefNotify' : 'prefAutoApply');
+            cb.checked = true;
+            await togglePref(type, true, cb);
+          }
+        } catch (err) {
+          setPrefMsg(t('prefSaveError'), 'error');
+        } finally {
+          btn.disabled = false;
+          spinner.hidden = true;
+        }
+      }
+
+      // Company details modal (Name, short description, link, opt-ins).
       function openCompanyModal(id) {
         const row = companies.find((c) => String(c.Id) === String(id));
         if (!row) return;
+        modalCompanyId = row.Id;
+        pendingPrefType = null;
         document.getElementById('companyModalName').textContent = row.Name || '';
         document.getElementById('companyModalTags').innerHTML = (row.industries || [])
           .map((i) => `<span class="industry-tag">${esc(i.name)}</span>`).join('');
@@ -553,11 +773,26 @@
         const link = document.getElementById('companyModalLink');
         if (row.Url) { link.href = row.Url; link.textContent = t('visitWebsite'); link.style.display = ''; }
         else { link.removeAttribute('href'); link.textContent = ''; link.style.display = 'none'; }
+        setPrefRowsBusy(false);
+        setPrefMsg('');
+        setResumeGateVisible(false);
+        document.getElementById('resumeFileInput').value = '';
+        reflectPrefs();
         document.getElementById('companyModal').classList.add('on');
       }
       function closeCompanyModal() {
         document.getElementById('companyModal').classList.remove('on');
+        modalCompanyId = null;
+        pendingPrefType = null;
       }
+
+      document.getElementById('prefNotify').addEventListener('change', (e) => {
+        togglePref('notify', e.target.checked, e.target);
+      });
+      document.getElementById('prefAutoApply').addEventListener('change', (e) => {
+        togglePref('autoApply', e.target.checked, e.target);
+      });
+      document.getElementById('resumeUploadBtn').addEventListener('click', uploadResumeAndContinue);
       document.getElementById('companiesList').addEventListener('click', (event) => {
         const tag = event.target.closest('.tag-filter');
         if (tag) { event.stopPropagation(); toggleIndustry(tag.getAttribute('data-industry-id')); return; }
@@ -580,6 +815,19 @@
       applyI18n();
       document.getElementById('companyModalClose').textContent = t('close');
 
+      async function loadSubscriptions() {
+        try {
+          const data = await api('/api/app/companies/subscriptions');
+          subs = {
+            hasResume: !!data.hasResume,
+            notify: new Set((data.notify || []).map(Number)),
+            autoApply: new Set((data.autoApply || []).map(Number)),
+          };
+        } catch {
+          // Non-fatal: keep defaults; checkboxes will simply start unchecked.
+        }
+      }
+
       (async () => {
         try {
           await waitForTelegramInitData();
@@ -587,7 +835,7 @@
           industries = rows;
           updatePickerLabel();
           renderIndustryOptions('');
-          await loadCompanies();
+          await Promise.all([loadCompanies(), loadSubscriptions()]);
         } catch (err) {
           document.getElementById('companiesList').innerHTML =
             `<div class="card"><p class="error">${esc(t('loadIndustriesError'))}: ${esc(err.message)}</p></div>`;

@@ -149,3 +149,51 @@ export async function findOrCreateIndustryByName(name, sortOrder = 0) {
   }
   return row;
 }
+
+// --- Per-user remote-company opt-ins (notify / auto-apply) ---
+
+const PREF_MODEL_BY_TYPE = {
+  notify: () => models.UserRemoteCompanyNotifies,
+  autoApply: () => models.UserRemoteCompanyAutoApplies,
+};
+
+export function isValidCompanyPrefType(type) {
+  return type === 'notify' || type === 'autoApply';
+}
+
+/** Returns the company ids a user has enabled for each opt-in type. */
+export async function getUserCompanyPrefs(userId) {
+  const id = Number.parseInt(String(userId), 10);
+  if (!Number.isSafeInteger(id) || id <= 0) return { notify: [], autoApply: [] };
+  const [notifyRows, autoApplyRows] = await Promise.all([
+    models.UserRemoteCompanyNotifies.findAll({ where: { UserId: id }, attributes: ['RemoteCompanyId'], raw: true }),
+    models.UserRemoteCompanyAutoApplies.findAll({ where: { UserId: id }, attributes: ['RemoteCompanyId'], raw: true }),
+  ]);
+  return {
+    notify: notifyRows.map((r) => r.RemoteCompanyId),
+    autoApply: autoApplyRows.map((r) => r.RemoteCompanyId),
+  };
+}
+
+/**
+ * Enable/disable one opt-in for (user, company). Idempotent.
+ * Returns { ok: true, enabled } or null on invalid input / unknown company.
+ */
+export async function setUserCompanyPref({ userId, companyId, type, enabled }) {
+  const uid = Number.parseInt(String(userId), 10);
+  const cid = Number.parseInt(String(companyId), 10);
+  if (!Number.isSafeInteger(uid) || uid <= 0) return null;
+  if (!Number.isSafeInteger(cid) || cid <= 0) return null;
+  if (!isValidCompanyPrefType(type)) return null;
+
+  const company = await models.RemoteCompanies.findByPk(cid, { attributes: ['Id'] });
+  if (!company) return null;
+
+  const Model = PREF_MODEL_BY_TYPE[type]();
+  if (enabled) {
+    await Model.findOrCreate({ where: { UserId: uid, RemoteCompanyId: cid } });
+  } else {
+    await Model.destroy({ where: { UserId: uid, RemoteCompanyId: cid } });
+  }
+  return { ok: true, enabled: Boolean(enabled) };
+}

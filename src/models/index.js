@@ -24,6 +24,8 @@ import defineHumanAssistantRequest from './HumanAssistantRequest.js';
 import definePublisherSignup from './PublisherSignup.js';
 import defineCampaignSignup from './CampaignSignup.js';
 import defineUserHhSearchUrl from './UserHhSearchUrl.js';
+import defineUserRemoteCompanyNotify from './UserRemoteCompanyNotify.js';
+import defineUserRemoteCompanyAutoApply from './UserRemoteCompanyAutoApply.js';
 
 /**
  * Initialize only the User model for empty bot runtime.
@@ -55,6 +57,8 @@ export function initModels(sequelize) {
   const PublisherSignup = definePublisherSignup(sequelize);
   const CampaignSignup = defineCampaignSignup(sequelize);
   const UserHhSearchUrl = defineUserHhSearchUrl(sequelize);
+  const UserRemoteCompanyNotify = defineUserRemoteCompanyNotify(sequelize);
+  const UserRemoteCompanyAutoApply = defineUserRemoteCompanyAutoApply(sequelize);
 
   User.hasMany(Application, { foreignKey: 'UserId' });
   Application.belongsTo(User, { foreignKey: 'UserId' });
@@ -118,6 +122,32 @@ export function initModels(sequelize) {
     as: 'Companies',
   });
 
+  // Per-user remote-company opt-ins (notify / auto-apply on matching positions).
+  User.belongsToMany(RemoteCompany, {
+    through: UserRemoteCompanyNotify,
+    foreignKey: 'UserId',
+    otherKey: 'RemoteCompanyId',
+    as: 'NotifyRemoteCompanies',
+  });
+  RemoteCompany.belongsToMany(User, {
+    through: UserRemoteCompanyNotify,
+    foreignKey: 'RemoteCompanyId',
+    otherKey: 'UserId',
+    as: 'NotifyUsers',
+  });
+  User.belongsToMany(RemoteCompany, {
+    through: UserRemoteCompanyAutoApply,
+    foreignKey: 'UserId',
+    otherKey: 'RemoteCompanyId',
+    as: 'AutoApplyRemoteCompanies',
+  });
+  RemoteCompany.belongsToMany(User, {
+    through: UserRemoteCompanyAutoApply,
+    foreignKey: 'RemoteCompanyId',
+    otherKey: 'UserId',
+    as: 'AutoApplyUsers',
+  });
+
   return {
     User,
     Application,
@@ -171,5 +201,9 @@ export function initModels(sequelize) {
     CampaignSignups: CampaignSignup,
     UserHhSearchUrl,
     UserHhSearchUrls: UserHhSearchUrl,
+    UserRemoteCompanyNotify,
+    UserRemoteCompanyNotifies: UserRemoteCompanyNotify,
+    UserRemoteCompanyAutoApply,
+    UserRemoteCompanyAutoApplies: UserRemoteCompanyAutoApply,
   };
 }

@@ -3,7 +3,12 @@ import express from 'express';
 import { miniAppAuth } from '../../middleware/auth.js';
 import { models } from '../../db.js';
 import { config } from '../../config.js';
-import { ensureUserByTelegramId, saveUserResumeFromBuffer, isSupportedResumeMimeType } from '../../services/userService.js';
+import {
+  ensureUserByTelegramId,
+  saveUserResumeFromBuffer,
+  isSupportedResumeMimeType,
+  runResumeEnrichmentInBackground,
+} from '../../services/userService.js';
 import { buildMonetizationStatus } from '../../services/planService.js';
 import { normalizeSkillIds } from '../../services/userService.js';
 import {
@@ -104,6 +109,8 @@ export function createProfileRouter() {
           mimeType,
           fileIdPrefix: 'webapp',
         });
+        // Fill skills + work-authorization from the resume (same as the apply flow).
+        runResumeEnrichmentInBackground({ userId: user.Id, resumeUrl, includeSkills: true });
         return res.json({ ok: true, resumeUrl });
       } catch (err) {
         console.error('POST /api/app/profile/resume-upload:', err);
