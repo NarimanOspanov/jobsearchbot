@@ -427,41 +427,9 @@
           return;
         }
 
-        if (selectedIndustryIds.size > 0) {
-          const sorted = [...companies].sort((a, b) => String(a.Name).localeCompare(String(b.Name), lang));
-          list.innerHTML = sorted.map((row) => companyCard(row)).join('');
-          return;
-        }
-
-        const noIndustryLabel = t('noIndustry');
-        const groups = new Map();
-        for (const row of companies) {
-          const key = row.primaryIndustry?.slug || 'other';
-          const label = row.primaryIndustry?.name || noIndustryLabel;
-          if (!groups.has(key)) groups.set(key, { label, rows: [] });
-          groups.get(key).rows.push(row);
-        }
-
-        const orderedKeys = [...groups.keys()].sort((a, b) => {
-          const labelA = groups.get(a).label;
-          const labelB = groups.get(b).label;
-          if (labelA === noIndustryLabel) return 1;
-          if (labelB === noIndustryLabel) return -1;
-          return labelA.localeCompare(labelB, lang);
-        });
-
-        list.innerHTML = orderedKeys
-          .map((key) => {
-            const group = groups.get(key);
-            group.rows.sort((a, b) => String(a.Name).localeCompare(String(b.Name), lang));
-            return `
-              <section>
-                <h2 class="section-title">${esc(group.label)}</h2>
-                ${group.rows.map((row) => companyCard(row)).join('')}
-              </section>
-            `;
-          })
-          .join('');
+        // Flat list ordered by name (companies can have multiple categories, so no grouping).
+        const sorted = [...companies].sort((a, b) => String(a.Name).localeCompare(String(b.Name), lang));
+        list.innerHTML = sorted.map((row) => companyCard(row)).join('');
       }
 
       async function loadCompanies() {
