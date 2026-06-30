@@ -215,6 +215,9 @@ export async function fetchClientDailyReportRows(userId, { since = null, allTime
       companyName: data.CompanyName || '',
       source: data.Source || '',
       applyType: data.ApplyType || '',
+      // Manual = an agent applied on the client's behalf (AgentUserId set); auto otherwise.
+      agentUserId: data.AgentUserId ?? null,
+      applyMode: data.AgentUserId != null ? 'manual' : 'auto',
       status: data.Status || '',
       appliedAt: data.AppliedAt || null,
       tailoredCvUrl: data.TailoredCVURL || null,
