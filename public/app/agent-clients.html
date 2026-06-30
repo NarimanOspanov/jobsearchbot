@@ -4784,6 +4784,16 @@
       async function maybeAutoGenerateMaterials() {
         if (!selectedJob || isJobBusy) return;
         if (hasTailoredMaterials()) return;
+        // General rule (all sources): never auto-(re)generate when the saved application already
+        // has a tailored CV or cover letter in the DB — even if selectedApplication wasn't wired
+        // up yet (e.g. the HH questionnaire queue). The agent can still regenerate manually.
+        const persisted = selectedApplication || appByScreenlyId(selectedJob.id);
+        if (
+          persisted &&
+          (String(persisted.TailoredCVURL || '').trim() || String(persisted.CoverLetter || '').trim())
+        ) {
+          return;
+        }
         const user = getSelectedUser();
         if (!user?.resumeUrl) return;
         setMsg('jobMsg', 'Generating tailored CV + cover letter...');
