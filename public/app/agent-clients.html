@@ -4182,6 +4182,12 @@
             String(app?.Status || '').toLowerCase() === 'new' &&
             isQuestionnaireApplication(app)
         );
+        // Narrow `applications` to just this set. The by-user query returns ALL "new" apps across
+        // sources; since these questionnaire records have no ScreenlyJobId, their synthetic
+        // position id is Application.Id — which could collide with another source's ScreenlyJobId
+        // and make appByScreenlyId() resolve the wrong application. Keeping only the questionnaire
+        // apps here makes the id->application lookup unambiguous.
+        applications = qApps;
         positions = qApps.map(positionFromApplication);
         pageInfo = {
           page: 1,
