@@ -76,6 +76,11 @@
           </div>
           <label class="muted" for="applyTypeSel" id="applyTypeLabel">Apply type</label>
           <select id="applyTypeSel"></select>
+          <label class="muted" id="hhStatusLabel">HH status</label>
+          <div class="dropdown" id="hhStatusDropdown">
+            <button type="button" id="hhStatusToggle" class="dd-toggle"><span id="hhStatusToggleText">All</span><span class="caret">▾</span></button>
+            <div id="hhStatusMenu" class="dd-menu" hidden></div>
+          </div>
           <button id="refreshBtn" type="button">Refresh</button>
         </div>
       </div>
@@ -177,6 +182,7 @@
           applyModeManual: 'Manual',
           applyModeAuto: 'Auto',
           thHhStatus: 'HH status',
+          hhStatusAll: 'All',
           thLocation: 'Location',
           applyTypeAll: 'All',
           allClients: 'All clients',
@@ -233,6 +239,7 @@
           applyModeManual: 'Вручную',
           applyModeAuto: 'Авто',
           thHhStatus: 'Статус HH',
+          hhStatusAll: 'Все',
           thLocation: 'Локация',
           applyTypeAll: 'Все',
           allClients: 'Все клиенты',
@@ -385,6 +392,8 @@
         document.getElementById('periodLabel').textContent = t('period');
         document.getElementById('clientLabel').textContent = t('client');
         document.getElementById('applyTypeLabel').textContent = t('applyType');
+        document.getElementById('hhStatusLabel').textContent = t('thHhStatus');
+        document.getElementById('hhStatusToggleText').textContent = t('hhStatusAll');
         document.getElementById('refreshBtn').textContent = t('refresh');
         document.getElementById('searchInput').placeholder = t('search');
         document.getElementById('pageSizeLabel').textContent = t('perPage');
@@ -528,6 +537,35 @@
           .concat(types.map((ty) => `<option value="${esc(ty)}">${esc(ty)}</option>`)).join('');
         sel.value = prev && types.includes(prev) ? prev : '';
       }
+      // Raw HH status for a row (only HH apps with a status); '' otherwise.
+      function rowHhStatusRaw(row) {
+        const isHh = String(row?.applyType || '').trim().toLowerCase() === 'hh';
+        return isHh && row?.hhStatus ? String(row.hhStatus).trim() : '';
+      }
+      // Multi-select HH status filter (checkbox dropdown). None checked => no filter.
+      function renderHhStatusOptions() {
+        const menu = document.getElementById('hhStatusMenu');
+        const prev = new Set(selectedHhStatuses());
+        const statuses = [...new Set(rows.map(rowHhStatusRaw).filter(Boolean))].sort();
+        if (!statuses.length) {
+          menu.innerHTML = `<div class="dd-item muted">${esc(t('noData'))}</div>`;
+        } else {
+          menu.innerHTML = statuses
+            .map((s) => `<label class="dd-item"><input type="checkbox" class="hh-status-cb" value="${esc(s)}" ${prev.has(s) ? 'checked' : ''} /><span>${esc(s)}</span></label>`)
+            .join('');
+        }
+        updateHhStatusToggleText();
+      }
+      function hhStatusCheckboxes() { return [...document.querySelectorAll('#hhStatusMenu .hh-status-cb')]; }
+      function selectedHhStatuses() { return hhStatusCheckboxes().filter((cb) => cb.checked).map((cb) => cb.value); }
+      function updateHhStatusToggleText() {
+        const el = document.getElementById('hhStatusToggleText');
+        if (!el) return;
+        const checked = selectedHhStatuses();
+        if (!checked.length) { el.textContent = t('hhStatusAll'); return; }
+        if (checked.length === 1) { el.textContent = checked[0]; return; }
+        el.textContent = `${checked.length} ${t('selectedWord')}`;
+      }
       // Lowercased searchable text for a row (client, title, company, apply type, location).
       function rowSearchText(row) {
         const meta = parseMetaJson(row.meta);
@@ -537,8 +575,10 @@
       // All rows after the apply-type filter + search query (client-side).
       function getVisibleRows() {
         const selectedType = document.getElementById('applyTypeSel').value || '';
+        const selStatuses = selectedHhStatuses();
         const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
         let out = selectedType ? rows.filter((row) => rowApplyType(row) === selectedType) : rows;
+        if (selStatuses.length) out = out.filter((row) => selStatuses.includes(rowHhStatusRaw(row)));
         if (q) out = out.filter((row) => rowSearchText(row).includes(q));
         return out;
       }
@@ -622,7 +662,7 @@
       async function loadRows() {
         const ids = selectedClientIds();
         const period = document.getElementById('periodSel').value || '24h';
-        if (!ids.length) { rows = []; renderApplyTypeOptions(); renderRows(); return; }
+        if (!ids.length) { rows = []; renderApplyTypeOptions(); renderHhStatusOptions(); renderRows(); return; }
         const results = await Promise.all(ids.map((id) =>
           api(`/api/app/mentor/report?clientUserId=${encodeURIComponent(id)}&period=${encodeURIComponent(period)}`)
             .then((p) => (Array.isArray(p?.rows) ? p.rows : []))
@@ -631,6 +671,7 @@
         rows = results.flat().sort((a, b) => new Date(b.appliedAt || 0) - new Date(a.appliedAt || 0));
         currentPage = 1;
         renderApplyTypeOptions();
+        renderHhStatusOptions();
         renderRows();
       }
       async function boot() {
@@ -668,6 +709,22 @@
         loadRows().catch(showLoadError);
       });
       document.getElementById('applyTypeSel').addEventListener('change', () => { currentPage = 1; renderRows(); });
+      // HH status multi-select dropdown (client-side filter).
+      document.getElementById('hhStatusToggle').addEventListener('click', (event) => {
+        event.stopPropagation();
+        const menu = document.getElementById('hhStatusMenu');
+        menu.hidden = !menu.hidden;
+      });
+      document.addEventListener('click', (event) => {
+        const dd = document.getElementById('hhStatusDropdown');
+        if (dd && !dd.contains(event.target)) document.getElementById('hhStatusMenu').hidden = true;
+      });
+      document.getElementById('hhStatusMenu').addEventListener('change', (event) => {
+        if (!event.target.classList.contains('hh-status-cb')) return;
+        updateHhStatusToggleText();
+        currentPage = 1;
+        renderRows();
+      });
       document.getElementById('searchInput').addEventListener('input', () => { currentPage = 1; renderRows(); });
       document.getElementById('pageSizeSel').addEventListener('change', () => { currentPage = 1; renderRows(); });
       document.getElementById('prevPageBtn').addEventListener('click', () => { currentPage -= 1; renderRows(); });
