@@ -409,6 +409,71 @@ export async function findHhApplicationByVacancyId(userId, hhVacancyId) {
   return rows.find((row) => metaHhVacancyId(row.MetaJson) === normalizedId) || null;
 }
 
+const HH_STATUS_MAX_LEN = 100;
+
+/**
+ * Robustly extract an HH vacancy id from an application's MetaJson. Handles both shapes:
+ * cron/questionnaire imports ({ hhVacancyId }) and position-derived imports
+ * ({ applyUrl: ".../vacancy_response?vacancyId=NNN" } or ".../vacancy/NNN").
+ */
+function metaHhVacancyIdLoose(metaRaw) {
+  const meta = parseApplicationMetaJson(metaRaw) || {};
+  const direct = normalizeHhVacancyId(meta.hhVacancyId);
+  if (direct) return direct;
+  const url = String(meta.applyUrl || '');
+  const m = url.match(/vacancyId=(\d+)/) || url.match(/\/vacancy\/(\d+)/);
+  return m ? normalizeHhVacancyId(m[1]) : null;
+}
+
+/**
+ * Bulk-update Applications.HhStatus from the cron's negotiations harvest.
+ * body: { userId, items: [{ hhVacancyId, hhStatus }] }. Matches each item to an
+ * existing application by userId + MetaJson.hhVacancyId; unknown vacancies are
+ * ignored (the negotiations list also contains HH-native applies we never imported).
+ * Returns { ok, updated, matched, total }.
+ */
+export async function updateHhApplicationStatuses(body = {}) {
+  const userId = Number.parseInt(String(body?.userId ?? ''), 10);
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    return { ok: false, status: 400, error: 'userId is required' };
+  }
+  const items = Array.isArray(body?.items) ? body.items : [];
+  if (!items.length) return { ok: true, updated: 0, matched: 0, total: 0 };
+
+  // Latest non-empty status wins per vacancy id.
+  const statusByVacancyId = new Map();
+  for (const item of items) {
+    const vacancyId = normalizeHhVacancyId(item?.hhVacancyId);
+    const status = String(item?.hhStatus ?? '').trim().slice(0, HH_STATUS_MAX_LEN);
+    if (!vacancyId || !status) continue;
+    if (!statusByVacancyId.has(vacancyId)) statusByVacancyId.set(vacancyId, status);
+  }
+  if (!statusByVacancyId.size) return { ok: true, updated: 0, matched: 0, total: items.length };
+
+  const rows = await models.Applications.findAll({
+    where: { UserId: userId },
+    order: [['AppliedAt', 'DESC'], ['Id', 'DESC']],
+    limit: 1000,
+  });
+
+  let updated = 0;
+  let matched = 0;
+  const seenVacancyIds = new Set();
+  for (const row of rows) {
+    const vacancyId = metaHhVacancyIdLoose(row.MetaJson);
+    if (!vacancyId || seenVacancyIds.has(vacancyId)) continue;
+    const status = statusByVacancyId.get(vacancyId);
+    if (status == null) continue;
+    seenVacancyIds.add(vacancyId);
+    matched += 1;
+    if (String(row.HhStatus || '') !== status) {
+      await row.update({ HhStatus: status });
+      updated += 1;
+    }
+  }
+  return { ok: true, updated, matched, total: items.length };
+}
+
 export async function loadEligibleHhApplyClientRows(limit = 200) {
   const safeLimit = Math.min(500, Math.max(1, Number.parseInt(String(limit), 10) || 200));
   const rows = await sequelize.query(

@@ -219,6 +219,7 @@ export async function fetchClientDailyReportRows(userId, { since = null, allTime
       agentUserId: data.AgentUserId ?? null,
       applyMode: data.AgentUserId != null ? 'manual' : 'auto',
       status: data.Status || '',
+      hhStatus: data.HhStatus || null,
       appliedAt: data.AppliedAt || null,
       tailoredCvUrl: data.TailoredCVURL || null,
       coverLetter: data.CoverLetter || null,

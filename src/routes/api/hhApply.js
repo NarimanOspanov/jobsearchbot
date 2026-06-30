@@ -6,6 +6,7 @@ import {
   checkHhApplicationApplied,
   importHhApplication,
   listHhApplyClients,
+  updateHhApplicationStatuses,
 } from '../../services/hhApplyCronService.js';
 
 const hhApplyUpload = multer({
@@ -92,6 +93,20 @@ export function createHhApplyRouter() {
       }
     }
   );
+
+  // Bulk-update HH negotiation statuses harvested from /applicant/negotiations.
+  router.post('/api/hh-apply/applications/hh-status', hhApplyCronSecretAuth, express.json({ limit: '1mb' }), async (req, res) => {
+    try {
+      const result = await updateHhApplicationStatuses(req.body || {});
+      if (!result.ok) {
+        return res.status(result.status || 400).json({ error: result.error });
+      }
+      return res.json(result);
+    } catch (err) {
+      console.error('POST /api/hh-apply/applications/hh-status:', err);
+      return res.status(500).json({ error: 'Failed to update HH statuses' });
+    }
+  });
 
   return router;
 }

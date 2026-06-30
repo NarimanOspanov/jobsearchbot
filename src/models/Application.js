@@ -78,6 +78,10 @@ export default function defineApplication(sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      HhStatus: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
     },
     {
       tableName: 'Applications',

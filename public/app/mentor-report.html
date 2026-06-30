@@ -104,6 +104,7 @@
               <th id="thCompany">Company</th>
               <th id="thApplyType">Apply type</th>
               <th id="thApplyMode">Apply mode</th>
+              <th id="thHhStatus">HH status</th>
             </tr>
           </thead>
           <tbody id="rowsBody"></tbody>
@@ -175,6 +176,7 @@
           thApplyMode: 'Apply mode',
           applyModeManual: 'Manual',
           applyModeAuto: 'Auto',
+          thHhStatus: 'HH status',
           thLocation: 'Location',
           applyTypeAll: 'All',
           allClients: 'All clients',
@@ -230,6 +232,7 @@
           thApplyMode: 'Режим отклика',
           applyModeManual: 'Вручную',
           applyModeAuto: 'Авто',
+          thHhStatus: 'Статус HH',
           thLocation: 'Локация',
           applyTypeAll: 'Все',
           allClients: 'Все клиенты',
@@ -393,6 +396,7 @@
         document.getElementById('thCompany').textContent = t('thCompany');
         document.getElementById('thApplyType').textContent = t('thApplyType');
         document.getElementById('thApplyMode').textContent = t('thApplyMode');
+        document.getElementById('thHhStatus').textContent = t('thHhStatus');
         document.getElementById('jobModalTitle').textContent = t('modalTitle');
         document.getElementById('closeModalBtn').textContent = t('close');
         document.getElementById('tailoredCvLink').textContent = t('tailoredCv');
@@ -510,6 +514,12 @@
         const mode = row?.applyMode || (row?.agentUserId != null ? 'manual' : 'auto');
         return mode === 'manual' ? t('applyModeManual') : t('applyModeAuto');
       }
+      // HH negotiation status — only for HH applications; empty for other sources.
+      function rowHhStatusLabel(row) {
+        const isHh = String(row?.applyType || '').trim().toLowerCase() === 'hh';
+        if (!isHh) return '';
+        return row?.hhStatus ? String(row.hhStatus) : t('noData');
+      }
       function renderApplyTypeOptions() {
         const sel = document.getElementById('applyTypeSel');
         const prev = sel.value || '';
@@ -538,7 +548,7 @@
         const applyUrl = rowApplyUrl(row, meta);
         const safeTitle = esc(row.vacancyTitle || t('noData'));
         const titleHtml = applyUrl ? `<a class="title-link" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">${safeTitle}</a>` : safeTitle;
-        return `<tr data-row-id="${esc(row.id)}"><td>${esc(clientNameById(row.userId))}</td><td>${esc(fmtDateTime(row.appliedAt))}</td><td>${titleHtml}</td><td>${esc(row.companyName || t('noData'))}</td><td>${esc(rowApplyType(row) || t('noData'))}</td><td>${esc(rowApplyModeLabel(row))}</td></tr>`;
+        return `<tr data-row-id="${esc(row.id)}"><td>${esc(clientNameById(row.userId))}</td><td>${esc(fmtDateTime(row.appliedAt))}</td><td>${titleHtml}</td><td>${esc(row.companyName || t('noData'))}</td><td>${esc(rowApplyType(row) || t('noData'))}</td><td>${esc(rowApplyModeLabel(row))}</td><td>${esc(rowHhStatusLabel(row))}</td></tr>`;
       }
       function renderRows() {
         const body = document.getElementById('rowsBody');
@@ -552,7 +562,7 @@
         const pageRows = visible.slice(start, start + size);
         body.innerHTML = pageRows.length
           ? pageRows.map(rowToHtml).join('')
-          : `<tr><td colspan="6" class="empty">${esc(t('empty'))}</td></tr>`;
+          : `<tr><td colspan="7" class="empty">${esc(t('empty'))}</td></tr>`;
         document.getElementById('resultCount').textContent = `${total} ${t('found')}`;
         const info = document.getElementById('pagerInfo');
         const pageEl = document.getElementById('pagerPage');
@@ -673,7 +683,7 @@
       document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeModal(); });
       function showLoadError(err) {
         const body = document.getElementById('rowsBody');
-        body.innerHTML = `<tr><td colspan="6" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="7" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
       }
       boot().catch(showLoadError);
     </script>
