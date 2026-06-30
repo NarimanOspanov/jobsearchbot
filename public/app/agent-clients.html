@@ -2114,7 +2114,7 @@
         if (hasApplyPriorityData()) return true;
         if (autoPriorityInFlightJobIds.size || autoPriorityQueuedJobIds.size) return true;
         const user = getSelectedUser();
-        if (!canRunApplyPriorityForUser(user) || applicationsPeriodMode) return false;
+        if (!canRunApplyPriorityForUser(user) || applicationsPeriodMode || hhQuestionnaireMode) return false;
         return (positions || []).some((p) => !getJobApplyRanking(p.id));
       }
       function getJobApplyRanking(jobId) {
@@ -2160,7 +2160,7 @@
       async function maybeAutoPrioritizeMissingJobsNow() {
         const seekerId = q().seekerId;
         const user = getSelectedUser();
-        if (!seekerId || !user || applicationsPeriodMode || isSyncing || isAnalyzingApplyPriority) return;
+        if (!seekerId || !user || applicationsPeriodMode || hhQuestionnaireMode || isSyncing || isAnalyzingApplyPriority) return;
         if (!canRunApplyPriorityForUser(user)) return;
         if (!positions.length) return;
         const unranked = collectUnrankedJobsForAutoPriority();
@@ -2183,7 +2183,7 @@
             if (runId !== autoPriorityRunId) return;
             if (String(q().seekerId || '') !== seekerId) return;
             const user = getSelectedUser();
-            if (!canRunApplyPriorityForUser(user) || applicationsPeriodMode) {
+            if (!canRunApplyPriorityForUser(user) || applicationsPeriodMode || hhQuestionnaireMode) {
               resetAutoPriorityState({ rerender: true });
               return;
             }
@@ -4159,17 +4159,17 @@
           .filter((id) => Number.isSafeInteger(id) && id > 0);
       }
 
-      function parseApplyPriorityJson(app) {
-        const raw = app?.ApplyPriorityJson;
-        if (!raw) return null;
-        if (typeof raw === 'object') return raw;
-        try { return JSON.parse(raw); } catch { return null; }
-      }
-
       // A "new" HH application the cron couldn't auto-apply because the vacancy has a
-      // questionnaire/test — flagged with reason "questionnaire" (manual=true).
+      // questionnaire/test — flagged with reason "questionnaire" (manual=true). Parses the raw
+      // ApplyPriorityJson directly (the normalized parseApplyPriorityJson() drops records without
+      // an applyRank, which questionnaire records may lack).
       function isQuestionnaireApplication(app) {
-        const pj = parseApplyPriorityJson(app);
+        const raw = app?.ApplyPriorityJson;
+        let pj = null;
+        if (raw) {
+          if (typeof raw === 'object') pj = raw;
+          else { try { pj = JSON.parse(raw); } catch { pj = null; } }
+        }
         if (pj && (String(pj.reason || '').toLowerCase() === 'questionnaire' || pj.manual === true)) return true;
         return /опросник|questionnaire/i.test(String(app?.Notes || ''));
       }
