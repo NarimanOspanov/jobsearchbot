@@ -1439,6 +1439,10 @@
       let isPriorityPickerOpen = false;
       let isStatusPickerOpen = false;
       let applicationsPeriodMode = false;
+      // HH questionnaire queue: "new" HH applications the cron couldn't auto-apply (have a
+      // questionnaire/test) and handed to the agent for manual apply. These have no ScreenlyJobId,
+      // so they come straight from the Applications table rather than the positions API.
+      let hhQuestionnaireMode = false;
       let jobsTableFullscreen = false;
       let isUploadingClientResume = false;
       let useRemotePositionsApi = false;
@@ -2484,6 +2488,7 @@
         positions = [];
         applications = [];
         applicationsPeriodMode = false;
+        hhQuestionnaireMode = false;
         pageInfo = { page: 1, pageSize: 100, hasMore: false, count: 0, totalRows: 0 };
         renderJobs();
         updatePagerUi();
@@ -4154,6 +4159,50 @@
           .filter((id) => Number.isSafeInteger(id) && id > 0);
       }
 
+      function parseApplyPriorityJson(app) {
+        const raw = app?.ApplyPriorityJson;
+        if (!raw) return null;
+        if (typeof raw === 'object') return raw;
+        try { return JSON.parse(raw); } catch { return null; }
+      }
+
+      // A "new" HH application the cron couldn't auto-apply because the vacancy has a
+      // questionnaire/test — flagged with reason "questionnaire" (manual=true).
+      function isQuestionnaireApplication(app) {
+        const pj = parseApplyPriorityJson(app);
+        if (pj && (String(pj.reason || '').toLowerCase() === 'questionnaire' || pj.manual === true)) return true;
+        return /опросник|questionnaire/i.test(String(app?.Notes || ''));
+      }
+
+      // Rebuild the table from the HH questionnaire "new" applications currently loaded.
+      function rebuildHhQuestionnairePositions() {
+        const qApps = (Array.isArray(applications) ? applications : []).filter(
+          (app) =>
+            String(app?.ApplyType || '').toLowerCase() === 'hh' &&
+            String(app?.Status || '').toLowerCase() === 'new' &&
+            isQuestionnaireApplication(app)
+        );
+        positions = qApps.map(positionFromApplication);
+        pageInfo = {
+          page: 1,
+          pageSize: Math.max(positions.length, 1),
+          hasMore: false,
+          count: positions.length,
+          totalRows: positions.length,
+        };
+      }
+
+      // Reload applications after a status/notes mutation, using the query that matches the
+      // current view (the questionnaire queue isn't keyed by ScreenlyJobId).
+      async function reloadApplicationsAfterMutation(seekerId) {
+        if (hhQuestionnaireMode) {
+          await loadApplicationsByUser(seekerId, { statuses: 'new', skipAutoPrioritize: true });
+          rebuildHhQuestionnairePositions();
+        } else {
+          await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
+        }
+      }
+
       async function loadApplicationsByUser(userId, { screenlyJobIds, appliedFrom, appliedTo, statuses, skipAutoPrioritize } = {}) {
         const ids = (Array.isArray(screenlyJobIds) ? screenlyJobIds : [])
           .map((id) => Number.parseInt(String(id), 10))
@@ -4196,7 +4245,10 @@
         const page = Math.max(1, Number.parseInt(String(query.page || '1'), 10) || 1);
         const pageSize = Math.min(200, Math.max(1, Number.parseInt(String(query.pageSize || '100'), 10) || 100));
         if (!seekerId) throw new Error('Select seeker first.');
-        if (!from || !to) throw new Error('Set from and to dates.');
+        // The HH questionnaire queue ("New" + "Search in HH") ignores the date range, so don't
+        // force dates for it.
+        const isHhQuestionnaireIntent = getSelectedStatuses().includes('new') && getSelectedSources().includes('hh');
+        if (!isHhQuestionnaireIntent && (!from || !to)) throw new Error('Set from and to dates.');
 
         resetAutoPriorityState({ rerender: false });
         setQ({
@@ -4214,6 +4266,22 @@
         setSyncBusy(true);
         try {
           const selectedStatuses = getSelectedStatuses();
+          const selectedSources = getSelectedSources();
+
+          // HH questionnaire queue: agent picked "Search in → HH" and "New". These records live
+          // only in the Applications table (no ScreenlyJobId), so load them directly and surface
+          // them in the same table/modal as other positions for manual apply.
+          hhQuestionnaireMode = selectedStatuses.includes('new') && selectedSources.includes('hh');
+          if (hhQuestionnaireMode) {
+            applicationsPeriodMode = false;
+            await loadApplicationsByUser(seekerId, { statuses: 'new', skipAutoPrioritize: true });
+            rebuildHhQuestionnairePositions();
+            renderJobs();
+            updatePagerUi();
+            setMsg('dashMsg', `Loaded ${positions.length} HH questionnaire application(s) for manual apply.`);
+            return;
+          }
+
           const usesApplicationPeriodQuery =
             selectedStatuses.length > 0 &&
             selectedStatuses.every((status) => APPLICATION_PERIOD_STATUSES.has(status));
@@ -4266,12 +4334,22 @@
         } finally {
           setSyncBusy(false);
           updatePagerUi();
-          if (!applicationsPeriodMode) maybeAutoPrioritizeMissingJobs();
+          if (!applicationsPeriodMode && !hhQuestionnaireMode) maybeAutoPrioritizeMissingJobs();
         }
       }
 
       function appByScreenlyId(screenlyId) {
-        return applications.find((a) => Number(a.ScreenlyJobId) === Number(screenlyId)) || null;
+        const byScreenly = applications.find((a) => Number(a.ScreenlyJobId) === Number(screenlyId));
+        if (byScreenly) return byScreenly;
+        // Applications without a ScreenlyJobId (e.g. the HH questionnaire queue) are keyed by
+        // their own Id — the synthetic position's id falls back to Application.Id.
+        return (
+          applications.find(
+            (a) =>
+              !Number.isSafeInteger(Number.parseInt(String(a?.ScreenlyJobId ?? ''), 10)) &&
+              Number(a.Id) === Number(screenlyId)
+          ) || null
+        );
       }
 
       function renderJobs() {
@@ -4378,7 +4456,7 @@
             ...impersonatedAgentPayload(),
           }),
         });
-        await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
+        await reloadApplicationsAfterMutation(seekerId);
         return appByScreenlyId(job.id) || app;
       }
 
@@ -4600,7 +4678,7 @@
           if (artifacts.tailoredCvUrl || artifacts.coverLetter || artifacts.coverLetterUrl) {
             generatedMaterials = null;
           }
-          await loadApplicationsByUser(seekerId, { screenlyJobIds: currentScreenlyJobIds() });
+          await reloadApplicationsAfterMutation(seekerId);
           renderJobs();
           renderArtifacts();
           renderScreenshotArtifact();
