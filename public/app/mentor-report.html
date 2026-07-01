@@ -680,22 +680,23 @@
           .map(([type, v]) => ({ type, ...v }))
           .sort((a, b) => b.total - a.total || a.type.localeCompare(b.type));
       }
+      // Only HH mixes auto (cron) and manual (agent questionnaire) applies, so the AUTO/MANUAL
+      // split is shown only for HH; other types are a single total.
       function breakdownText(types) {
         const AUTO = t('applyModeAuto').toUpperCase();
         const MANUAL = t('applyModeManual').toUpperCase();
         return types
-          .map((tp) => (tp.manual > 0 ? `${tp.total} ${tp.type} (${tp.auto} ${AUTO}, ${tp.manual} ${MANUAL})` : `${tp.total} ${tp.type}`))
+          .map((tp) => (tp.type === 'HH' ? `${tp.total} ${tp.type} (${tp.auto} ${AUTO}, ${tp.manual} ${MANUAL})` : `${tp.total} ${tp.type}`))
           .join(', ');
       }
-      // Pie slices: split a type into AUTO/MANUAL when it has manual applies.
       function breakdownSlices(types) {
         const AUTO = t('applyModeAuto').toUpperCase();
         const MANUAL = t('applyModeManual').toUpperCase();
         const slices = [];
         for (const tp of types) {
-          if (tp.manual > 0) {
+          if (tp.type === 'HH' && (tp.auto > 0 || tp.manual > 0)) {
             if (tp.auto > 0) slices.push({ label: `${tp.type} · ${AUTO}`, value: tp.auto });
-            slices.push({ label: `${tp.type} · ${MANUAL}`, value: tp.manual });
+            if (tp.manual > 0) slices.push({ label: `${tp.type} · ${MANUAL}`, value: tp.manual });
           } else {
             slices.push({ label: tp.type, value: tp.total });
           }
