@@ -61,6 +61,28 @@
       .dd-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; user-select: none; }
       .dd-item:hover { background: rgba(79,124,255,0.12); }
       .dd-item input { width: 16px; height: 16px; cursor: pointer; }
+
+      /* Mobile: no horizontal scroll — filters go full-width, table becomes cards. */
+      @media (max-width: 680px) {
+        .wrap { padding: 10px; }
+        .toolbar { gap: 6px; }
+        .toolbar > select,
+        .toolbar > .dropdown { width: 100%; flex: 1 1 100%; }
+        .dropdown { display: block; }
+        .dd-toggle { width: 100%; min-width: 0; }
+        .dd-menu { min-width: 0; left: 0; right: 0; }
+
+        .table-wrap { overflow: visible; border: none; border-radius: 0; }
+        table, thead, tbody, tr, th, td { display: block; }
+        thead { display: none; }
+        table { font-size: 13px; }
+        tr[data-row-id] { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; padding: 4px 10px; background: #10182d; }
+        tr[data-row-id] td { border: none; padding: 6px 0; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; text-align: right; word-break: break-word; }
+        tr[data-row-id] td::before { content: attr(data-label); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; text-align: left; flex: 0 0 40%; }
+        tr[data-row-id] td:empty { display: none; }
+        td.empty { text-align: center; }
+        td.empty::before { content: none; }
+      }
     </style>
   </head>
   <body>
@@ -500,13 +522,13 @@
               ? `<a class="title-link" href="${esc(applyUrl)}" target="_blank" rel="noopener noreferrer">${safeTitle}</a>`
               : safeTitle;
             return `<tr data-row-id="${esc(row.id)}">
-              <td>${esc(fmtDateTime(row.appliedAt))}</td>
-              <td>${titleHtml}</td>
-              <td>${esc(row.companyName || t('noData'))}</td>
-              <td>${esc(formatApplyTypeDisplay(row))}</td>
-              <td>${esc(rowApplyModeLabel(row))}</td>
-              <td>${esc(rowHhStatusLabel(row))}</td>
-              <td>${esc(location)}</td>
+              <td data-label="${esc(t('thAppliedAt'))}">${esc(fmtDateTime(row.appliedAt))}</td>
+              <td data-label="${esc(t('thTitle'))}">${titleHtml}</td>
+              <td data-label="${esc(t('thCompany'))}">${esc(row.companyName || t('noData'))}</td>
+              <td data-label="${esc(t('thApplyType'))}">${esc(formatApplyTypeDisplay(row))}</td>
+              <td data-label="${esc(t('thApplyMode'))}">${esc(rowApplyModeLabel(row))}</td>
+              <td data-label="${esc(t('thHhStatus'))}">${esc(rowHhStatusLabel(row))}</td>
+              <td data-label="${esc(t('thLocation'))}">${esc(location)}</td>
             </tr>`;
           })
           .join('');
