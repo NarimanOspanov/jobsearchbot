@@ -74,6 +74,14 @@
         td.empty { text-align: center; }
         td.empty::before { content: none; }
       }
+
+      .breakdown-link { background: transparent; border: none; color: var(--muted); padding: 0; font: inherit; cursor: pointer; text-align: left; text-decoration: underline dotted; text-underline-offset: 3px; }
+      .breakdown-link:hover { color: var(--text); }
+      .breakdown-link[hidden] { display: none; }
+      #breakdownChartWrap { position: relative; width: 100%; max-width: 380px; margin: 0 auto; }
+      #breakdownList { display: grid; gap: 4px; margin-top: 12px; font-size: 14px; }
+      #breakdownList .bd-row { display: flex; align-items: center; gap: 8px; }
+      #breakdownList .bd-swatch { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
     </style>
   </head>
   <body>
@@ -111,6 +119,7 @@
           <div class="row">
             <input id="searchInput" type="search" placeholder="Search" autocomplete="off" />
             <span class="muted" id="resultCount" style="white-space:nowrap"></span>
+            <button type="button" id="applyBreakdown" class="breakdown-link" hidden></button>
           </div>
           <div class="row">
             <label class="muted" for="pageSizeSel" id="pageSizeLabel">Per page</label>
@@ -187,6 +196,19 @@
       </div>
     </div>
 
+    <div id="breakdownModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="breakdownTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="breakdownTitle">Applications by type</strong>
+          <button class="btn" id="breakdownCloseBtn" type="button">Close</button>
+        </div>
+        <div class="modal-body">
+          <div id="breakdownChartWrap"><canvas id="breakdownChart"></canvas></div>
+          <div id="breakdownList"></div>
+        </div>
+      </div>
+    </div>
+
     <script>
       const STRINGS = {
         en: {
@@ -205,6 +227,7 @@
           applyModeAuto: 'Auto',
           thHhStatus: 'HH status',
           hhStatusAll: 'All',
+          breakdownTitle: 'Applications by type',
           thLocation: 'Location',
           applyTypeAll: 'All',
           allClients: 'All clients',
@@ -262,6 +285,7 @@
           applyModeAuto: 'Авто',
           thHhStatus: 'Статус HH',
           hhStatusAll: 'Все',
+          breakdownTitle: 'Отклики по типу',
           thLocation: 'Локация',
           applyTypeAll: 'Все',
           allClients: 'Все клиенты',
@@ -312,6 +336,8 @@
       let clients = [];
       let currentPage = 1;
       let clientsChart = null;
+      let breakdownChart = null;
+      let lastBreakdownTypes = [];
       let chartPayload = { dates: [], series: [] };
       const CLIENT_CHART_COLORS = ['#4f7cff', '#22c55e', '#f59e0b', '#ec4899', '#38bdf8', '#a78bfa', '#f97316', '#14b8a6'];
       const chartScale = {
@@ -430,6 +456,8 @@
         document.getElementById('thHhStatus').textContent = t('thHhStatus');
         document.getElementById('jobModalTitle').textContent = t('modalTitle');
         document.getElementById('closeModalBtn').textContent = t('close');
+        document.getElementById('breakdownTitle').textContent = t('breakdownTitle');
+        document.getElementById('breakdownCloseBtn').textContent = t('close');
         document.getElementById('tailoredCvLink').textContent = t('tailoredCv');
         document.getElementById('coverLetterBtn').textContent = t('coverLetter');
         document.getElementById('coverLetterUrlLink').textContent = t('coverLetterFile');
@@ -626,12 +654,83 @@
           ? pageRows.map(rowToHtml).join('')
           : `<tr><td colspan="7" class="empty">${esc(t('empty'))}</td></tr>`;
         document.getElementById('resultCount').textContent = `${total} ${t('found')}`;
+        renderApplyBreakdown(visible);
         const info = document.getElementById('pagerInfo');
         const pageEl = document.getElementById('pagerPage');
         info.textContent = total ? `${start + 1}–${start + pageRows.length} / ${total}` : '0';
         pageEl.textContent = `${currentPage} / ${pages}`;
         document.getElementById('prevPageBtn').disabled = currentPage <= 1;
         document.getElementById('nextPageBtn').disabled = currentPage >= pages;
+      }
+      // --- Apply-type breakdown next to the count + pie-chart modal ---
+      function rowIsManual(row) {
+        if (row?.applyMode) return String(row.applyMode).toLowerCase() === 'manual';
+        return row?.agentUserId != null;
+      }
+      function computeApplyBreakdown(visible) {
+        const map = new Map(); // TYPE -> { total, auto, manual }
+        for (const row of visible) {
+          const type = (rowApplyType(row) || 'N/A').toUpperCase();
+          const e = map.get(type) || { total: 0, auto: 0, manual: 0 };
+          e.total += 1;
+          if (rowIsManual(row)) e.manual += 1; else e.auto += 1;
+          map.set(type, e);
+        }
+        return [...map.entries()]
+          .map(([type, v]) => ({ type, ...v }))
+          .sort((a, b) => b.total - a.total || a.type.localeCompare(b.type));
+      }
+      function breakdownText(types) {
+        const AUTO = t('applyModeAuto').toUpperCase();
+        const MANUAL = t('applyModeManual').toUpperCase();
+        return types
+          .map((tp) => (tp.manual > 0 ? `${tp.total} ${tp.type} (${tp.auto} ${AUTO}, ${tp.manual} ${MANUAL})` : `${tp.total} ${tp.type}`))
+          .join(', ');
+      }
+      // Pie slices: split a type into AUTO/MANUAL when it has manual applies.
+      function breakdownSlices(types) {
+        const AUTO = t('applyModeAuto').toUpperCase();
+        const MANUAL = t('applyModeManual').toUpperCase();
+        const slices = [];
+        for (const tp of types) {
+          if (tp.manual > 0) {
+            if (tp.auto > 0) slices.push({ label: `${tp.type} · ${AUTO}`, value: tp.auto });
+            slices.push({ label: `${tp.type} · ${MANUAL}`, value: tp.manual });
+          } else {
+            slices.push({ label: tp.type, value: tp.total });
+          }
+        }
+        return slices;
+      }
+      function renderApplyBreakdown(visible) {
+        const el = document.getElementById('applyBreakdown');
+        lastBreakdownTypes = computeApplyBreakdown(visible);
+        if (!lastBreakdownTypes.length) { el.hidden = true; el.textContent = ''; return; }
+        el.hidden = false;
+        el.textContent = `· ${breakdownText(lastBreakdownTypes)}`;
+      }
+      function openBreakdownModal() {
+        const types = lastBreakdownTypes || [];
+        if (!types.length) return;
+        const slices = breakdownSlices(types);
+        const colors = slices.map((_, i) => CLIENT_CHART_COLORS[i % CLIENT_CHART_COLORS.length]);
+        document.getElementById('breakdownList').innerHTML = slices
+          .map((s, i) => `<div class="bd-row"><span class="bd-swatch" style="background:${colors[i]}"></span><span>${esc(s.label)}: <strong>${esc(s.value)}</strong></span></div>`)
+          .join('');
+        const canvas = document.getElementById('breakdownChart');
+        if (breakdownChart) { breakdownChart.destroy(); breakdownChart = null; }
+        if (window.Chart) {
+          breakdownChart = new Chart(canvas, {
+            type: 'pie',
+            data: { labels: slices.map((s) => s.label), datasets: [{ data: slices.map((s) => s.value), backgroundColor: colors, borderColor: 'rgba(0,0,0,0.25)', borderWidth: 1 }] },
+            options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#9eb0d1', boxWidth: 12 } } } },
+          });
+        }
+        document.getElementById('breakdownModal').classList.add('on');
+      }
+      function closeBreakdownModal() {
+        document.getElementById('breakdownModal').classList.remove('on');
+        if (breakdownChart) { breakdownChart.destroy(); breakdownChart = null; }
       }
       function closeModal() { document.getElementById('jobModal').classList.remove('on'); }
       function toggleButton(el, on, href = '') {
@@ -759,7 +858,10 @@
       });
       document.getElementById('closeModalBtn').addEventListener('click', closeModal);
       document.getElementById('jobModal').addEventListener('click', (event) => { if (event.target.id === 'jobModal') closeModal(); });
-      document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeModal(); });
+      document.getElementById('applyBreakdown').addEventListener('click', openBreakdownModal);
+      document.getElementById('breakdownCloseBtn').addEventListener('click', closeBreakdownModal);
+      document.getElementById('breakdownModal').addEventListener('click', (event) => { if (event.target.id === 'breakdownModal') closeBreakdownModal(); });
+      document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { closeModal(); closeBreakdownModal(); } });
       function showLoadError(err) {
         const body = document.getElementById('rowsBody');
         body.innerHTML = `<tr><td colspan="7" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
