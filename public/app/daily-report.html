@@ -53,6 +53,14 @@
         padding: 8px 10px;
         font: inherit;
       }
+      .dropdown { position: relative; display: inline-block; }
+      .dd-toggle { min-width: 150px; text-align: left; display: inline-flex; justify-content: space-between; align-items: center; gap: 8px; border-radius: 8px; border: 1px solid var(--border); background: #0f1730; color: var(--text); padding: 8px 10px; font: inherit; cursor: pointer; }
+      .dd-toggle .caret { opacity: 0.7; }
+      .dd-menu { position: absolute; z-index: 50; margin-top: 4px; min-width: 220px; max-height: 300px; overflow: auto; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px; box-shadow: 0 10px 28px rgba(0,0,0,0.45); }
+      .dd-menu[hidden] { display: none; }
+      .dd-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; user-select: none; }
+      .dd-item:hover { background: rgba(79,124,255,0.12); }
+      .dd-item input { width: 16px; height: 16px; cursor: pointer; }
     </style>
   </head>
   <body>
@@ -68,6 +76,13 @@
             <option value="30d">Last month</option>
             <option value="all">All time</option>
           </select>
+          <label class="muted" for="applyTypeSel" id="applyTypeLabel">Apply type</label>
+          <select id="applyTypeSel"></select>
+          <label class="muted" id="hhStatusLabel">HH status</label>
+          <div class="dropdown" id="hhStatusDropdown">
+            <button type="button" id="hhStatusToggle" class="dd-toggle"><span id="hhStatusToggleText">All</span><span class="caret">▾</span></button>
+            <div id="hhStatusMenu" class="dd-menu" hidden></div>
+          </div>
         </div>
       </div>
       <div class="card">
@@ -79,6 +94,8 @@
                 <th id="thTitle">Title</th>
                 <th id="thCompany">Company</th>
                 <th id="thApplyType">Apply type</th>
+                <th id="thApplyMode">Apply mode</th>
+                <th id="thHhStatus">HH status</th>
                 <th id="thLocation">Location</th>
               </tr>
             </thead>
@@ -139,6 +156,13 @@
           thTitle: 'Title',
           thCompany: 'Company',
           thApplyType: 'Apply type',
+          thApplyMode: 'Apply mode',
+          applyModeManual: 'Manual',
+          applyModeAuto: 'Auto',
+          thHhStatus: 'HH status',
+          applyTypeAll: 'All',
+          hhStatusAll: 'All',
+          selectedWord: 'selected',
           thLocation: 'Location',
           empty: 'No applied jobs in the selected period.',
           modalTitle: 'Job details',
@@ -181,6 +205,13 @@
           thTitle: 'Вакансия',
           thCompany: 'Компания',
           thApplyType: 'Тип отклика',
+          thApplyMode: 'Режим отклика',
+          applyModeManual: 'Вручную',
+          applyModeAuto: 'Авто',
+          thHhStatus: 'Статус HH',
+          applyTypeAll: 'Все',
+          hhStatusAll: 'Все',
+          selectedWord: 'выбрано',
           thLocation: 'Локация',
           empty: 'За выбранный период нет откликов.',
           modalTitle: 'Детали вакансии',
@@ -363,6 +394,60 @@
         return row.applyType || t('noData');
       }
 
+      // Manual = an agent applied for the client (AgentUserId set); auto otherwise.
+      function rowApplyModeLabel(row) {
+        const mode = row?.applyMode || (row?.agentUserId != null ? 'manual' : 'auto');
+        return mode === 'manual' ? t('applyModeManual') : t('applyModeAuto');
+      }
+      // HH negotiation status — only for HH applications; empty for other sources.
+      function rowHhStatusRaw(row) {
+        const isHh = String(row?.applyType || '').trim().toLowerCase() === 'hh';
+        return isHh && row?.hhStatus ? String(row.hhStatus).trim() : '';
+      }
+      function rowHhStatusLabel(row) {
+        const isHh = String(row?.applyType || '').trim().toLowerCase() === 'hh';
+        if (!isHh) return '';
+        return row?.hhStatus ? String(row.hhStatus) : t('noData');
+      }
+
+      // Apply-type filter: options are the display labels present in the data.
+      function renderApplyTypeOptions() {
+        const sel = document.getElementById('applyTypeSel');
+        const prev = sel.value || '';
+        const types = [...new Set(rows.map(formatApplyTypeDisplay).filter((x) => x && x !== t('noData')))].sort();
+        sel.innerHTML = [`<option value="">${esc(t('applyTypeAll'))}</option>`]
+          .concat(types.map((ty) => `<option value="${esc(ty)}">${esc(ty)}</option>`)).join('');
+        sel.value = prev && types.includes(prev) ? prev : '';
+      }
+      // HH status multi-select (checkbox dropdown). None checked => no filter.
+      function renderHhStatusOptions() {
+        const menu = document.getElementById('hhStatusMenu');
+        const prev = new Set(selectedHhStatuses());
+        const statuses = [...new Set(rows.map(rowHhStatusRaw).filter(Boolean))].sort();
+        menu.innerHTML = statuses.length
+          ? statuses.map((s) => `<label class="dd-item"><input type="checkbox" class="hh-status-cb" value="${esc(s)}" ${prev.has(s) ? 'checked' : ''} /><span>${esc(s)}</span></label>`).join('')
+          : `<div class="dd-item muted">${esc(t('noData'))}</div>`;
+        updateHhStatusToggleText();
+      }
+      function hhStatusCheckboxes() { return [...document.querySelectorAll('#hhStatusMenu .hh-status-cb')]; }
+      function selectedHhStatuses() { return hhStatusCheckboxes().filter((cb) => cb.checked).map((cb) => cb.value); }
+      function updateHhStatusToggleText() {
+        const el = document.getElementById('hhStatusToggleText');
+        if (!el) return;
+        const checked = selectedHhStatuses();
+        if (!checked.length) { el.textContent = t('hhStatusAll'); return; }
+        if (checked.length === 1) { el.textContent = checked[0]; return; }
+        el.textContent = `${checked.length} ${t('selectedWord')}`;
+      }
+      // Rows after apply-type + HH-status filters (client-side).
+      function getVisibleRows() {
+        const selectedType = document.getElementById('applyTypeSel')?.value || '';
+        const selStatuses = selectedHhStatuses();
+        let out = selectedType ? rows.filter((row) => formatApplyTypeDisplay(row) === selectedType) : rows;
+        if (selStatuses.length) out = out.filter((row) => selStatuses.includes(rowHhStatusRaw(row)));
+        return out;
+      }
+
       function applyStaticUi() {
         document.title = t('pageTitle');
         document.getElementById('titleText').textContent = t('pageTitle');
@@ -381,7 +466,12 @@
         document.getElementById('thTitle').textContent = t('thTitle');
         document.getElementById('thCompany').textContent = t('thCompany');
         document.getElementById('thApplyType').textContent = t('thApplyType');
+        document.getElementById('thApplyMode').textContent = t('thApplyMode');
+        document.getElementById('thHhStatus').textContent = t('thHhStatus');
         document.getElementById('thLocation').textContent = t('thLocation');
+        document.getElementById('applyTypeLabel').textContent = t('applyType');
+        document.getElementById('hhStatusLabel').textContent = t('thHhStatus');
+        document.getElementById('hhStatusToggleText').textContent = t('hhStatusAll');
         document.getElementById('jobModalTitle').textContent = t('modalTitle');
         document.getElementById('closeModalBtn').textContent = t('close');
         document.getElementById('tailoredCvLink').textContent = t('tailoredCv');
@@ -395,11 +485,12 @@
 
       function renderRows() {
         const body = document.getElementById('rowsBody');
-        if (!rows.length) {
-          body.innerHTML = `<tr><td colspan="5" class="empty">${esc(t('empty'))}</td></tr>`;
+        const visible = getVisibleRows();
+        if (!visible.length) {
+          body.innerHTML = `<tr><td colspan="7" class="empty">${esc(t('empty'))}</td></tr>`;
           return;
         }
-        body.innerHTML = rows
+        body.innerHTML = visible
           .map((row) => {
             const meta = parseMetaJson(row.meta);
             const location = meta?.location || t('noLocation');
@@ -413,6 +504,8 @@
               <td>${titleHtml}</td>
               <td>${esc(row.companyName || t('noData'))}</td>
               <td>${esc(formatApplyTypeDisplay(row))}</td>
+              <td>${esc(rowApplyModeLabel(row))}</td>
+              <td>${esc(rowHhStatusLabel(row))}</td>
               <td>${esc(location)}</td>
             </tr>`;
           })
@@ -484,10 +577,12 @@
           rows = Array.isArray(payload?.rows) ? payload.rows : [];
           if (payload?.period) currentPeriod = String(payload.period);
           document.getElementById('subtitleText').textContent = subtitleForPeriod(currentPeriod);
+          renderApplyTypeOptions();
+          renderHhStatusOptions();
           renderRows();
         } catch (err) {
           const body = document.getElementById('rowsBody');
-          body.innerHTML = `<tr><td colspan="5" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
+          body.innerHTML = `<tr><td colspan="7" class="empty">${esc(t('loadError'))}: ${esc(err.message || err)}</td></tr>`;
         }
       }
 
@@ -509,6 +604,23 @@
         currentPeriod = String(event.target.value || '24h');
         syncPeriodToUrl(currentPeriod);
         load();
+      });
+
+      // Client-side filters: apply type + HH status multi-select.
+      document.getElementById('applyTypeSel').addEventListener('change', () => renderRows());
+      document.getElementById('hhStatusToggle').addEventListener('click', (event) => {
+        event.stopPropagation();
+        const menu = document.getElementById('hhStatusMenu');
+        menu.hidden = !menu.hidden;
+      });
+      document.addEventListener('click', (event) => {
+        const dd = document.getElementById('hhStatusDropdown');
+        if (dd && !dd.contains(event.target)) document.getElementById('hhStatusMenu').hidden = true;
+      });
+      document.getElementById('hhStatusMenu').addEventListener('change', (event) => {
+        if (!event.target.classList.contains('hh-status-cb')) return;
+        updateHhStatusToggleText();
+        renderRows();
       });
 
       currentPeriod = readPeriodFromUrl();
